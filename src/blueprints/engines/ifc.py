@@ -33,6 +33,28 @@ METHOD = "ifc-engine:v1"
 AGREE = 0.005  # two sources "agree" within 0.5%
 # Kinds whose counting convention matched the reference answers on dev drawings.
 VALIDATED_KINDS = {"door", "window", "wall", "space", "stair", "column", "beam", "sanitary"}
+# Kinds whose placement height reliably tells the storey (their origin sits on the
+# storey's floor). Walls, beams, slabs and columns are placed with offsets, so their
+# height is not a usable second opinion.
+HEIGHT_CHECKED_KINDS = {"door", "window", "stair"}
+HEIGHT_TOLERANCE = 0.05  # metres
+
+
+def _count_by_height(index: dict, storey: int, elements: list[dict]) -> int | None:
+    """How many of the kind's elements physically sit in a storey's height band.
+
+    Independent of the model's containment relations: it only uses where each element
+    is placed and how high each storey is.
+    """
+    levels = sorted((s["z"], i) for i, s in enumerate(index["storeys"]) if s.get("z") is not None)
+    if len(levels) != len(index["storeys"]) or any(e.get("z") is None for e in elements):
+        return None
+    position = next(k for k, (_, i) in enumerate(levels) if i == storey)
+    low = levels[position][0] - HEIGHT_TOLERANCE
+    high = levels[position + 1][0] - HEIGHT_TOLERANCE if position + 1 < len(levels) else float("inf")
+    if position == 0:
+        low = float("-inf")
+    return sum(1 for e in elements if low <= e["z"] < high)
 
 _indexes: dict[tuple[str, bool], dict] = {}
 _lock = threading.Lock()
@@ -196,12 +218,25 @@ def answer(q: Question, dataset: Dataset) -> Answer:
 
     if measure == "count":
         validated = kind in VALIDATED_KINDS
+        confidence, note = (0.95, "") if validated else (
+            0.7, " Counting rule for this kind not yet checked on dev drawings.")
+        checks = {"elements the model assigns to the storey" if storey is not None
+                  else "elements in the model": len(elements)}
+        if storey is not None and kind in HEIGHT_CHECKED_KINDS:
+            by_height = _count_by_height(index, storey, source)
+            if by_height is not None:
+                checks["elements placed within the storey's height"] = by_height
+                if by_height == len(elements):
+                    confidence, note = 0.99, " The same number are physically placed within that storey's height."
+                else:
+                    confidence = 0.6
+                    note = (f" But {by_height} are physically placed within that storey's height: "
+                            "the model's storey assignment and the geometry differ.")
         return Answer(
-            answer=len(elements), unit="count", state=CHECK, confidence=0.95 if validated else 0.7,
+            answer=len(elements), unit="count", state=CHECK, confidence=confidence,
             evidence=[_element(e) for e in elements],
-            explanation=f"Counted {len(elements)} {kind} elements ({classes}) {scope}."
-                        + ("" if validated else " Counting rule for this kind not yet checked on dev drawings."),
-            meta={"interpreted": f"count of {classes} {scope}", "ifc": ifc_rel},
+            explanation=f"Counted {len(elements)} {kind} elements ({classes}) {scope}.{note}",
+            meta={"interpreted": f"count of {classes} {scope}", "checks": checks, "ifc": ifc_rel},
             **common)
 
     # measure == "volume"

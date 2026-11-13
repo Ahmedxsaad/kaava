@@ -1,8 +1,8 @@
 {
- "calibrated": "2026-11-13T22:12:29+00:00",
+ "calibrated": "2026-11-13T22:15:15+00:00",
  "dataset": "junction-dataset-preview",
  "calibration_runs": [
-  "20261113-221227-router-v1-raw-3ee2"
+  "20261113-221501-router-v1-raw-188b"
  ],
  "alpha": 0.01,
  "bound_confidence": 0.95,
@@ -98,10 +98,24 @@
    "calibration_answers": 86,
    "levels_tested": [
     {
+     "score": 0.99,
+     "answers": 26,
+     "errors": 2,
+     "upper_bound": 0.2669964340278845,
+     "passed": false
+    },
+    {
      "score": 0.95,
+     "answers": 84,
+     "errors": 4,
+     "upper_bound": 0.1240247715694398,
+     "passed": false
+    },
+    {
+     "score": 0.6,
      "answers": 86,
      "errors": 6,
-     "upper_bound": 0.13305723921450302,
+     "upper_bound": 0.15267453565955996,
      "passed": false
     }
    ]

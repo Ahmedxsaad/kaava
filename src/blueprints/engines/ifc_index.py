@@ -19,7 +19,7 @@ from pathlib import Path
 
 from .. import config
 
-INDEX_VERSION = 3
+INDEX_VERSION = 4
 
 # Element kinds we can count, and the IFC classes that define them. by_type() also
 # returns subtypes (IfcWall includes IfcWallStandardCase).
@@ -178,6 +178,15 @@ def build_index(ifc_path: Path, *, with_volumes: bool = False) -> dict:
     area_scale = _unit_scale(model, "AREAUNIT")
     volume_scale = _unit_scale(model, "VOLUMEUNIT")
 
+    def height(element) -> float | None:
+        """World height of an element's placement origin, in metres."""
+        import ifcopenshell.util.placement as up
+
+        try:
+            return float(up.get_local_placement(element.ObjectPlacement)[2][3]) * length_scale
+        except Exception:
+            return None
+
     storeys = []
     storey_idx: dict[int, int] = {}
     for s in model.by_type("IfcBuildingStorey"):
@@ -185,6 +194,7 @@ def build_index(ifc_path: Path, *, with_volumes: bool = False) -> dict:
         storeys.append({
             "id": s.GlobalId, "name": s.Name or "", "long_name": getattr(s, "LongName", None) or "",
             "elevation": (s.Elevation * length_scale) if isinstance(s.Elevation, (int, float)) else None,
+            "z": height(s),
         })
 
     def storey_index(element) -> int | None:
@@ -224,7 +234,8 @@ def build_index(ifc_path: Path, *, with_volumes: bool = False) -> dict:
             except RuntimeError:
                 pass
         kinds[kind] = [
-            {"id": e.GlobalId, "cls": e.is_a(), "name": e.Name or "", "storey": storey_index(e)}
+            {"id": e.GlobalId, "cls": e.is_a(), "name": e.Name or "", "storey": storey_index(e),
+             "z": height(e)}
             for e in found
         ]
 
