@@ -17,7 +17,7 @@ from collections import Counter
 from functools import lru_cache
 from pathlib import Path
 
-_NUMBER = re.compile(r"^\d+(\.\d+)+[a-z]?$")
+_NUMBER = re.compile(r"^[A-Za-z]{0,2}\d+(\.\d+)+[a-z]?$")
 _AREA = re.compile(r"^(\d+(?:[.,]\d+)?)\s*m[²2]$")
 _APARTMENT = re.compile(r"^(Whg|Wohnung|App|Appartement|Appartamento|Apt|Apartment|Unit|Log|Logement)\.?\s+(\w{1,3})$",
                         re.IGNORECASE)

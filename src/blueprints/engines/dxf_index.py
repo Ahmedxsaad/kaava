@@ -27,12 +27,13 @@ from pathlib import Path
 
 from .. import config
 
-INDEX_VERSION = 7
+INDEX_VERSION = 9
 
 # $INSUNITS code -> metres per drawing unit
 _UNIT_SCALE = {1: 0.0254, 2: 0.3048, 4: 0.001, 5: 0.01, 6: 1.0}
 
-_NUMBER = re.compile(r"^\d+(\.\d+)*[a-z]?$")
+# Room numbers: "2.01", "12", "0.13a", and basement style "U1.13".
+_NUMBER = re.compile(r"^[A-Za-z]{0,2}\d+(\.\d+)*[a-z]?$")
 _AREA = re.compile(r"^(\d+(?:[.,]\d+)?)\s*m[²2]$")
 # "Whg. A", "App. B", "Apt. C", "Unit D": a short word, an optional dot, one letter or number.
 _APARTMENT = re.compile(r"^(Whg|Wohnung|App|Appartement|Appartamento|Apt|Apartment|Unit|Log|Logement)\.?\s+(\w{1,3})$",
@@ -41,6 +42,18 @@ _APARTMENT = re.compile(r"^(Whg|Wohnung|App|Appartement|Appartamento|Apt|Apartme
 DRAIN_MAX_RADIUS = 0.06  # drains are 2-4 cm; hob burners are 8 cm
 ELLIPSE_POINTS = 48      # toilet bowls and washbasin bowls
 TUB_POINTS = 69          # the rounded inner outline of a bathtub
+SLIVER_MAX_WIDTH = 0.3   # metres; real shower trays measure 0.6 m or more across
+
+
+def _short_side(polygon) -> float:
+    """Short side of the tightest rectangle around a shape, whatever its rotation."""
+    import math
+
+    rect = polygon.minimum_rotated_rectangle
+    if rect.geom_type != "Polygon":
+        return 0.0
+    xs, ys = rect.exterior.coords.xy
+    return min(math.dist((xs[0], ys[0]), (xs[1], ys[1])), math.dist((xs[1], ys[1]), (xs[2], ys[2])))
 
 
 def cache_path(dxf_path: Path) -> Path:
@@ -76,6 +89,7 @@ def _text_position(entity, scale: float) -> tuple[float, float]:
 def build_index(dxf_path: Path) -> dict:
     import ezdxf
     from shapely.geometry import LineString, Point, Polygon
+    from shapely.ops import unary_union
 
     doc = ezdxf.readfile(str(dxf_path))
     scale = _UNIT_SCALE.get(doc.header.get("$INSUNITS", 6), 1.0)
@@ -107,8 +121,11 @@ def build_index(dxf_path: Path) -> dict:
         holes = [other for other, _ in room_shapes
                  if other is not poly and other.area < poly.area
                  and poly.contains(other.representative_point()) and poly.buffer(0.01).contains(other)]
+        # A room that sits in the hole (a kitchen inside a living room) is drawn as its
+        # own outline on top of the hole's ring: take the union so the hole counts once.
+        hole_area = unary_union(holes).area if holes else 0.0
         rooms.append({"polygon": pts, "gross_area": round(poly.area, 4),
-                      "area": round(poly.area - sum(h.area for h in holes), 4), "holes": len(holes),
+                      "area": round(poly.area - hole_area, 4), "holes": len(holes),
                       "shaft": crossed >= 2, "number": None, "name": None, "printed_area": None,
                       "apartment_tag": None, "unit": None, "texts": []})
 
@@ -201,11 +218,15 @@ def build_index(dxf_path: Path) -> dict:
             fixtures.append({"kind": "washbasin", "bbox": _bbox(pts)})
         else:
             fixtures.append({"kind": "toilet", "bbox": _bbox(pts)})
-    for pts in boxes:  # a tray with a drain that belongs to nothing else is a shower
+    for pts in boxes:  # a tray with a drain that belongs to nothing else is a shower...
         drain = holds_drain(pts, used)
         if drain is not None:
             used.add(drain)
-            fixtures.append({"kind": "shower", "bbox": _bbox(pts)})
+            # ...unless it is a sliver: shower trays are at least 0.6 m on their short
+            # side. A drain inside a narrow strip is a bathtub drawn without its usual
+            # rounded inner outline.
+            kind = "bathtub" if _short_side(Polygon(pts)) < SLIVER_MAX_WIDTH else "shower"
+            fixtures.append({"kind": kind, "bbox": _bbox(pts)})
     orphan_drains = len(drains) - len(used)
 
     annotation = [e.dxf.text.strip() for e in layers.get("ANNOTATION", []) if e.dxftype() == "TEXT"]

@@ -118,3 +118,17 @@ def asks_about_numbered_rooms(question: str) -> bool:
 def bare_numbers(question: str) -> list[str]:
     """Number-like tokens outside quotes, e.g. the "2.01" of "room 2.01 ('Zimmer')"."""
     return _BARE_NUMBER.findall(norm(strip_quoted(question)))
+
+
+_ROOM_REF = re.compile(r"(\S+)\s*\(\s*['\"«‘“„]")
+
+
+def room_ref_in(question: str) -> str | None:
+    """The room identifier in "room 2.01 ('Zimmer')": the token right before the bracketed name.
+
+    Structural, so it works for any numbering style ("U1.13") and any language. A
+    question built this way asks about ONE room; if that room is not on the drawing the
+    question must be declined, not read as something else.
+    """
+    m = _ROOM_REF.search(question)
+    return m.group(1) if m else None

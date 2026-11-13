@@ -27,15 +27,18 @@ from pathlib import Path, PurePosixPath
 
 from ..answer import Answer
 from ..data import Dataset, Question
-from ..questions import (apartment_in, asks_about_numbered_rooms, bare_numbers, kinds_in,
-                         measure_of, norm, quoted_strings)
+from ..questions import (apartment_in, asks_about_numbered_rooms, kinds_in, measure_of, norm,
+                         quoted_strings, room_ref_in)
 from ..scoring import CHECK
 from . import dxf_index, pdf_labels
 
 METHOD = "dxf-engine:v1"
 AGREE_REL = 0.005   # areas from two sources agree within 0.5%...
 AGREE_ABS = 0.011   # ...or within the rounding of a label printed to two decimals
-OUTDOOR = ("balkon", "balcon", "balcony", "loggia", "terras", "terraz", "terrace")
+# Room names the reference treats as outdoor space, as prefixes (DE / FR / IT / EN).
+# Seating areas and winter gardens were added from dev drawings of the full dataset.
+OUTDOOR = ("balkon", "balcon", "balcony", "loggia", "terras", "terraz", "terrace",
+           "sitzplatz", "jardin d'hiver", "wintergarten", "giardino d'inverno", "veranda")
 FIXTURE_KINDS = ("toilet", "washbasin", "bathtub", "shower")
 
 _indexes: dict[str, dict] = {}
@@ -140,13 +143,13 @@ def answer(q: Question, dataset: Dataset) -> Answer:
     # ------------------------------------------------------------------ areas
     if measure == "area":
         if label is not None:
-            numbers = {r["number"] for r in numbered}
-            asked = [n for n in bare_numbers(q.question) if n in numbers]
-            if len(asked) == 1:  # one room, by its number
-                hits = [r for r in numbered if r["number"] == asked[0]]
+            ref = room_ref_in(q.question)
+            if ref is not None:  # "room N ('X')": one room, by its number
+                hits = [r for r in numbered if norm(r["number"]) == norm(ref)]
                 if len(hits) != 1:
-                    return decline(f"{len(hits)} rooms carry the number {asked[0]}")
+                    return decline(f"{len(hits)} rooms on this drawing carry the number {ref}")
                 room = hits[0]
+                asked = [room["number"]]
                 if room["name"] and norm(room["name"]) != norm(label):
                     return decline(f"room {asked[0]} is labelled '{room['name']}' on the drawing, not '{label}'")
                 checks = {"outline in the DXF": round(room["area"], 3)}
@@ -169,8 +172,6 @@ def answer(q: Question, dataset: Dataset) -> Answer:
                     explanation=f"Room {asked[0]} ('{label}'): outline area {room['area']:.2f} m²; {note}.",
                     meta={"interpreted": f"net area of the room numbered {asked[0]}", "checks": checks},
                     **common)
-            if bare_numbers(q.question):
-                return decline(f"no room numbered {bare_numbers(q.question)[0]} on this drawing")
             return _sum_answer(named(label), f"Rooms labelled '{label}'", pdf, common,
                                interpreted=f"sum of the areas of rooms named '{label}'")
 

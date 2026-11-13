@@ -136,3 +136,14 @@ def test_room_number_and_numbered_rooms():
     assert asks_about_numbered_rooms("What is the total net floor area in m² of all numbered indoor rooms on this floor?")
     assert asks_about_numbered_rooms("Qual è la superficie netta totale in m² di tutti i locali interni numerati di questo piano?")
     assert not asks_about_numbered_rooms("What is the total net area in m² of all rooms labelled 'X' on this floor?")
+
+
+def test_room_reference_is_read_by_structure_whatever_the_numbering():
+    from blueprints.questions import room_ref_in
+
+    assert room_ref_in("What is the net floor area of room 2.01 ('Zimmer') in m²?") == "2.01"
+    assert room_ref_in("What is the net floor area of room U1.13 ('Reduit') in m²?") == "U1.13"
+    assert room_ref_in("Wie gross ist die Nettofläche von Raum U1.07 («Bad») in m²?") == "U1.07"
+    assert room_ref_in("Quelle est la surface nette de la pièce 0.13 ('Couloir') en m² ?") == "0.13"
+    assert room_ref_in("What is the total net area in m² of all rooms labelled 'Bad' on this floor?") is None
+    assert room_ref_in("How many rooms labelled 'Zimmer' are there on this floor?") is None

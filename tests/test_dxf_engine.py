@@ -115,3 +115,44 @@ def test_rooms_of_unknown_type_lower_the_score(dev_swiss):
                               "(excluding balconies, loggias, terraces and other outdoor spaces, shafts and voids)?",
                path="data/swiss_dwellings/site2150_bldg3001_floor13690.pdf")
     assert ans.confidence == 0.6 and "no name on the drawing" in ans.explanation
+
+
+# ---- rules learned from the full dataset's dev drawings ---------------------------------
+
+FULL = config.DATA_DIR / "junction-dataset"
+needs_full = pytest.mark.skipif(not (FULL / "questions.jsonl").is_file(), reason="full dataset not present")
+
+
+def _full_ask(path, text):
+    from blueprints.data import Dataset, Question, drawing_of, question_id, source_of
+    from blueprints.engines import dxf
+
+    ds = Dataset(FULL)
+    q = Question(qid=question_id(path, text), path=path, question=text, answer=None, unit=None, type="",
+                 source=source_of(path), drawing=drawing_of(path), group=ds.group_of(path))
+    return dxf.answer(q, ds)
+
+
+@needs_full
+def test_letter_prefixed_room_numbers_are_recognised():
+    plan = "data/swiss_dwellings/site250_bldg459_floor14012.pdf"
+    ans = _full_ask(plan, "What is the net floor area of room U1.13 ('Reduit') in m²?")
+    assert ans.answer == pytest.approx(1.02, rel=0.02)
+    # A room reference that is not on the drawing is declined, never read as a label total.
+    missing = _full_ask(plan, "What is the net floor area of room U9.99 ('Reduit') in m²?")
+    assert missing.answer is None and "U9.99" in missing.reason
+
+
+@needs_full
+def test_a_room_inside_another_rooms_outline_is_subtracted_once():
+    ans = _full_ask("data/swiss_dwellings/site983_bldg2062_floor9222.pdf",
+                    "What is the net floor area of apartment A in m², summing all its rooms except balconies, "
+                    "loggias, terraces and other outdoor spaces?")
+    assert ans.answer == pytest.approx(92.84, rel=0.005)
+
+
+@needs_full
+def test_a_bathtub_without_its_rounded_outline_is_not_a_shower():
+    plan = "data/swiss_dwellings/site317_bldg647_floor2745.pdf"
+    assert _full_ask(plan, "How many bathtubs are drawn on this floor plan?").answer == 6
+    assert _full_ask(plan, "How many showers are drawn on this floor plan?").answer == 2
