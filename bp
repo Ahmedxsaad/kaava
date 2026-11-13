@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Run the blueprints CLI. -I is Python's isolated mode: dataset files are untrusted
+# input, so nothing from the current directory or PYTHON* variables can be imported.
+exec "$(cd "$(dirname "$0")" && pwd)/.venv/bin/python" -I -m blueprints.cli "$@"

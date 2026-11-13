@@ -1,0 +1,19 @@
+# secrets: API keys live in .env and never leave this machine
+.env
+.env.*
+!.env.example
+
+# dataset (downloaded with 02-dataset/download.sh; licences per source, not ours to redistribute)
+data/
+
+# rendered-image cache for model calls (rebuilt on demand)
+cache/
+
+# python
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+build/
+dist/
