@@ -410,7 +410,19 @@ def cmd_ask(args: argparse.Namespace) -> int:
         path = matches[0]
     q = Question(qid=question_id(path, args.question), path=path, question=args.question, answer=None,
                  unit=None, type="", source=source_of(path), drawing=drawing_of(path), group=ds.group_of(path))
-    ans = router.make(verify.load_thresholds())(q, ds)
+    fallback = None
+    if args.provider:  # a vision model for drawings no exact engine covers; costs money per question
+        from dotenv import load_dotenv
+
+        from . import pointing
+        from .vlm import make_vlm
+
+        load_dotenv(config.REPO_ROOT / ".env")
+        fallback = pointing.make_engine(make_vlm(args.provider, args.model, args.effort))
+    try:
+        ans = router.make(verify.load_thresholds(), fallback=fallback)(q, ds)
+    except FatalEngineError as exc:
+        raise SystemExit(f"cannot ask the model: {exc}")
 
     badge = {"verified": "VERIFIED", "check": "CHECK THIS", "declined": "CAN'T ANSWER RELIABLY"}[ans.state]
     unit = {"m2": " m2", "m3": " m3", "count": ""}.get(ans.unit or "", "")
@@ -434,8 +446,11 @@ def cmd_ask(args: argparse.Namespace) -> int:
         index = dxf_index.load_index(ds.abspath(dxf_rel))
         used = overlay.render(ans, args.question, ds.abspath(pdf_rel), index, Path(args.out))
         print(f"  overlay: {args.out}" if used else "  overlay: the drawing and its PDF could not be lined up")
+    elif args.out and any(e.get("kind") == "point" for e in ans.evidence):
+        overlay.render_points(ans, args.question, ds.abspath(path), Path(args.out))
+        print(f"  overlay: {args.out}")
     elif args.out:
-        print("  overlay: only drawn for floor plans with a DXF so far")
+        print("  overlay: only drawn for floor plans with a DXF, or for items a model pointed at")
     return 0
 
 
@@ -593,6 +608,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("path", help="drawing file (dataset path or unique file name)")
     p.add_argument("question")
     p.add_argument("--out", default=None, help="write a PNG of the plan with the evidence drawn on it")
+    p.add_argument("--provider", default=None, choices=["gemini", "anthropic", "mock"],
+                   help="also use a vision model when no exact engine covers the drawing (costs money)")
+    p.add_argument("--model", default=None)
+    p.add_argument("--effort", default="high", choices=["low", "medium", "high", "xhigh", "max"])
     p.set_defaults(fn=cmd_ask)
 
     p = sub.add_parser("calibrate", help="set the Verified thresholds on the calibration split")

@@ -196,3 +196,54 @@ def render(answer: Answer, question: str, pdf_path: Path, index: dict, out_path:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     canvas.save(out_path)
     return transform
+
+
+def render_points(answer: Answer, question: str, image_path: Path, out_path: Path) -> bool:
+    """Draw a model's pointed-at items on a raster plan (pixel coordinates of the file)."""
+    from PIL import Image, ImageDraw
+
+    points = [e for e in answer.evidence if e.get("kind") == "point" and e.get("space") == "image_px"]
+    with Image.open(image_path) as im:
+        plan = im.convert("RGB")
+    # Small scans are enlarged so pins and text stay readable.
+    zoom = max(1.0, 1700 / plan.width)
+    if zoom > 1:
+        plan = plan.resize((round(plan.width * zoom), round(plan.height * zoom)), Image.Resampling.LANCZOS)
+    draw = ImageDraw.Draw(plan)
+    pin_font = _font(24)
+    for number, item in enumerate(points, 1):
+        x, y, text = item["x"] * zoom, item["y"] * zoom, str(number)
+        w = draw.textlength(text, font=pin_font)
+        r = max(19, w / 2 + 8)
+        draw.ellipse([x - r, y - r, x + r, y + r], fill=_PIN, outline="white", width=3)
+        draw.text((x - w / 2, y - 14), text, fill="white", font=pin_font)
+
+    state_text, state_colour = _STATE[answer.state]
+    value = "no answer" if answer.answer is None else str(answer.answer)
+    cost = "EUR 0" if not answer.cost_usd else f"USD {answer.cost_usd:.4f}"
+    footer = f"{answer.method}  ·  {cost}  ·  {len(points)} item(s) pointed at by the model and counted by the code"
+    margin, width = 30, plan.width
+    measure = ImageDraw.Draw(Image.new("RGB", (8, 8)))
+    body_font, small_font = _font(28), _font(22)
+    body = (_wrap(measure, f"Q: {question}", body_font, width - 2 * margin)
+            + _wrap(measure, answer.explanation or answer.reason, body_font, width - 2 * margin))
+    footer_lines = _wrap(measure, footer, small_font, width - 2 * margin)
+    height = 118 + 38 * len(body) + 30 * len(footer_lines) + 14
+    canvas = Image.new("RGB", (width, plan.height + height), "white")
+    canvas.paste(plan, (0, height))
+    draw = ImageDraw.Draw(canvas)
+    badge = _font(40)
+    w = draw.textlength(state_text, font=badge)
+    draw.rounded_rectangle([margin, 26, margin + w + 40, 90], radius=12, fill=state_colour)
+    draw.text((margin + 20, 34), state_text, fill="white", font=badge)
+    draw.text((margin + w + 70, 22), value, fill="black", font=_font(56))
+    y = 112
+    for line in body:
+        draw.text((margin, y), line, fill=(40, 40, 40), font=body_font)
+        y += 38
+    for line in footer_lines:
+        draw.text((margin, y), line, fill=(110, 110, 110), font=small_font)
+        y += 30
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    canvas.save(out_path)
+    return True
