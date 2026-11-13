@@ -4,7 +4,7 @@
     split      create (or extend) the dev / calibration / test split
     sample     save a fixed stratified question sample from one split
     baseline   run the image-only vision-model baseline on a sample
-    run        run an engine (ifc) over a split or a sample and log it
+    run        run an engine (ifc, dxf) over a split or a sample and log it
     floor      the no-drawing guessing floor any real method must clear
     score      score any engine's predictions file and log the run
     errors     list the answers of a logged run, with the question text
@@ -258,9 +258,10 @@ def cmd_floor(args: argparse.Namespace) -> int:
 
 def _engines() -> dict:
     """name -> (method label, answer function, sources it is built for)."""
-    from .engines import ifc
+    from .engines import dxf, ifc
 
-    return {"ifc": (ifc.METHOD, ifc.answer, ("ifc_models",))}
+    return {"ifc": (ifc.METHOD, ifc.answer, ("ifc_models",)),
+            "dxf": (dxf.METHOD, dxf.answer, ("swiss_dwellings",))}
 
 
 def cmd_run(args: argparse.Namespace) -> int:
@@ -441,7 +442,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(fn=cmd_baseline)
 
     p = sub.add_parser("run", help="run an engine and log the result")
-    p.add_argument("engine", choices=["ifc"])
+    p.add_argument("engine", choices=["ifc", "dxf"])
     p.add_argument("--sample", default=None, help="sample file (default: all questions of --split)")
     p.add_argument("--split", default="dev", choices=SPLITS)
     p.add_argument("--source", action="append", help="limit to a source (repeatable)")

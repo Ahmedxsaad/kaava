@@ -326,10 +326,12 @@ def format_table(metrics: dict) -> str:
         if name == "OVERALL":
             out.append("-" * len(head))
         p50 = "" if m["latency_p50_ms"] is None else f"{m['latency_p50_ms'] / 1000:6.1f}"
+        # Free-text answers have no automatic rule: say how many are left out of "acc".
+        ungraded = f"   ({m['ungraded']} free-text answers not graded)" if m["ungraded"] else ""
         out.append(
             f"{name:<28}{m['n']:>5}{m['answered']:>6}{pct(m['accuracy']):>8}"
             f"{pct(m['accuracy_when_answered']):>10}{pct(m['coverage']):>8}"
-            f"{eur(m['eur_per_question']):>9}{p50:>7}"
+            f"{eur(m['eur_per_question']):>9}{p50:>7}{ungraded}"
         )
     if "weighted" in metrics:
         w = metrics["weighted"]

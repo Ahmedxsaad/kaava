@@ -60,9 +60,9 @@ def measure_of(question: str) -> str | None:
 # answers; the other languages are dictionary forms for the languages the dataset is
 # known to contain. Matching is on whole words of the question minus quoted names.
 _KIND_WORDS: dict[str, str] = {
-    "door": r"doors?|uks|ust|uste|ukse|ukseid|døre?|deur(en)?|türen?|ovi|ovea|ovia|portes?|dörr(ar)?",
+    "door": r"doors?|uks|ust|uste|ukse|ukseid|døre?|deur(en)?|tür|türen?|ovi|ovea|ovia|portes?|porta|dörr(ar)?",
     "window": r"windows?|aken|akent|akna|aknad|aknaid|vinduer?|raam|ramen|fenster|ikkunaa?|ikkunoita"
-              r"|fenêtres?|fönster",
+              r"|fenêtres?|fönster|finestr[ae]",
     "wall": r"walls?|sein|seina|seinad|seinu|væg|vægge|muur|muren|wand|wände|seinää?|seiniä|murs?"
             r"|vägg(ar)?",
     "space": r"rooms?|spaces?|ruum\w*|rum|rummet|ruimtes?|raum|räume|huone|huonetta|huoneita|pièces?",
@@ -80,6 +80,11 @@ _KIND_WORDS: dict[str, str] = {
     "footing": r"footings?",
     "furniture": r"furniture|furnishings?",
     "sanitary": r"sanitary (fixtures?|terminals?|appliances?)",
+    "apartment": r"apartments?|appartements?|logements?|wohnung(en)?|appartament[oi]",
+    "toilet": r"toilets?|wcs?|toiletten?|toilettes",
+    "washbasin": r"washbasins?|wash basins?|lavabos?|lavabi|waschbecken",
+    "bathtub": r"bathtubs?|baignoires?|badewannen?|vasche da bagno|vasca da bagno",
+    "shower": r"showers?|douches?|duschen?|docce|doccia",
 }
 _KINDS = {kind: re.compile(rf"(?<!\w)(?:{words})(?!\w)") for kind, words in _KIND_WORDS.items()}
 _MODEL_SCOPE = re.compile(r"(?<!\w)(model|mudel|modell|modèle|modelo|modello|malli)\w*")
@@ -93,3 +98,23 @@ def kinds_in(question: str) -> list[str]:
 
 def asks_about_whole_model(question: str) -> bool:
     return bool(_MODEL_SCOPE.search(norm(strip_quoted(question))))
+
+
+_APARTMENT_REF = re.compile(r"(?<!\w)(?:apartment|appartement|wohnung|appartamento)\s+([a-z]|\d{1,3})(?!\w)")
+_NUMBERED_ROOMS = re.compile(r"(?<!\w)(numbered|numérotées|nummerierten|numerati)(?!\w)")
+_BARE_NUMBER = re.compile(r"(?<![\w.])\d+(?:\.\d+)*[a-z]?(?![\w.])")
+
+
+def apartment_in(question: str) -> str | None:
+    """The apartment a question names ("apartment B", "Wohnung B", "l'appartement B"), upper-cased."""
+    m = _APARTMENT_REF.search(norm(strip_quoted(question)))
+    return m.group(1).upper() if m else None
+
+
+def asks_about_numbered_rooms(question: str) -> bool:
+    return bool(_NUMBERED_ROOMS.search(norm(strip_quoted(question))))
+
+
+def bare_numbers(question: str) -> list[str]:
+    """Number-like tokens outside quotes, e.g. the "2.01" of "room 2.01 ('Zimmer')"."""
+    return _BARE_NUMBER.findall(norm(strip_quoted(question)))
