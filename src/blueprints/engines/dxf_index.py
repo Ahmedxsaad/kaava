@@ -27,7 +27,7 @@ from pathlib import Path
 
 from .. import config
 
-INDEX_VERSION = 6
+INDEX_VERSION = 7
 
 # $INSUNITS code -> metres per drawing unit
 _UNIT_SCALE = {1: 0.0254, 2: 0.3048, 4: 0.001, 5: 0.01, 6: 1.0}
@@ -113,11 +113,14 @@ def build_index(dxf_path: Path) -> dict:
                       "apartment_tag": None, "unit": None, "texts": []})
 
     unplaced_texts = []
+    anchors = []  # where each room number is written: used to line the drawing up with its PDF
     for e in layers.get("ROOM_TEXT", []):
         if e.dxftype() != "TEXT":
             continue
         text = e.dxf.text.strip()
         x, y = _text_position(e, scale)
+        if _NUMBER.match(text):
+            anchors.append([text, round(x, 4), round(y, 4), round(float(e.dxf.height) * scale, 4)])
         inside = [i for i, (poly, _) in enumerate(room_shapes) if poly.contains(Point(x, y))]
         if not inside:
             unplaced_texts.append(text)
@@ -218,5 +221,6 @@ def build_index(dxf_path: Path) -> dict:
         "fixtures": fixtures,
         "orphan_drains": orphan_drains,
         "unplaced_texts": unplaced_texts,
+        "anchors": anchors,
         "annotation": annotation,
     }

@@ -1,6 +1,7 @@
 """Command line: ./bp <command>
 
     info       what is in the dataset
+    ask        ask a question about one drawing; draw the evidence on the plan
     split      create (or extend) the dev / calibration / test split
     sample     save a fixed stratified question sample from one split
     baseline   run the image-only vision-model baseline on a sample
@@ -364,6 +365,52 @@ def cmd_run(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_ask(args: argparse.Namespace) -> int:
+    """Ask any question about a drawing; print the answer card and draw the evidence on the plan."""
+    from pathlib import PurePosixPath
+
+    from . import overlay, verify
+    from .data import Question, drawing_of, question_id, source_of
+    from .engines import dxf, dxf_index, router
+
+    ds = Dataset(args.dataset)
+    path = args.path
+    if path not in ds.files:
+        matches = sorted(f for f in ds.files if f.endswith(path) or PurePosixPath(f).name == path)
+        if len(matches) != 1:
+            raise SystemExit(f"'{path}' matches {len(matches)} files in the dataset")
+        path = matches[0]
+    q = Question(qid=question_id(path, args.question), path=path, question=args.question, answer=None,
+                 unit=None, type="", source=source_of(path), drawing=drawing_of(path), group=ds.group_of(path))
+    ans = router.make(verify.load_thresholds())(q, ds)
+
+    badge = {"verified": "VERIFIED", "check": "CHECK THIS", "declined": "CAN'T ANSWER RELIABLY"}[ans.state]
+    unit = {"m2": " m2", "m3": " m3", "count": ""}.get(ans.unit or "", "")
+    print(f"[{badge}]  {ans.answer if ans.answer is not None else '-'}{unit}")
+    print(f"  {ans.explanation or ans.reason}")
+    if ans.meta.get("interpreted"):
+        print(f"  read as: {ans.meta['interpreted']}")
+    for name, value in (ans.meta.get("checks") or {}).items():
+        print(f"  check: {name}: {value}")
+    if ans.state == "verified":
+        v = ans.meta["verified_because"]
+        print(f"  why verified: {v['calibration_errors']} errors in {v['calibration_answers']} held-out answers of "
+              f"this kind (95% upper bound {100 * v['error_upper_bound']:.2f}%)")
+    print(f"  method: {ans.method or router.METHOD}   cost: EUR {config.usd_to_eur(ans.cost_usd or 0):.4f}   "
+          f"evidence items: {len(ans.evidence)}")
+
+    siblings = ds.formats(path)
+    dxf_rel = next((f for f in siblings if f.lower().endswith(".dxf")), None)
+    pdf_rel = next((f for f in siblings if f.lower().endswith(".pdf")), None)
+    if args.out and dxf_rel and pdf_rel and ans.method == dxf.METHOD:
+        index = dxf_index.load_index(ds.abspath(dxf_rel))
+        used = overlay.render(ans, args.question, ds.abspath(pdf_rel), index, Path(args.out))
+        print(f"  overlay: {args.out}" if used else "  overlay: the drawing and its PDF could not be lined up")
+    elif args.out:
+        print("  overlay: only drawn for floor plans with a DXF so far")
+    return 0
+
+
 def cmd_score(args: argparse.Namespace) -> int:
     """Score a predictions file from any engine.
 
@@ -508,6 +555,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--final", action="store_true", help="allow the test split")
     p.add_argument("--notes", default="")
     p.set_defaults(fn=cmd_run)
+
+    p = sub.add_parser("ask", help="ask a question about one drawing and draw the evidence")
+    p.add_argument("path", help="drawing file (dataset path or unique file name)")
+    p.add_argument("question")
+    p.add_argument("--out", default=None, help="write a PNG of the plan with the evidence drawn on it")
+    p.set_defaults(fn=cmd_ask)
 
     p = sub.add_parser("calibrate", help="set the Verified thresholds on the calibration split")
     p.add_argument("--alpha", type=float, default=0.01, help="largest tolerated error rate among Verified answers")
