@@ -1,0 +1,126 @@
+{
+ "calibrated": "2026-11-13T22:12:29+00:00",
+ "dataset": "junction-dataset-preview",
+ "calibration_runs": [
+  "20261113-221227-router-v1-raw-3ee2"
+ ],
+ "alpha": 0.01,
+ "bound_confidence": 0.95,
+ "families": {
+  "dxf-engine:v1/area": {
+   "threshold": null,
+   "answers_at_threshold": 0,
+   "errors_at_threshold": null,
+   "upper_bound": null,
+   "calibration_answers": 194,
+   "levels_tested": [
+    {
+     "score": 0.99,
+     "answers": 78,
+     "errors": 0,
+     "upper_bound": 0.05463088384794834,
+     "passed": false
+    },
+    {
+     "score": 0.85,
+     "answers": 164,
+     "errors": 0,
+     "upper_bound": 0.02636586234984343,
+     "passed": false
+    },
+    {
+     "score": 0.6,
+     "answers": 192,
+     "errors": 6,
+     "upper_bound": 0.07244390558951513,
+     "passed": false
+    },
+    {
+     "score": 0.5,
+     "answers": 194,
+     "errors": 6,
+     "upper_bound": 0.07171298494318344,
+     "passed": false
+    }
+   ]
+  },
+  "dxf-engine:v1/count": {
+   "threshold": 0.9,
+   "answers_at_threshold": 400,
+   "errors_at_threshold": 0,
+   "upper_bound": 0.009179804583665262,
+   "calibration_answers": 400,
+   "levels_tested": [
+    {
+     "score": 0.99,
+     "answers": 232,
+     "errors": 0,
+     "upper_bound": 0.015774599364195417,
+     "passed": false
+    },
+    {
+     "score": 0.9,
+     "answers": 400,
+     "errors": 0,
+     "upper_bound": 0.009179804583665262,
+     "passed": true
+    }
+   ]
+  },
+  "ifc-engine:v1/area": {
+   "threshold": null,
+   "answers_at_threshold": 0,
+   "errors_at_threshold": null,
+   "upper_bound": null,
+   "calibration_answers": 250,
+   "levels_tested": [
+    {
+     "score": 0.99,
+     "answers": 242,
+     "errors": 0,
+     "upper_bound": 0.015127712453415524,
+     "passed": false
+    },
+    {
+     "score": 0.5,
+     "answers": 250,
+     "errors": 8,
+     "upper_bound": 0.06207669737487046,
+     "passed": false
+    }
+   ]
+  },
+  "ifc-engine:v1/count": {
+   "threshold": null,
+   "answers_at_threshold": 0,
+   "errors_at_threshold": null,
+   "upper_bound": null,
+   "calibration_answers": 86,
+   "levels_tested": [
+    {
+     "score": 0.95,
+     "answers": 86,
+     "errors": 6,
+     "upper_bound": 0.13305723921450302,
+     "passed": false
+    }
+   ]
+  },
+  "ifc-engine:v1/volume": {
+   "threshold": null,
+   "answers_at_threshold": 0,
+   "errors_at_threshold": null,
+   "upper_bound": null,
+   "calibration_answers": 30,
+   "levels_tested": [
+    {
+     "score": 0.6,
+     "answers": 30,
+     "errors": 0,
+     "upper_bound": 0.09503385285530412,
+     "passed": false
+    }
+   ]
+  }
+ }
+}

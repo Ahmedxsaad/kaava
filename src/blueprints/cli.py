@@ -4,7 +4,8 @@
     split      create (or extend) the dev / calibration / test split
     sample     save a fixed stratified question sample from one split
     baseline   run the image-only vision-model baseline on a sample
-    run        run an engine (ifc, dxf) over a split or a sample and log it
+    run        run an engine (ifc, dxf) or the whole router over a split or a sample
+    calibrate  set the Verified thresholds from the calibration split
     floor      the no-drawing guessing floor any real method must clear
     score      score any engine's predictions file and log the run
     errors     list the answers of a logged run, with the question text
@@ -258,10 +259,53 @@ def cmd_floor(args: argparse.Namespace) -> int:
 
 def _engines() -> dict:
     """name -> (method label, answer function, sources it is built for)."""
-    from .engines import dxf, ifc
+    from . import verify
+    from .engines import dxf, ifc, router
 
+    every_source = tuple(sorted(config.FULL_SET_MIX and {s for s, _ in config.FULL_SET_MIX}))
     return {"ifc": (ifc.METHOD, ifc.answer, ("ifc_models",)),
-            "dxf": (dxf.METHOD, dxf.answer, ("swiss_dwellings",))}
+            "dxf": (dxf.METHOD, dxf.answer, ("swiss_dwellings",)),
+            # The whole system: route, answer, then mark Verified where calibration allows.
+            "router": (router.METHOD, router.make(verify.load_thresholds()), every_source)}
+
+
+def cmd_calibrate(args: argparse.Namespace) -> int:
+    """Set the Verified thresholds from the calibration split and save them."""
+    from . import verify
+    from .engines import router
+
+    ds = Dataset(args.dataset)
+    split = Split.load()
+    questions = split.select(ds.questions, "calibration")
+    method = f"{router.METHOD}:raw"
+    run_id = new_run_id(method)
+    run_dir = config.RESULTS_DIR / "runs" / run_id
+    result = run_eval(method=method, answer_fn=router.make(None), dataset=ds, questions=questions,
+                      split_of=split.of, run_dir=run_dir, workers=args.workers,
+                      max_consecutive_errors=25, progress=lambda _msg: None)
+    weights, mix_note = _mix_weights(ds)
+    finalize_run(run_id=run_id, run_dir=run_dir, method=method, result=result, dataset=ds,
+                 split_name="calibration", sample_name="all-calibration", weights=weights,
+                 run_config={"mix": mix_note, "purpose": "calibration of Verified thresholds"},
+                 notes="engine answers before thresholds; used only to set them",
+                 log=result["complete"])
+    outcome = verify.calibrate(result["rows"], alpha=args.alpha)
+    path = verify.save_thresholds(outcome, runs=[run_id], dataset=ds.root.name)
+
+    print(f"target: at most {100 * args.alpha:g}% of Verified answers wrong "
+          f"(95% upper bound, calibration split, {len(questions)} questions)\n")
+    print(f"{'family':<30}{'threshold':>10}{'answers':>9}{'errors':>8}{'bound':>8}   decision")
+    for family, f in outcome["families"].items():
+        if f["threshold"] is None:
+            best = min(f["levels_tested"], key=lambda t: t["upper_bound"]) if f["levels_tested"] else None
+            why = (f"best level: {best['answers']} answers, {best['errors']} wrong, bound "
+                   f"{100 * best['upper_bound']:.1f}%" if best else "no scored answers")
+            print(f"{family:<30}{'none':>10}{'':>9}{'':>8}{'':>8}   not yet Verified ({why})")
+        else:
+            print(f"{family:<30}{f['threshold']:>10}{f['answers_at_threshold']:>9}{f['errors_at_threshold']:>8}"
+                  f"{100 * f['upper_bound']:>7.2f}%   Verified at score >= {f['threshold']}")
+    print(f"\nsaved: {_rel(path)}")
+    return 0
 
 
 def cmd_run(args: argparse.Namespace) -> int:
@@ -269,6 +313,18 @@ def cmd_run(args: argparse.Namespace) -> int:
     ds = Dataset(args.dataset)
     split = Split.load()
     method, answer_fn, default_sources = _engines()[args.engine]
+    if args.fallback_run:
+        from . import verify
+        from .engines import router
+
+        if args.engine != "router":
+            raise SystemExit("--fallback-run only applies to the router")
+        logged = config.RESULTS_DIR / "runs" / args.fallback_run / "predictions.jsonl"
+        if not logged.is_file():
+            raise SystemExit(f"no such run: {logged}")
+        fallback_method = json.loads((logged.parent / "summary.json").read_text())["method"]
+        method = f"{router.METHOD}+fallback[{fallback_method}]"
+        answer_fn = router.make(verify.load_thresholds(), fallback=router.replay(logged))
     if args.sample:
         sample, questions = load_sample(Path(args.sample), ds)
         sample_name, split_name = sample["name"], sample["split"]
@@ -442,14 +498,21 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(fn=cmd_baseline)
 
     p = sub.add_parser("run", help="run an engine and log the result")
-    p.add_argument("engine", choices=["ifc", "dxf"])
+    p.add_argument("engine", choices=["ifc", "dxf", "router"])
     p.add_argument("--sample", default=None, help="sample file (default: all questions of --split)")
     p.add_argument("--split", default="dev", choices=SPLITS)
     p.add_argument("--source", action="append", help="limit to a source (repeatable)")
+    p.add_argument("--fallback-run", default=None, metavar="RUN_ID",
+                   help="router only: for questions no engine covers, replay this model run's answers")
     p.add_argument("--workers", type=int, default=4)
     p.add_argument("--final", action="store_true", help="allow the test split")
     p.add_argument("--notes", default="")
     p.set_defaults(fn=cmd_run)
+
+    p = sub.add_parser("calibrate", help="set the Verified thresholds on the calibration split")
+    p.add_argument("--alpha", type=float, default=0.01, help="largest tolerated error rate among Verified answers")
+    p.add_argument("--workers", type=int, default=4)
+    p.set_defaults(fn=cmd_calibrate)
 
     p = sub.add_parser("floor", help="no-drawing guessing floor (free, dev only)")
     p.add_argument("--sample", default=None, help="sample file (default: every dev question)")

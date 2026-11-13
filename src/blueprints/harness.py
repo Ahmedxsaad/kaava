@@ -320,7 +320,10 @@ def format_table(metrics: dict) -> str:
     def eur(x: float | None) -> str:
         return "      -" if x is None else f"{x:7.4f}"
 
+    verified_any = metrics["overall"]["verified"] > 0
     head = f"{'source/type':<28}{'n':>5}{'answ':>6}{'acc':>8}{'acc|answ':>10}{'cover':>8}{'EUR/q':>9}{'p50 s':>7}"
+    if verified_any:
+        head += f"{'Verified':>10}{'wrong':>7}"
     out = [head, "-" * len(head)]
     for name, m in list(metrics["by_family"].items()) + [("OVERALL", metrics["overall"])]:
         if name == "OVERALL":
@@ -328,10 +331,11 @@ def format_table(metrics: dict) -> str:
         p50 = "" if m["latency_p50_ms"] is None else f"{m['latency_p50_ms'] / 1000:6.1f}"
         # Free-text answers have no automatic rule: say how many are left out of "acc".
         ungraded = f"   ({m['ungraded']} free-text answers not graded)" if m["ungraded"] else ""
+        verified = f"{m['verified']:>10}{m['verified_wrong']:>7}" if verified_any else ""
         out.append(
             f"{name:<28}{m['n']:>5}{m['answered']:>6}{pct(m['accuracy']):>8}"
             f"{pct(m['accuracy_when_answered']):>10}{pct(m['coverage']):>8}"
-            f"{eur(m['eur_per_question']):>9}{p50:>7}{ungraded}"
+            f"{eur(m['eur_per_question']):>9}{p50:>7}{verified}{ungraded}"
         )
     if "weighted" in metrics:
         w = metrics["weighted"]
