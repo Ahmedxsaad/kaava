@@ -258,16 +258,29 @@ def cmd_floor(args: argparse.Namespace) -> int:
     return 0
 
 
-def _engines() -> dict:
+ENGINE_NAMES = ("ifc", "dxf", "router", "pointing")
+
+
+def _engines(args: argparse.Namespace | None = None) -> dict:
     """name -> (method label, answer function, sources it is built for)."""
     from . import verify
     from .engines import dxf, ifc, router
 
-    every_source = tuple(sorted(config.FULL_SET_MIX and {s for s, _ in config.FULL_SET_MIX}))
-    return {"ifc": (ifc.METHOD, ifc.answer, ("ifc_models",)),
-            "dxf": (dxf.METHOD, dxf.answer, ("swiss_dwellings",)),
-            # The whole system: route, answer, then mark Verified where calibration allows.
-            "router": (router.METHOD, router.make(verify.load_thresholds()), every_source)}
+    every_source = tuple(sorted({s for s, _ in config.FULL_SET_MIX}))
+    engines = {"ifc": (ifc.METHOD, ifc.answer, ("ifc_models",)),
+               "dxf": (dxf.METHOD, dxf.answer, ("swiss_dwellings",)),
+               # The whole system: route, answer, then mark Verified where calibration allows.
+               "router": (router.METHOD, router.make(verify.load_thresholds()), every_source)}
+    if args is not None and getattr(args, "engine", None) == "pointing":
+        from dotenv import load_dotenv
+
+        from . import pointing
+        from .vlm import make_vlm
+
+        load_dotenv(config.REPO_ROOT / ".env")
+        vlm = make_vlm(args.provider, args.model, args.effort)
+        engines["pointing"] = (pointing.method_name(vlm), pointing.make_engine(vlm), ("cubicasa5k",))
+    return engines
 
 
 def cmd_calibrate(args: argparse.Namespace) -> int:
@@ -313,7 +326,10 @@ def cmd_run(args: argparse.Namespace) -> int:
     """Run an engine over a sample, or over every question of a split for its sources."""
     ds = Dataset(args.dataset)
     split = Split.load()
-    method, answer_fn, default_sources = _engines()[args.engine]
+    try:
+        method, answer_fn, default_sources = _engines(args)[args.engine]
+    except FatalEngineError as exc:
+        raise SystemExit(f"cannot start: {exc}")
     if args.fallback_run:
         from . import verify
         from .engines import router
@@ -329,6 +345,9 @@ def cmd_run(args: argparse.Namespace) -> int:
     if args.sample:
         sample, questions = load_sample(Path(args.sample), ds)
         sample_name, split_name = sample["name"], sample["split"]
+        if args.source:  # part of a sample: only these sources
+            questions = [q for q in questions if q.source in args.source]
+            sample_name += f"[{'+'.join(args.source)}]"
     else:
         sources = tuple(args.source) if args.source else default_sources
         try:
@@ -341,18 +360,26 @@ def cmd_run(args: argparse.Namespace) -> int:
         raise SystemExit("no questions selected")
     _check_split(questions, split, split_name, args.final, f"run {method} on {sample_name}")
 
+    paid = args.engine == "pointing"
+    if paid and not args.sample:
+        raise SystemExit("a model engine costs money per question: give it a --sample")
+    offline = paid and args.provider == "mock"  # a pipeline check, never a result
     run_id = new_run_id(method)
-    run_dir = config.RESULTS_DIR / "runs" / run_id
-    print(f"method    {method}\nsample    {sample_name}: {len(questions)} questions")
+    runs_root = Path(tempfile.mkdtemp(prefix="bp-mock-")) if offline else config.RESULTS_DIR / "runs"
+    run_dir = runs_root / run_id
+    print(f"method    {method}\nsample    {sample_name}: {len(questions)} questions"
+          + (f"\nbudget    EUR {args.max_cost_eur:.2f}" if paid else ""))
     result = run_eval(method=method, answer_fn=answer_fn, dataset=ds, questions=questions,
                       split_of=split.of, run_dir=run_dir, workers=args.workers,
-                      max_consecutive_errors=25, progress=lambda _msg: None)
+                      max_cost_eur=args.max_cost_eur if paid else None,
+                      max_consecutive_errors=3 if paid else 25,
+                      progress=print if paid else (lambda _msg: None))
     weights, mix_note = _mix_weights(ds)
     summary = finalize_run(
         run_id=run_id, run_dir=run_dir, method=method, result=result, dataset=ds,
         split_name=split_name, sample_name=sample_name, weights=weights,
         run_config={"engine": args.engine, "mix": mix_note}, notes=args.notes,
-        log=result["complete"],
+        log=result["complete"] and not offline,
     )
     print()
     print(format_table(summary["metrics"]))
@@ -361,7 +388,8 @@ def cmd_run(args: argparse.Namespace) -> int:
         print(f"\nINCOMPLETE: {errors} engine errors. {result['stopped']}  Not added to the leaderboard.")
         print(f"See: ./bp errors {run_id} --status abstained")
         return 3
-    print(f"\nlogged: results/runs/{run_id}/ and results/leaderboard.csv")
+    print(f"\nmock run, not logged to results/. Output: {run_dir}" if offline
+          else f"\nlogged: results/runs/{run_id}/ and results/leaderboard.csv")
     return 0
 
 
@@ -545,7 +573,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(fn=cmd_baseline)
 
     p = sub.add_parser("run", help="run an engine and log the result")
-    p.add_argument("engine", choices=["ifc", "dxf", "router"])
+    p.add_argument("engine", choices=ENGINE_NAMES)
+    p.add_argument("--provider", default="gemini", choices=["gemini", "anthropic", "mock"],
+                   help="model engines only")
+    p.add_argument("--model", default=None, help="model engines only")
+    p.add_argument("--effort", default="high", choices=["low", "medium", "high", "xhigh", "max"])
+    p.add_argument("--max-cost-eur", type=float, default=2.0, help="model engines only: stop at this spend")
     p.add_argument("--sample", default=None, help="sample file (default: all questions of --split)")
     p.add_argument("--split", default="dev", choices=SPLITS)
     p.add_argument("--source", action="append", help="limit to a source (repeatable)")
