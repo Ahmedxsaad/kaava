@@ -1,68 +1,61 @@
 {
- "calibrated": "2026-11-13T22:15:15+00:00",
- "dataset": "junction-dataset-preview",
+ "calibrated": "2026-11-13T22:56:23+00:00",
+ "dataset": "junction-dataset",
  "calibration_runs": [
-  "20261113-221501-router-v1-raw-188b"
+  "20261113-225519-router-v1-raw-bb00"
  ],
  "alpha": 0.01,
  "bound_confidence": 0.95,
  "families": {
   "dxf-engine:v1/area": {
-   "threshold": null,
-   "answers_at_threshold": 0,
-   "errors_at_threshold": null,
-   "upper_bound": null,
-   "calibration_answers": 194,
+   "threshold": 0.85,
+   "answers_at_threshold": 2612,
+   "errors_at_threshold": 6,
+   "upper_bound": 0.005252466781505521,
+   "calibration_answers": 3034,
    "levels_tested": [
     {
      "score": 0.99,
-     "answers": 78,
+     "answers": 838,
      "errors": 0,
-     "upper_bound": 0.05463088384794834,
-     "passed": false
+     "upper_bound": 0.00487393633634579,
+     "passed": true
     },
     {
      "score": 0.85,
-     "answers": 164,
-     "errors": 0,
-     "upper_bound": 0.02636586234984343,
-     "passed": false
+     "answers": 2612,
+     "errors": 6,
+     "upper_bound": 0.005252466781505521,
+     "passed": true
     },
     {
      "score": 0.6,
-     "answers": 192,
-     "errors": 6,
-     "upper_bound": 0.07244390558951513,
-     "passed": false
-    },
-    {
-     "score": 0.5,
-     "answers": 194,
-     "errors": 6,
-     "upper_bound": 0.07171298494318344,
+     "answers": 3034,
+     "errors": 72,
+     "upper_bound": 0.03033265209247069,
      "passed": false
     }
    ]
   },
   "dxf-engine:v1/count": {
    "threshold": 0.9,
-   "answers_at_threshold": 400,
-   "errors_at_threshold": 0,
-   "upper_bound": 0.009179804583665262,
-   "calibration_answers": 400,
+   "answers_at_threshold": 6354,
+   "errors_at_threshold": 8,
+   "upper_bound": 0.0024793139434781506,
+   "calibration_answers": 6354,
    "levels_tested": [
     {
      "score": 0.99,
-     "answers": 232,
+     "answers": 3648,
      "errors": 0,
-     "upper_bound": 0.015774599364195417,
-     "passed": false
+     "upper_bound": 0.0010106948942223584,
+     "passed": true
     },
     {
      "score": 0.9,
-     "answers": 400,
-     "errors": 0,
-     "upper_bound": 0.009179804583665262,
+     "answers": 6354,
+     "errors": 8,
+     "upper_bound": 0.0024793139434781506,
      "passed": true
     }
    ]
@@ -72,20 +65,27 @@
    "answers_at_threshold": 0,
    "errors_at_threshold": null,
    "upper_bound": null,
-   "calibration_answers": 250,
+   "calibration_answers": 592,
    "levels_tested": [
     {
      "score": 0.99,
      "answers": 242,
      "errors": 0,
-     "upper_bound": 0.015127712453415524,
+     "upper_bound": 0.01677646038863699,
+     "passed": false
+    },
+    {
+     "score": 0.9,
+     "answers": 584,
+     "errors": 3,
+     "upper_bound": 0.015906731826365615,
      "passed": false
     },
     {
      "score": 0.5,
-     "answers": 250,
-     "errors": 8,
-     "upper_bound": 0.06207669737487046,
+     "answers": 592,
+     "errors": 11,
+     "upper_bound": 0.034348915559392644,
      "passed": false
     }
    ]
@@ -95,27 +95,43 @@
    "answers_at_threshold": 0,
    "errors_at_threshold": null,
    "upper_bound": null,
-   "calibration_answers": 86,
+   "calibration_answers": 150,
    "levels_tested": [
     {
      "score": 0.99,
-     "answers": 26,
+     "answers": 47,
      "errors": 2,
-     "upper_bound": 0.2669964340278845,
+     "upper_bound": 0.15517042563251476,
      "passed": false
     },
     {
      "score": 0.95,
-     "answers": 84,
+     "answers": 147,
      "errors": 4,
-     "upper_bound": 0.1240247715694398,
+     "upper_bound": 0.07212947266437952,
      "passed": false
     },
     {
      "score": 0.6,
-     "answers": 86,
+     "answers": 150,
      "errors": 6,
-     "upper_bound": 0.15267453565955996,
+     "upper_bound": 0.08925422292359521,
+     "passed": false
+    }
+   ]
+  },
+  "ifc-engine:v1/length": {
+   "threshold": null,
+   "answers_at_threshold": 0,
+   "errors_at_threshold": null,
+   "upper_bound": null,
+   "calibration_answers": 7,
+   "levels_tested": [
+    {
+     "score": 0.9,
+     "answers": 7,
+     "errors": 0,
+     "upper_bound": 0.3481636551311608,
      "passed": false
     }
    ]
