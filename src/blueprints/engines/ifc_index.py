@@ -19,7 +19,7 @@ from pathlib import Path
 
 from .. import config
 
-INDEX_VERSION = 4
+INDEX_VERSION = 5
 
 # Element kinds we can count, and the IFC classes that define them. by_type() also
 # returns subtypes (IfcWall includes IfcWallStandardCase).
@@ -39,10 +39,11 @@ KIND_CLASSES: dict[str, list[str]] = {
     "covering": ["IfcCovering"],
     "footing": ["IfcFooting"],
     "furniture": ["IfcFurnishingElement"],
-    # IFC4 has its own class; IFC2X3 models type a generic flow terminal instead.
+    # IFC4 has its own classes; IFC2X3 models type a generic flow terminal instead.
     "sanitary": ["IfcSanitaryTerminal"],
+    "light": ["IfcLightFixture"],
 }
-_TYPED_FLOW_TERMINALS = {"sanitary": "IfcSanitaryTerminalType"}
+_TYPED_FLOW_TERMINALS = {"sanitary": "IfcSanitaryTerminalType", "light": "IfcLightFixtureType"}
 VOLUME_KINDS = ("slab", "wall")
 
 
@@ -239,6 +240,16 @@ def build_index(ifc_path: Path, *, with_volumes: bool = False) -> dict:
             for e in found
         ]
 
+    # Wall quantities the model states itself (its base quantity set), in metres.
+    wall_quantities = {}
+    for wall in model.by_type("IfcWall"):
+        length = _quantity(wall, ("Length",))
+        side = _quantity(wall, ("NetSideArea",))
+        wall_quantities[wall.GlobalId] = {
+            "length": length * length_scale if length is not None else None,
+            "net_side_area": side * area_scale if side is not None else None,
+        }
+
     index = {
         "version": INDEX_VERSION,
         "schema": model.schema,
@@ -247,6 +258,7 @@ def build_index(ifc_path: Path, *, with_volumes: bool = False) -> dict:
         "storeys": storeys,
         "spaces": spaces,
         "kinds": kinds,
+        "wall_quantities": wall_quantities,
         "volumes": None,
     }
     if with_volumes:

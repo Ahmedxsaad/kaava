@@ -35,10 +35,11 @@ def norm(text: str) -> str:
 # NFKC turns "m²" into "m2" and "m³" into "m3", so one spelling covers both.
 _AREA = re.compile(r"\bm2\b|m\^2|\bsq\.? ?m\b|square met")
 _VOLUME = re.compile(r"\bm3\b|m\^3|cubic met")
-_LENGTH = re.compile(r"\(m\)|\bin m\b|\bin met(er|re)s\b|\bi m\b|\bmeetrites\b")
+_LENGTH = re.compile(r"\(m\)|\bin m\b|\bin met(er|re)s\b|\bin metern\b|\bi m\b|\bmeetrites\b|\bîn metri\b")
 _COUNT = re.compile(
     r"\bhow many\b|\bnumber of\b|\bmitu\b|\bhvor mange\b|\bhoeveel\b|\bwie ?viele\b"
     r"|\bkuinka monta\b|\bmontako\b|\bcombien\b|\bquant[ie]\b|\bcu[aá]nt[oa]s\b|\bhur många\b"
+    r"|\bnumărul de\b|\bnumarul de\b|\bcâte\b|\bcâți\b"
 )
 
 
@@ -60,18 +61,20 @@ def measure_of(question: str) -> str | None:
 # answers; the other languages are dictionary forms for the languages the dataset is
 # known to contain. Matching is on whole words of the question minus quoted names.
 _KIND_WORDS: dict[str, str] = {
-    "door": r"doors?|uks|ust|uste|ukse|ukseid|døre?|deur(en)?|tür|türen?|ovi|ovea|ovia|portes?|porta|dörr(ar)?",
+    "door": r"doors?|uks|ust|uste|ukse|ukseid|døre?|deur(en)?|tür|türen?|ovi|ovea|ovia|portes?|porta|dörr(ar)?"
+            r"|uși|ușă|usi",
     "window": r"windows?|aken|akent|akna|aknad|aknaid|vinduer?|raam|ramen|fenster|ikkunaa?|ikkunoita"
-              r"|fenêtres?|fönster|finestr[ae]",
+              r"|fenêtres?|fönster|finestr[ae]|ferestre|fereastră",
     "wall": r"walls?|sein|seina|seinad|seinu|væg|vægge|muur|muren|wand|wände|seinää?|seiniä|murs?"
-            r"|vägg(ar)?",
-    "space": r"rooms?|spaces?|ruum\w*|rum|rummet|ruimtes?|raum|räume|huone|huonetta|huoneita|pièces?",
+            r"|vägg(ar)?|pereți|pereti|perete",
+    "space": r"rooms?|spaces?|ruum\w*|rum|rummet|ruimtes?|raum|raums|räume|huone|huonetta|huoneita|pièces?"
+             r"|camere|încăperi|incaperi",
     "stair": r"stairs?|staircases?|trepp|treppi|trepid|trappe|trapper|trap|trappen|treppen?"
-             r"|porras|portaat|portaita|escaliers?|trappa|trappor",
+             r"|porras|portaat|portaita|escaliers?|trappa|trappor|scări|scari|scară",
     "column": r"columns?|post|posti|postid|søjler?|kolom(men)?|stützen?|säulen?|pilaria?|pilareita"
-              r"|poteaux?|pelare",
-    "beam": r"beams?|tala|talad|talasid|bjælker?|balk(en)?|träger|palkkia?|palkkeja|poutres?|balkar",
-    "slab": r"slabs?|vahelagi|vahelaed|dæk|decken?|laattaa?|laattoja|dalles?|bjälklag",
+              r"|poteaux?|pelare|stâlpi|stalpi|stâlp",
+    "beam": r"beams?|tala|talad|talasid|bjælker?|balk(en)?|träger|palkkia?|palkkeja|poutres?|balkar|grinzi|grindă",
+    "slab": r"slabs?|vahelagi|vahelaed|dæk|decken?|bodenplatten?|laattaa?|laattoja|dalles?|bjälklag|planșee",
     "roof": r"roofs?|katus(ed)?|dak(en)?|dach|dächer|katto|kattoa|toits?",
     "railing": r"railings?|piirded?|gelændere?|leuning(en)?|geländer|kaide|kaiteita",
     "ramp": r"ramps?|kaldtee|rampe[rn]?",
@@ -79,7 +82,8 @@ _KIND_WORDS: dict[str, str] = {
     "covering": r"coverings?",
     "footing": r"footings?",
     "furniture": r"furniture|furnishings?",
-    "sanitary": r"sanitary (fixtures?|terminals?|appliances?)",
+    "sanitary": r"sanitary (fixtures?|terminals?|appliances?)|sanitärobjekte?|obiecte sanitare",
+    "light": r"light fixtures?|luminaires?|leuchten?|corpuri de iluminat",
     "apartment": r"apartments?|appartements?|logements?|wohnung(en)?|appartament[oi]",
     "toilet": r"toilets?|wcs?|toiletten?|toilettes",
     "washbasin": r"washbasins?|wash basins?|lavabos?|lavabi|waschbecken",

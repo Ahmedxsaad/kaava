@@ -32,7 +32,7 @@ from . import ifc_index
 METHOD = "ifc-engine:v1"
 AGREE = 0.005  # two sources "agree" within 0.5%
 # Kinds whose counting convention matched the reference answers on dev drawings.
-VALIDATED_KINDS = {"door", "window", "wall", "space", "stair", "column", "beam", "sanitary"}
+VALIDATED_KINDS = {"door", "window", "wall", "space", "stair", "column", "beam", "sanitary", "light"}
 # Kinds whose placement height reliably tells the storey (their origin sits on the
 # storey's floor). Walls, beams, slabs and columns are placed with offsets, so their
 # height is not a usable second opinion.
@@ -116,9 +116,6 @@ def answer(q: Question, dataset: Dataset) -> Answer:
     measure = measure_of(q.question)
     if measure is None:
         return decline("could not tell what the question measures")
-    if measure == "length":
-        return decline("length questions are not supported yet")
-
     index = _index(dataset.abspath(ifc_rel), with_volumes=(measure == "volume"))
     storeys = index["storeys"]
     quoted = quoted_strings(q.question)
@@ -136,6 +133,34 @@ def answer(q: Question, dataset: Dataset) -> Answer:
     storey_name = storeys[storey]["name"] if storey is not None else None
     other_quoted = [t for t in quoted if storey is None or norm(t) != norm(storey_hits[-1][0])]
     names = ", ".join(repr(s["name"]) for s in storeys)
+
+    # ---- wall length and wall side area, from the model's own wall quantities ----
+    if measure == "length" or (measure == "area" and kinds == ["wall"]):
+        if kinds != ["wall"]:
+            return decline("only the total length of walls is supported for lengths")
+        if storey is None:
+            return decline(f"no storey of this model matches {quoted}; its storeys are {names}")
+        walls = [e for e in index["kinds"]["wall"] if e["storey"] == storey]
+        if not walls:
+            return decline(f"no walls on storey '{storey_name}'")
+        field, unit, what = (("length", "m", "length") if measure == "length"
+                             else ("net_side_area", "m2", "net side area"))
+        values = [index["wall_quantities"].get(e["id"], {}).get(field) for e in walls]
+        missing = sum(v is None for v in values)
+        if missing:
+            return decline(f"{missing} of {len(walls)} walls on '{storey_name}' state no {what} in the model")
+        total = sum(values)
+        symbol = "m" if unit == "m" else "m²"
+        return Answer(
+            answer=round(total, 2), unit=unit, state=CHECK, confidence=0.9,
+            evidence=[_element(e, **{f"{field}": round(v, 3)}) for e, v in zip(walls, values)]
+                     + [{"kind": "formula", "text": f"sum of {len(walls)} wall {what}s = {total:.2f} {symbol}"}],
+            explanation=f"Total {what} of the {len(walls)} walls on storey '{storey_name}': {total:.2f} {symbol}, "
+                        "summed from each wall's base quantities in the model.",
+            meta={"interpreted": f"sum of wall {what} (model quantity) on storey '{storey_name}'",
+                  "checks": {"walls on the storey": len(walls), f"walls stating a {what}": len(walls)},
+                  "ifc": ifc_rel},
+            **common)
 
     # ---- areas -------------------------------------------------------------
     if measure == "area":
