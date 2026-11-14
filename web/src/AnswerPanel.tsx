@@ -48,11 +48,13 @@ function notVerified(result: AskResult): string {
 
 function why(result: AskResult): { title: string; text: React.ReactNode } {
   const v = result.verified_because;
+  const two = result.readings;  // a scan read twice: the printed labels, and a vision model's own count
   if (result.state === "verified" && v) {
     return {
       title: "Why you can skip the check",
       text: (
         <>
+          {two ? "Two readings give the same count: the room names printed on the plan, read by local OCR, and the rooms the vision model marked on its own. " : null}
           On drawings held back for measuring, answers of this kind that passed the same checks were wrong{" "}
           <b>{v.calibration_errors.toLocaleString("en")}</b> times in <b>{v.calibration_answers.toLocaleString("en")}</b>.
           The error rate is below <b>{pct(v.error_upper_bound)}</b> with 95% confidence. Our bar is 1%.
@@ -62,6 +64,15 @@ function why(result: AskResult): { title: string; text: React.ReactNode } {
   }
   if (result.state === "check") {
     const bar = result.family?.threshold;
+    if (two && two.labels !== two.model) {
+      return {
+        title: "Why it needs a look",
+        text: `Two readings of this plan differ: the printed labels give ${two.labels}, the vision model marked ${two.model}. Both are drawn on the sheet, so you can see which is right.`,
+      };
+    }
+    if (two) {
+      return { title: "Why it needs a look", text: `The printed labels and the vision model give the same count. ${notVerified(result)}` };
+    }
     if (result.restated?.question) {
       return {
         title: "Why it needs a look",
@@ -107,6 +118,7 @@ function Steps({ result, marked }: { result: AskResult; marked: number }) {
   const route = method.startsWith("dxf") ? "This plan comes with a DXF, so its geometry answers the question exactly, at no cost."
     : method.startsWith("ifc") ? "This drawing is a building model, or was rendered from one, so a query on the model answers exactly, at no cost."
     : method.startsWith("raster-labels") ? "A scan with no vector data: the room labels printed on it are read by a local OCR model, at no cost."
+    : method.startsWith("labels+model") ? "A scan with no vector data, read twice: the room labels printed on it by a local OCR model, and the rooms themselves by a vision model."
     : method.startsWith("vlm") ? "No exact engine covers this, so a vision model points at each item. This is the paid path."
     : "No exact engine covers this kind of drawing.";
   const total = result.evidence.filter((e) => e.kind !== "formula" && e.kind !== "context").length;
@@ -365,11 +377,18 @@ export function AnswerPanel(props: Props) {
           <p>{reason.text}</p>
           {result.can_use_model && (
             <div className="fallback">
-              <p>
-                {result.answer === null ? "No exact engine covers this question on a scan." : "The printed labels alone are a weak source here."}{" "}
-                A vision model can point at each item for about a cent. Its answer is always marked Check this.
-              </p>
-              <button onClick={props.onUseModel} disabled={asking}>Ask the vision model</button>
+              {result.can_confirm ? (
+                <p>
+                  This count comes from the labels printed on the plan. A vision model can count the rooms on its own
+                  for about a cent: two readings that agree are a stronger answer than either alone.
+                </p>
+              ) : (
+                <p>
+                  {result.answer === null ? "No exact engine covers this question on a scan." : "The printed labels alone are a weak source here."}{" "}
+                  A vision model can mark each item for about a cent. Its answer is always marked Check this.
+                </p>
+              )}
+              <button onClick={props.onUseModel} disabled={asking}>{result.can_confirm ? "Count again with the vision model" : "Ask the vision model"}</button>
             </div>
           )}
         </section>

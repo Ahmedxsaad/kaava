@@ -95,14 +95,16 @@ function Dumbbell({ before, after, mix, onTip }: {
 
 function Routing({ mix, labels, onTip }: { mix: Stats["full_set_mix"]; labels: Stats["labels_on_scans"]; onTip(tip: Tip | null): void }) {
   const sum = (test: (m: { source: string; type: string }) => boolean) => mix.filter(test).reduce((s, m) => s + m.questions, 0);
-  // Scans: the share the label engine answers on its own was measured on the development split.
+  // Scans: the shares were measured on the development split. The label engine's strictest answers stand
+  // alone; its other strong answers are read a second time by the vision model.
   const scans = sum((m) => m.source === "cubicasa5k");
-  const read = Math.round(scans * (labels?.share ?? 0));
+  const read = Math.round(scans * (labels?.share_alone ?? 0));
+  const twice = Math.round(scans * ((labels?.share ?? 0) - (labels?.share_alone ?? 0)));
   const parts = [
     { name: "DXF geometry", note: "Swiss floors · €0", colour: "var(--series-1)", n: sum((m) => m.source === "swiss_dwellings"), ink: "#fff" },
     { name: "IFC model query", note: "building models · €0", colour: "var(--series-2)", n: sum((m) => m.source === "ifc_models"), ink: "#fff" },
-    { name: "Printed labels, local OCR", note: "room counts on scans where two printed sources agree · €0", colour: "var(--series-3)", n: read, ink: "#0b0b0b" },
-    { name: "Vision model, each item marked", note: "the other scans and schedules · paid", colour: "var(--series-4)", n: scans - read + sum((m) => m.source === "opening_design"), ink: "#0b0b0b" },
+    { name: "Printed labels, local OCR", note: "room counts on scans where the labels and the type line agree · €0", colour: "var(--series-3)", n: read, ink: "#0b0b0b" },
+    { name: "Vision model, each item marked", note: `the other scans and schedules · paid (${int(twice)} of them room counts read twice: labels and model)`, colour: "var(--series-4)", n: scans - read + sum((m) => m.source === "opening_design"), ink: "#0b0b0b" },
     { name: "No engine yet", note: "free-text model questions", colour: "var(--series-other)", n: sum((m) => m.source === "ifc_bench"), ink: "#0b0b0b" },
   ];
   const total = parts.reduce((s, p) => s + p.n, 0) || 1;

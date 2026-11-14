@@ -2,7 +2,8 @@
  "calibrated": "2026-11-14T07:37:21+00:00",
  "dataset": "junction-dataset",
  "calibration_runs": [
-  "20261114-073656-router-v1-raw-a363"
+  "20261114-073656-router-v1-raw-a363",
+  "20261114-114642-vlm-pointing-gemini-4-carbon-thinking-low-img-ultra_high-box-9e5e"
  ],
  "alpha": 0.01,
  "bound_confidence": 0.95,
@@ -181,6 +182,35 @@
      "passed": false
     }
    ]
+  },
+  "labels+model:v1/count": {
+   "threshold": null,
+   "answers_at_threshold": 0,
+   "errors_at_threshold": null,
+   "upper_bound": null,
+   "calibration_answers": 762,
+   "levels_tested": [
+    {
+     "score": 0.95,
+     "answers": 762,
+     "errors": 10,
+     "upper_bound": 0.0221584444488544,
+     "passed": false
+    }
+   ],
+   "design": {
+    "labels_run": "20261114-073656-router-v1-raw-a363",
+    "model_run": "20261114-114642-vlm-pointing-gemini-4-carbon-thinking-low-img-ultra_high-box-9e5e",
+    "model_method": "vlm-pointing:gemini-4-carbon:thinking=low:img=ultra_high:boxes:p2",
+    "questions": 800,
+    "model_gave_no_answer": 0,
+    "agree": 762,
+    "differ": 38,
+    "labels_right_when_they_differ": 4,
+    "model_right_when_they_differ": 34,
+    "labels_right_overall": 756,
+    "model_right_overall": 786
+   }
   }
  }
 }

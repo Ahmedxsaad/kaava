@@ -151,6 +151,10 @@ def test_demo_tour_returns_the_states_it_promises(client):
                 assert answer["replayed_from"] and "-router-" not in answer["replayed_from"]
                 marks = [e for e in answer["evidence"] if e["kind"] in ("point", "box")]
                 assert len(marks) == answer["answer"]  # the number is the count of the marked items
+            elif answer["method"].startswith("labels+model"):  # the labels, and a logged model count beside them
+                assert answer["replayed_from"] and answer["readings"]["labels"] is not None
+                assert any(e["kind"] == "box" for e in answer["evidence"])
+                assert any(e["kind"] == "context" and e["role"] == "marked by the vision model" for e in answer["evidence"])
             else:
                 assert answer["cost_eur"] == 0 and any(e["kind"] == "box" for e in answer["evidence"])
 

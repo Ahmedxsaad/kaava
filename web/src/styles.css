@@ -301,6 +301,7 @@ h1, h2 { font-family: var(--serif); font-weight: 400; letter-spacing: -0.015em; 
 .tape path { fill: none; stroke: var(--ink); }
 .aside rect { fill: none; stroke: var(--ink-4); }
 .aside.doubt rect { stroke: var(--warn); }
+.aside.second rect { stroke: var(--ink-2); stroke-opacity: .75; fill: rgba(1, 30, 1, .04); }
 .sweep { pointer-events: none; }
 .sweep line { stroke: var(--ink); stroke-opacity: 0.45; }
 .sweep-stop-0 { stop-color: var(--ink); stop-opacity: 0; }

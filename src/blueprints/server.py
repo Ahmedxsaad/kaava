@@ -105,6 +105,7 @@ ENGINE_LABELS = {
     dxf.METHOD: "DXF geometry",
     raster_labels.METHOD: "Printed room labels (local OCR)",
     router.METHOD: "Router",
+    router.AGREED: "Printed labels + vision model",
 }
 
 
@@ -152,7 +153,7 @@ def speak(text: str) -> bytes:
     if not key or os.environ.get("BLUEPRINTS_OFFLINE"):
         raise HTTPException(503, "no voice service is configured")
     voice = os.environ.get("ELEVENLABS_VOICE_ID", "21m00Tcm4TlvDq8ikWAM")
-    body = json.dumps({"text": text[:400], "model_id": os.environ.get("ELEVENLABS_MODEL_ID", "eleven_multilingual_v2")}).encode()
+    body = json.dumps({"text": text[:400], "model_id": os.environ.get("ELEVENLABS_MODEL_ID", "eleven_flash_v2_5")}).encode()
     request = urllib.request.Request(
         f"https://api.elevenlabs.io/v1/text-to-speech/{voice}?output_format=mp3_44100_128", data=body,
         headers={"xi-api-key": key, "content-type": "application/json", "accept": "audio/mpeg"})
@@ -750,6 +751,26 @@ class Service:
                 self.spent_eur += config.usd_to_eur(ans.cost_usd or 0.0)
             if labels is not None and ans is not labels and ans.answer is not None:
                 _second_opinion(ans, labels)
+        # Scans: a strong label reading can be put next to the vision model's own count of the same thing.
+        can_confirm = (not exact and ans.method == raster_labels.METHOD and ans.answer is not None
+                       and not router.is_weak(ans))
+        if can_confirm and (req.use_model or router.wants_second_reading(ans)):
+            # Asked for, or the label answer is of the weaker kind. A logged count costs nothing more.
+            other = None
+            logged = self.logged["pointing"].get(asked.qid)
+            if logged and logged.get("pred") is not None:  # already paid for
+                other, replayed = _answer_from_row(logged), logged["run_id"]
+            elif req.use_model:
+                if self.spent_eur >= self.budget_eur:
+                    raise HTTPException(402, f"the demo's model budget of EUR {self.budget_eur:.2f} is used up")
+                try:
+                    other = self._model_fallback()(asked, self.ds)
+                except FatalEngineError as exc:
+                    raise HTTPException(503, f"cannot ask the vision model: {exc}")
+                self.spent_eur += config.usd_to_eur(other.cost_usd or 0.0)
+            if other is not None and other.answer is not None:
+                ans = verify.apply(router.confirmed(ans, other), self.thresholds)
+                can_confirm = False
         latency = ans.latency_ms if ans.latency_ms else (time.perf_counter() - t0) * 1000
         view = self.view(drawing)
         out = {
@@ -771,8 +792,11 @@ class Service:
             "verified_because": ans.meta.get("verified_because"),
             "family": self._family_stats(ans),
             "evidence": self._evidence(ans, view, drawing),
-            "can_use_model": not exact and not ans.method.startswith("vlm")
-                             and (ans.answer is None or router.is_weak(ans)),
+            "can_use_model": can_confirm or (not exact and not ans.method.startswith("vlm")
+                                             and (ans.answer is None or router.is_weak(ans))),
+            "can_confirm": can_confirm,
+            "readings": ({"labels": ans.meta.get("labels_said"), "model": ans.meta.get("model_said")}
+                         if ans.method == router.AGREED else None),
             "reference": None,
             "baseline": None,
         }
@@ -941,10 +965,10 @@ def _slug(text: str) -> str:
 def _checks(ans: Answer) -> list[dict]:
     """The independent checks behind an answer, as name and value."""
     checks = [{"name": k, "value": v} for k, v in (ans.meta.get("checks") or {}).items()]
-    if ans.method == raster_labels.METHOD and ans.answer is not None:
+    if ans.method in (raster_labels.METHOD, router.AGREED) and ans.answer is not None:
         source = ans.meta.get("source")
         if source in ("labels", "labels+type"):
-            checks.append({"name": "room labels of this kind read on the plan", "value": ans.answer})
+            checks.append({"name": "room labels of this kind read on the plan", "value": ans.meta.get("labels_said", ans.answer)})
         if source in ("type", "labels+type"):
             checks.append({"name": "the apartment's type line on the plan",
                            "value": "states the same" if source == "labels+type" else "the only source"})
@@ -983,7 +1007,7 @@ def _labels_share_of(run_id: str) -> dict | None:
     preds = config.RESULTS_DIR / "runs" / run_id / "predictions.jsonl"
     if not preds.is_file():
         return None
-    scans = stood = right = 0
+    scans = stood = right = alone = 0
     with open(preds, encoding="utf-8") as f:
         for line in f:
             if '"cubicasa5k"' not in line:
@@ -994,10 +1018,12 @@ def _labels_share_of(run_id: str) -> dict | None:
                     and (row.get("confidence") or 0.0) >= router.LABELS_STAND_FROM):
                 stood += 1
                 right += row.get("status") == "correct"
+                alone += (row.get("confidence") or 0.0) >= router.CONFIRM_BELOW
     if not scans:
         return None
+    # share: the label engine has a strong answer. share_alone: strong enough to stand without a second reading.
     return {"run_id": run_id, "scan_questions": scans, "answered": stood, "correct": right,
-            "share": stood / scans}
+            "share": stood / scans, "share_alone": alone / scans}
 
 
 def _num(text: str):

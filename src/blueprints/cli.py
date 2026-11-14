@@ -314,7 +314,12 @@ def cmd_calibrate(args: argparse.Namespace) -> int:
                  notes="engine answers before thresholds; used only to set them",
                  log=result["complete"])
     outcome = verify.calibrate(result["rows"], alpha=args.alpha)
-    path = verify.save_thresholds(outcome, runs=[run_id], dataset=ds.root.name)
+    # Families measured by their own run (two readings of a scan: scripts/calibrate_agreement.py) are kept.
+    kept = {name: family for name, family in verify.load_thresholds().get("families", {}).items()
+            if name not in outcome["families"] and family.get("design")}
+    outcome["families"].update(kept)
+    path = verify.save_thresholds(outcome, runs=[run_id] + [f["design"]["model_run"] for f in kept.values()],
+                                  dataset=ds.root.name)
 
     print(f"target: at most {100 * args.alpha:g}% of Verified answers wrong "
           f"(95% upper bound, calibration split, {len(questions)} questions)\n")
@@ -351,8 +356,12 @@ def cmd_run(args: argparse.Namespace) -> int:
             if not file.is_file():
                 raise SystemExit(f"no such run: {file}")
         fallback_methods = [json.loads((file.parent / "summary.json").read_text())["method"] for file in logged]
-        method = f"{router.METHOD}+fallback[{' then '.join(fallback_methods)}]"
-        answer_fn = router.make(verify.load_thresholds(), fallback=router.replay(*logged))
+        method = f"{router.METHOD}+fallback[{' then '.join(fallback_methods)}]" + ("+confirm" if args.confirm_labels else "")
+        replayed = router.replay(*logged)
+        answer_fn = router.make(verify.load_thresholds(), fallback=replayed,
+                                confirm=replayed if args.confirm_labels else None)
+    elif args.confirm_labels:
+        raise SystemExit("--confirm-labels needs --fallback-run: the model's answers are replayed from a logged run")
     if args.sample:
         sample, questions = load_sample(Path(args.sample), ds)
         sample_name, split_name = sample["name"], sample["split"]
@@ -421,7 +430,7 @@ def cmd_ask(args: argparse.Namespace) -> int:
         path = matches[0]
     q = Question(qid=question_id(path, args.question), path=path, question=args.question, answer=None,
                  unit=None, type="", source=source_of(path), drawing=drawing_of(path), group=ds.group_of(path))
-    fallback = None
+    fallback = confirm = None
     if args.provider:  # a vision model for drawings no exact engine covers; costs money per question
         from dotenv import load_dotenv
 
@@ -430,8 +439,9 @@ def cmd_ask(args: argparse.Namespace) -> int:
 
         load_dotenv(config.REPO_ROOT / ".env")
         fallback = pointing.make_engine(make_vlm(args.provider, args.model, args.effort))
+        confirm = fallback  # a strong label answer on a scan is read a second time by the model
     try:
-        ans = router.make(verify.load_thresholds(), fallback=fallback)(q, ds)
+        ans = router.make(verify.load_thresholds(), fallback=fallback, confirm=confirm)(q, ds)
     except FatalEngineError as exc:
         raise SystemExit(f"cannot ask the model: {exc}")
 
@@ -622,6 +632,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--fallback-run", action="append", metavar="RUN_ID",
                    help="router only: for questions no engine covers, replay this model run's answers "
                         "(repeatable: the first run that holds a question answers it)")
+    p.add_argument("--confirm-labels", action="store_true",
+                   help="router only: put the replayed model's count next to a strong label answer on a scan; "
+                        "the two agreeing is its own kind of answer (labels+model:v1)")
     p.add_argument("--workers", type=int, default=4)
     p.add_argument("--final", action="store_true", help="allow the test split")
     p.add_argument("--notes", default="")

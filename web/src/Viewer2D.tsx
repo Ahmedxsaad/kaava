@@ -331,12 +331,13 @@ export function Viewer2D(props: Props) {
           {context.map((item, i) => {
             const [x0, y0, x1, y1] = item.bbox!;
             const doubt = item.role === "not counted";
+            const second = item.role === "marked by the vision model";  // the same thing, counted a second way
             return (
-              <g key={`ctx-${i}`} className={`aside${doubt ? " doubt" : ""}`}>
+              <g key={`ctx-${i}`} className={`aside${doubt ? " doubt" : ""}${second ? " second" : ""}`}>
                 <rect x={x0 - 4 * u} y={y0 - 4 * u} width={x1 - x0 + 8 * u} height={y1 - y0 + 8 * u} rx={3 * u}
                   strokeWidth={1.2 * u} strokeDasharray={`${4 * u} ${3 * u}`} />
                 <g transform={`translate(${(x0 + x1) / 2},${y1 + 18 * u}) scale(${u})`}>
-                  <Plate text={doubt ? "not counted" : item.role ?? ""} className="quiet" />
+                  <Plate text={doubt ? "not counted" : second ? "vision model" : item.role ?? ""} className="quiet" />
                 </g>
               </g>
             );

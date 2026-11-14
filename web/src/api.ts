@@ -118,6 +118,8 @@ export interface AskResult {
   } | null;
   evidence: Evidence[];
   can_use_model: boolean;
+  can_confirm: boolean;  // a strong label reading that a vision model could count as well
+  readings: { labels: number | null; model: number | null } | null;  // two readings of one scan
   reference: { answer: number | string; unit: string | null; type: string; status: string } | null;
   baseline: {
     answer: number | string | null;
@@ -180,7 +182,7 @@ export interface Stats {
     }>;
   };
   full_set_mix: { source: string; type: string; questions: number }[];
-  labels_on_scans: { run_id: string; scan_questions: number; answered: number; correct: number; share: number } | null;
+  labels_on_scans: { run_id: string; scan_questions: number; answered: number; correct: number; share: number; share_alone: number } | null;
   model_budget_eur: number;
   model_spent_eur: number;
 }

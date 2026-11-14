@@ -188,3 +188,62 @@ def test_unreadable_labels_fall_through_to_the_model(tiny, monkeypatch):
     fallback, _ = _model(1)
     assert router.make(_thresholds(), fallback=fallback)(_room_question(tiny), tiny).answer == 1
     assert router.make(_thresholds())(_room_question(tiny), tiny).answer is None
+
+
+# ---------------------------------------------------------------- two readings of one scan
+
+
+def _agreed_thresholds(threshold):
+    family = {"threshold": threshold, "answers_at_threshold": 700, "errors_at_threshold": 1, "upper_bound": 0.0068}
+    return {"alpha": 0.01, "families": {"labels+model:v1/count": family}}
+
+
+def test_labels_and_model_with_the_same_count_can_be_verified(tiny, monkeypatch):
+    """Verified only when calibration allowed the family; the model's marks are shown, not counted."""
+    from blueprints.answer import Answer
+
+    _labels(monkeypatch, 3, 0.9)
+
+    def model(q, dataset):
+        return Answer(answer=3, unit="count", confidence=0.6, method="vlm-pointing:x:boxes", cost_usd=0.004,
+                      evidence=[{"kind": "box", "space": "image_px", "bbox": [10, 10, 20, 20], "label": "bedroom"}] * 3)
+
+    q = _room_question(tiny)
+    ans = router.make(_agreed_thresholds(0.95), confirm=model)(q, tiny)
+    assert ans.answer == 3 and ans.state == VERIFIED and ans.method == router.AGREED and ans.cost_usd == 0.004
+    assert ans.meta["verified_because"]["calibration_errors"] == 1
+    counted = [e for e in ans.evidence if not e.get("role")]
+    assert len(counted) == 1 and counted[0]["label"] == "MH"                  # the label read by OCR
+    assert sum(e.get("role") == "marked by the vision model" for e in ans.evidence) == 3
+    # No threshold for the family (calibration did not allow it): the same answer, for checking.
+    unproven = router.make(_agreed_thresholds(None), confirm=model)(q, tiny)
+    assert unproven.answer == 3 and unproven.state == CHECK and unproven.method == router.AGREED
+
+
+def test_the_strictest_label_answers_stand_alone_and_free(tiny, monkeypatch):
+    """At 0.99 the labels were right 97% of the time on calibration drawings: no second reading is paid for."""
+    _labels(monkeypatch, 3, 0.99)
+    model, calls = _model(2)
+    ans = router.make(_agreed_thresholds(0.95), fallback=model, confirm=model)(_room_question(tiny), tiny)
+    assert ans.answer == 3 and ans.method == "raster-labels:v1" and ans.cost_usd == 0.0 and calls == []
+
+
+def test_readings_that_differ_are_never_verified(tiny, monkeypatch):
+    _labels(monkeypatch, 3, 0.9)
+    model, calls = _model(2)
+    ans = router.make(_agreed_thresholds(0.95), confirm=model)(_room_question(tiny), tiny)
+    # The model's count is the one shown (it was right far more often on calibration drawings), flagged as differing.
+    assert ans.state == CHECK and ans.answer == 2 and ans.confidence == router.DIFFER_SCORE and len(calls) == 1
+    assert ans.meta["model_said"] == 2 and ans.meta["labels_said"] == 3 and "differ" in ans.explanation
+    assert any(e.get("role") == "label read by OCR" for e in ans.evidence)  # the labels are drawn, not counted
+    # The model gives nothing: the labels' answer stands as it was, the call is still paid for.
+    silent, _ = _model(None)
+    alone = router.make(_agreed_thresholds(0.95), confirm=silent)(_room_question(tiny), tiny)
+    assert alone.answer == 3 and alone.state == CHECK and alone.confidence == 0.9 and alone.cost_usd == 0.004
+
+
+def test_weak_labels_are_not_confirmed_they_give_way(tiny, monkeypatch):
+    _labels(monkeypatch, 3, 0.6)
+    model, calls = _model(3)
+    ans = router.make(_agreed_thresholds(0.95), fallback=model, confirm=model)(_room_question(tiny), tiny)
+    assert ans.method == "vlm-pointing:x" and ans.state == CHECK and len(calls) == 1
