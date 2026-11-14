@@ -183,9 +183,12 @@ class GeminiVLM:
     IMAGE_TOKENS = {"low": 280, "medium": 560, "high": 1120, "ultra_high": 2240}
 
     def __init__(self, model: str = "gemini-4-carbon", effort: str = "high",
-                 resolution: str = "ultra_high", max_output_tokens: int = 16000, attempts: int = 6):
+                 resolution: str | None = None, max_output_tokens: int = 16000, attempts: int = 6):
         from google import genai
         from google.genai import errors, types
+
+        # The image budget can be set from the environment to measure a cheaper setting.
+        resolution = resolution or os.environ.get("BLUEPRINTS_GEMINI_RESOLUTION") or "ultra_high"
 
         if model not in config.PRICES_USD_PER_MTOK:
             raise FatalEngineError(

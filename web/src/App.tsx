@@ -187,6 +187,18 @@ export function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // A link pasted into an open tab, or back and forward: follow it without reloading the app.
+  useEffect(() => {
+    const follow = () => {
+      const next = readRoute();
+      if (next.page === "numbers") return setPage("numbers");
+      if (next.page === "home" || !next.drawing) return setPage("home");
+      void open(next.drawing, next.question || undefined, next.view ?? undefined);
+    };
+    window.addEventListener("hashchange", follow);
+    return () => window.removeEventListener("hashchange", follow);
+  }, [open]);
+
   // Evidence is marked one item at a time, in the order a line crossing the sheet from the
   // left meets them; the counter follows.
   const units = useMemo(() => (result ? countable(result.evidence) : []), [result]);

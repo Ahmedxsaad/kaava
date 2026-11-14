@@ -20,3 +20,6 @@ dist/
 node_modules/
 web/dist/
 uploads/
+pitch/video/work/
+pitch/preview/
+pitch/*.mp4

@@ -1,0 +1,65 @@
+[
+ {
+  "id": "home",
+  "go": "",
+  "pad": 0.6,
+  "text": "This is Blueprints Talk. Ask a construction drawing a question, and see exactly where the answer came from."
+ },
+ {
+  "id": "doors",
+  "stop": 1,
+  "view": "both",
+  "pad": 0.5,
+  "text": "How many doors are on this floor? The answer is not generated. It is counted from the drawing's own geometry: thirty-two door outlines, each one numbered on the plan and in the 3D model raised from it. A vision model alone said twenty-four."
+ },
+ {
+  "id": "verified",
+  "hover": 6,
+  "pad": 0.6,
+  "text": "The answer is marked Verified. That is a measured claim: on drawings held back for testing, answers of this kind were wrong eight times in more than six thousand."
+ },
+ {
+  "id": "area",
+  "stop": 2,
+  "pad": 0.6,
+  "text": "Areas work the same way. Each room of the apartment fills with its square metres, and the balconies are left out, as the question asked."
+ },
+ {
+  "id": "ifc",
+  "stop": 5,
+  "view": "both",
+  "pad": 1.2,
+  "text": "Building models are queried directly, with no vision model involved. On this storey the query finds forty-two doors, each one marked on the plan and in the model, at no cost."
+ },
+ {
+  "id": "scan",
+  "stop": 8,
+  "pad": 0.6,
+  "text": "A scan has no geometry to query. Here Gemini draws a box around every window, and the code counts the boxes. Answers read from pixels are marked Check this, never Verified."
+ },
+ {
+  "id": "miscount",
+  "stop": 9,
+  "leave_out": [
+   3,
+   9
+  ],
+  "leave_out_after": 7.5,
+  "pad": 0.6,
+  "text": "And this is why. On this plan it boxes twenty-three windows where the dataset says twenty. Every box is on the sheet, so a person can check each one, and leave out what does not belong."
+ },
+ {
+  "id": "numbers",
+  "go": "p=numbers",
+  "scroll_after": 7.0,
+  "scroll": 330,
+  "pad": 0.6,
+  "text": "On the same two hundred questions, a vision model alone is right sixty-two point five percent of the time. This system is right ninety-five point eight percent of the time, at forty percent of the cost. Sixty-nine answers were Verified. None of them was wrong."
+ },
+ {
+  "id": "close",
+  "go": "",
+  "pad": 1.6,
+  "text": "Numbers computed, never generated. Evidence you can check in seconds. Blueprints Talk."
+ }
+]

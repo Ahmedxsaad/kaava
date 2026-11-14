@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Blueprints Talk · Junction 2026</title>
+<style>
+  @font-face { font-family: "Gelasio"; font-weight: 400; src: url("../web/node_modules/@fontsource/gelasio/files/gelasio-latin-400-normal.woff2") format("woff2"); }
+  @font-face { font-family: "Gelasio"; font-weight: 500; src: url("../web/node_modules/@fontsource/gelasio/files/gelasio-latin-500-normal.woff2") format("woff2"); }
+  @font-face { font-family: "Hanken Grotesk"; font-weight: 400; src: url("../web/node_modules/@fontsource/hanken-grotesk/files/hanken-grotesk-latin-400-normal.woff2") format("woff2"); }
+  @font-face { font-family: "Hanken Grotesk"; font-weight: 500; src: url("../web/node_modules/@fontsource/hanken-grotesk/files/hanken-grotesk-latin-500-normal.woff2") format("woff2"); }
+  @font-face { font-family: "Hanken Grotesk"; font-weight: 600; src: url("../web/node_modules/@fontsource/hanken-grotesk/files/hanken-grotesk-latin-600-normal.woff2") format("woff2"); }
+
+  :root {
+    --page: #f2f3f5; --card: #ffffff; --ink: #011e01; --ink-2: #2c412b; --ink-3: #5b6b5a; --ink-4: #93a092;
+    --line: #dfe2e5; --accent: #c46103; --verified: #2d802a; --check: #8c6400; --brick: #b14142;
+    --serif: "Gelasio", Georgia, serif; --sans: "Hanken Grotesk", system-ui, sans-serif;
+  }
+  @page { size: 1600px 900px; margin: 0; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: var(--page); color: var(--ink); font-family: var(--sans); -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .slide { width: 1600px; height: 900px; padding: 72px 96px 64px; position: relative; overflow: hidden; page-break-after: always; break-after: page; display: flex; flex-direction: column; }
+  .slide.dark { background: var(--ink); color: #fff; }
+  .eyebrow { font-size: 17px; letter-spacing: .02em; color: var(--ink-3); margin-bottom: 22px; }
+  .dark .eyebrow { color: #a9b8a8; }
+  h1 { font-family: var(--serif); font-weight: 400; font-size: 84px; line-height: 1.04; letter-spacing: -0.015em; }
+  h2 { font-family: var(--serif); font-weight: 400; font-size: 54px; line-height: 1.1; letter-spacing: -0.01em; max-width: 1180px; }
+  p.lead { font-size: 25px; line-height: 1.5; color: var(--ink-2); max-width: 940px; margin-top: 26px; }
+  .dark p.lead { color: #d5ddd4; }
+  .foot { position: absolute; left: 96px; right: 96px; bottom: 34px; display: flex; justify-content: space-between; font-size: 14px; color: var(--ink-4); }
+  .dark .foot { color: #7f917e; }
+  .mark { display: inline-flex; align-items: center; gap: 12px; font-family: var(--serif); font-size: 24px; }
+  .mark i { width: 26px; height: 20px; background: linear-gradient(var(--ink) 0 8px, transparent 8px 12px, var(--ink) 12px 20px); transform: skewX(-18deg); display: inline-block; }
+  .dark .mark i { background: linear-gradient(#fff 0 8px, transparent 8px 12px, #fff 12px 20px); }
+  .grow { flex: 1; }
+  .cols { display: grid; gap: 40px; margin-top: 44px; }
+  .c2 { grid-template-columns: 1fr 1fr; } .c3 { grid-template-columns: repeat(3, 1fr); } .c4 { grid-template-columns: repeat(4, 1fr); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 38px 40px; }
+  .card h3 { font-family: var(--serif); font-weight: 400; font-size: 28px; line-height: 1.2; margin-bottom: 10px; }
+  .card p, li { font-size: 21.5px; line-height: 1.5; color: var(--ink-2); }
+  .card .tag { font-size: 14px; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 14px; display: block; }
+  .big { font-family: var(--serif); font-size: 76px; line-height: 1; letter-spacing: -0.02em; }
+  .tile { border-top: 1px solid rgba(255,255,255,.28); padding-top: 22px; }
+  .tile span { display: block; font-size: 18px; margin-top: 12px; color: #fff; }
+  .tile em { display: block; font-style: normal; font-size: 16px; margin-top: 8px; color: #a9b8a8; line-height: 1.45; }
+  .tile em b { color: #fff; font-weight: 600; }
+  .shot { border-radius: 14px; border: 1px solid var(--line); overflow: hidden; background: #fff; box-shadow: 0 18px 50px rgba(1, 30, 1, .08); }
+  .shot img { display: block; width: 100%; }
+  .pill { display: inline-flex; align-items: center; gap: 9px; padding: 7px 15px; border-radius: 99px; font-size: 17px; font-weight: 500; }
+  .pill::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+  .pill.v { color: var(--verified); background: #e7f2e6; } .pill.c { color: var(--check); background: #f8efd6; } .pill.d { color: var(--brick); background: #f6e3e3; }
+  ul.plain { list-style: none; display: grid; gap: 16px; margin-top: 8px; }
+  ul.plain li { padding-left: 22px; position: relative; }
+  ul.plain li::before { content: ""; position: absolute; left: 0; top: 15px; width: 9px; height: 1.5px; background: var(--ink-3); }
+  table { border-collapse: collapse; width: 100%; font-size: 22px; }
+  th, td { text-align: left; padding: 15px 0; border-bottom: 1px solid var(--line); font-weight: 400; }
+  th { font-size: 15px; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-3); }
+  td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
+  td.n b { font-family: var(--serif); font-weight: 400; font-size: 34px; }
+  td.n.muted { color: var(--ink-3); }
+  .small { font-size: 16px; line-height: 1.5; color: var(--ink-3); }
+  .route { display: grid; grid-template-columns: 250px 1fr 150px 110px; align-items: center; gap: 22px; padding: 17px 0; border-bottom: 1px solid var(--line); }
+  .route.head { padding: 0 0 10px; border: 0; }
+  .route.head span { font-size: 14px; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-3); }
+  .route.head span.r, .route i { text-align: right; }
+  .route i { font-style: normal; font-size: 19px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+  .route.head + .route { border-top: 1px solid var(--line); }
+  .route b { font-weight: 600; font-size: 20px; }
+  .route span { font-size: 19px; color: var(--ink-2); line-height: 1.4; }
+  .route em { font-style: normal; font-family: var(--serif); font-size: 26px; text-align: right; }
+  .dumb text { font-family: var(--sans); }
+</style>
+</head>
+<body>
+
+<!-- 1 -->
+<section class="slide">
+  <div class="mark"><i></i>Blueprints Talk</div>
+  <div class="grow"></div>
+  <p class="eyebrow">Junction 2026 · Stoa · Make Blueprints Talk</p>
+  <h1>Ask a drawing.<br>See where the answer came from.</h1>
+  <p class="lead">Counts, areas and volumes computed from the drawing's own geometry and marked on the sheet, so a project engineer can check an answer in seconds. Every answer is Verified, Check this, or Can't answer reliably.</p>
+  <div class="grow"></div>
+  <div class="foot"><span>All figures in this deck come from the evaluation log in the repository (results/), 14 November 2026.</span><span>1</span></div>
+</section>
+
+<!-- 2 -->
+<section class="slide">
+  <p class="eyebrow">The problem</p>
+  <h2>A wrong quantity becomes a wrong order. A vision model alone is wrong too often, and cannot show its work.</h2>
+  <div class="cols c2" style="align-items: stretch;">
+    <div class="card">
+      <span class="tag">Same 200 questions, vision model alone</span>
+      <div class="big">62.5%</div>
+      <p style="margin-top: 16px;">correct. Gemini 4 Carbon, given the image and asked for the number. Re-weighted to the dataset's mix of questions: 77.3%.</p>
+      <p style="margin-top: 14px;">On a floor with 32 doors it answers 24. Nothing on the screen says which eight it missed.</p>
+    </div>
+    <div class="card">
+      <span class="tag">What that means on site</span>
+      <ul class="plain">
+        <li>If one answer in three can be wrong, every answer has to be re-counted by hand. No time is saved.</li>
+        <li>A number without evidence cannot go into an order, an estimate or a contract.</li>
+        <li>A better model next year moves 62% up. It does not turn a guess into a measurement.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="foot"><span>Blueprints Talk</span><span>2</span></div>
+</section>
+
+<!-- 3 -->
+<section class="slide">
+  <p class="eyebrow">The idea</p>
+  <h2>Compute the number. Never generate it.</h2>
+  <p class="lead" style="margin-top: 18px;">A router sends each question to the cheapest method that can answer it from the drawing itself. The language model reads questions and marks items; the code does the counting and the measuring.</p>
+  <div style="margin-top: 30px;">
+    <div class="route head"><span>Method</span><span>What it reads</span><span class="r">Share of questions</span><span class="r">Cost each</span></div>
+    <div class="route"><b>DXF geometry</b><span>Floor plans that come with CAD data: room polygons measured, door and window outlines counted.</span><i>29.6%</i><em>€0</em></div>
+    <div class="route"><b>IFC model query</b><span>Building models and the plans rendered from them: elements enumerated, areas and volumes from geometry.</span><i>2.4%</i><em>€0</em></div>
+    <div class="route"><b>Printed labels, local OCR</b><span>Scans: room names and the apartment's type line read on the sheet by a small local model.</span><i>3.8%</i><em>€0</em></div>
+    <div class="route"><b>Gemini marks, code counts</b><span>Everything else on a scan: Gemini draws a box round each item in its native detection format. The answer is the number of boxes.</span><i>63.5%</i><em>€0.007</em></div>
+  </div>
+  <p class="small" style="margin-top: 20px; max-width: 1180px;">The remaining 0.6% are free-text questions about building models, which have no engine yet. Shares are of the dataset's 127,044 questions.</p>
+  <div class="foot"><span>Free-form questions in any language are restated by Gemini so an exact engine can read them; the number still comes from geometry.</span><span>3</span></div>
+</section>
+
+<!-- 4 -->
+<section class="slide dark">
+  <p class="eyebrow">Reliability</p>
+  <h2>Three states. “Verified” is a measured claim, not a feeling.</h2>
+  <p class="lead" style="margin-top: 18px;">Thresholds are set on calibration drawings the engines were never tuned on: a kind of answer is Verified only if the 95% upper bound on its error rate is at most 1%.</p>
+  <div class="cols c4" style="margin-top: 54px;">
+    <div class="tile"><div class="big">0</div><span>wrong among Verified answers</span><em>of <b>18,198</b> Verified answers on 63,592 development questions</em></div>
+    <div class="tile"><div class="big">&lt; 0.25%</div><span>error bound, counts</span><em><b>8</b> wrong in <b>6,354</b> held-out answers</em></div>
+    <div class="tile"><div class="big">&lt; 0.53%</div><span>error bound, areas</span><em><b>6</b> wrong in <b>2,612</b> held-out answers</em></div>
+    <div class="tile"><div class="big">€0</div><span>cost of a Verified answer</span><em>every one comes from geometry, in milliseconds</em></div>
+  </div>
+  <div class="grow"></div>
+  <p class="lead" style="font-size: 21px; max-width: 1240px;">Check this: the answer and its evidence, with the reason it needs a look. Can't answer reliably: no number, and why. A wrong Verified answer is the worst outcome, so abstaining is always allowed.</p>
+  <div class="foot"><span>Blueprints Talk</span><span>4</span></div>
+</section>
+
+<!-- 5 -->
+<section class="slide" style="padding-top: 56px;">
+  <p class="eyebrow">Verification</p>
+  <h2 style="font-size: 46px;">Every counted item is on the sheet. Leave one out and the answer follows.</h2>
+  <div class="cols" style="grid-template-columns: 1.32fr 1fr; gap: 34px; margin-top: 30px;">
+    <div class="shot"><img src="../docs/screenshots/doors-verified.png" alt="Thirty-two doors marked on a plan and in the 3D model raised from it"></div>
+    <div style="display: grid; gap: 22px; align-content: start;">
+      <div style="display: grid; grid-template-columns: 250px 1fr; gap: 26px; align-items: start;">
+        <div class="shot"><img src="img/scan-boxes.png" alt="Fourteen windows boxed on a hand-drawn scan"></div>
+        <p style="font-size: 19px; line-height: 1.5; color: var(--ink-2);">On a scan there is no geometry to query. Gemini draws a box round each window and the code counts the boxes: 14. Each box can be checked, or left out.</p>
+      </div>
+      <ul class="plain">
+        <li>The plan and a 3D model raised from it, marked with the same numbered items.</li>
+        <li>The answer beside a vision model alone: result, cost, time.</li>
+        <li>Inspect items one by one, measure on the sheet, share one image of the answer with its evidence.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="foot"><span>Left: 32 doors from DXF geometry, Verified; the model alone said 24. Right: 14 windows on a scan, boxed by Gemini, counted by the code.</span><span>5</span></div>
+</section>
+
+<!-- 6 -->
+<section class="slide">
+  <p class="eyebrow">Results</p>
+  <h2>From 62.5% to 95.8% correct, at 40% of the cost.</h2>
+  <div class="cols" style="grid-template-columns: 1fr 1.05fr; gap: 64px; margin-top: 36px;">
+    <div>
+      <table>
+        <tr><th>Same 200 development questions</th><th class="n">Model alone</th><th class="n">This system</th></tr>
+        <tr><td>Correct</td><td class="n muted"><b>62.5%</b></td><td class="n"><b>95.8%</b></td></tr>
+        <tr><td>Re-weighted to the dataset's mix</td><td class="n muted"><b>77.3%</b></td><td class="n"><b>95.9%</b></td></tr>
+        <tr><td>Cost per 1,000 questions</td><td class="n muted"><b>€7.99</b></td><td class="n"><b>€3.15</b></td></tr>
+        <tr><td>Answers marked Verified</td><td class="n muted"><b>0</b></td><td class="n"><b>69</b></td></tr>
+        <tr><td>of them wrong</td><td class="n muted">&nbsp;</td><td class="n"><b>0</b></td></tr>
+      </table>
+      <p class="small" style="margin-top: 22px;">The scan prompt was tuned on this sample's scans, so scans were measured again on 100 questions from drawings no sample had used: 89.0%. With that figure the re-weighted total is near 92.6%. The test split has not been opened.</p>
+    </div>
+    <svg class="dumb" viewBox="0 0 700 430" width="700" height="430" role="img" aria-label="Accuracy by kind of question, model alone against this system">
+      <g font-size="14" fill="#5b6b5a">
+        <text x="250" y="16">0%</text><text x="350" y="16" text-anchor="middle">25%</text><text x="450" y="16" text-anchor="middle">50%</text><text x="550" y="16" text-anchor="middle">75%</text><text x="650" y="16" text-anchor="end">100%</text>
+      </g>
+      <g stroke="#dfe2e5"><line x1="250" x2="250" y1="26" y2="380"/><line x1="350" x2="350" y1="26" y2="380"/><line x1="450" x2="450" y1="26" y2="380"/><line x1="550" x2="550" y1="26" y2="380"/><line x1="650" x2="650" y1="26" y2="380"/></g>
+      <!-- x = 250 + 4 * percent -->
+      <g font-size="16" fill="#011e01">
+        <text x="0" y="57">Finnish scans · counts</text><text x="0" y="107">Swiss floors · counts</text><text x="0" y="157">Swiss floors · areas</text>
+        <text x="0" y="207">IFC models · areas</text><text x="0" y="257">IFC models · counts</text><text x="0" y="307">US drawing sets · counts</text><text x="0" y="357">US drawing sets · areas</text>
+      </g>
+      <g stroke="#93a092" stroke-width="2">
+        <line x1="590" x2="626" y1="52" y2="52"/><line x1="566" x2="650" y1="102" y2="102"/><line x1="392" x2="650" y1="152" y2="152"/>
+        <line x1="250" x2="650" y1="202" y2="202"/><line x1="323" x2="650" y1="252" y2="252"/>
+      </g>
+      <g fill="#a9b3a8" stroke="#f2f3f5" stroke-width="2">
+        <circle cx="590" cy="52" r="7"/><circle cx="566" cy="102" r="7"/><circle cx="392" cy="152" r="7"/><circle cx="250" cy="202" r="7"/><circle cx="323" cy="252" r="7"/>
+      </g>
+      <g fill="#011e01" stroke="#f2f3f5" stroke-width="2">
+        <circle cx="626" cy="52" r="8"/><circle cx="650" cy="102" r="8"/><circle cx="650" cy="152" r="8"/><circle cx="650" cy="202" r="8"/><circle cx="650" cy="252" r="8"/><circle cx="505" cy="302" r="8"/><circle cx="650" cy="352" r="8"/>
+      </g>
+      <g font-size="14" fill="#5b6b5a" text-anchor="end">
+        <text x="578" y="57">85%</text><text x="554" y="107">79%</text><text x="380" y="157">35%</text><text x="238" y="207">0%</text><text x="311" y="257">18%</text>
+        <text x="492" y="307">no engine yet: same as the model</text><text x="637" y="357">no engine yet: same as the model</text>
+      </g>
+      <g font-size="14" font-weight="600" fill="#011e01">
+        <text x="662" y="57">94%</text><text x="662" y="107">100%</text><text x="662" y="157">100%</text><text x="662" y="207">100%</text><text x="662" y="257">100%</text><text x="518" y="307">64%</text><text x="662" y="357">100%</text>
+      </g>
+      <g font-size="15" fill="#2c412b">
+        <circle cx="258" cy="410" r="7" fill="#a9b3a8"/><text x="274" y="415">Vision model alone</text>
+        <circle cx="438" cy="410" r="8" fill="#011e01"/><text x="454" y="415">Engines first, Gemini for the rest</text>
+      </g>
+    </svg>
+  </div>
+  <div class="foot"><span>Vision model: Gemini 4 Carbon at low thinking. The same comparison on Claude Sonnet 5.5 gave 65.1% against 92.7%.</span><span>6</span></div>
+</section>
+
+<!-- 7 -->
+<section class="slide">
+  <p class="eyebrow">Honest by design</p>
+  <h2>What we measured and chose not to claim.</h2>
+  <div class="cols c3" style="margin-top: 40px;">
+    <div class="card">
+      <span class="tag">Two readings of a scan</span>
+      <h3>1.3% wrong, so not Verified</h3>
+      <p>When the printed labels and Gemini give the same count they are wrong 10 times in 762 on calibration drawings. Better than either alone, above our 1% bar. It stays Check this, and the screen says why.</p>
+    </div>
+    <div class="card">
+      <span class="tag">AI super-resolution</span>
+      <h3>Sharper to look at, worse to read</h3>
+      <p>Reading scans after AI enlargement gave fewer right answers and three times the errors where the engine is trusted most. The enlarged view is for the reader's eyes only, and is labelled.</p>
+    </div>
+    <div class="card">
+      <span class="tag">More thinking</span>
+      <h3>14 times the price</h3>
+      <p>Gemini at high thinking cost €0.10 and three minutes per question in a pilot, and three of eight replies ran out of tokens. Low thinking: €0.007 and eight seconds. We measured before choosing.</p>
+    </div>
+  </div>
+  <p class="lead" style="font-size: 22px; max-width: 1260px; margin-top: 36px;">Drawings are split into development, calibration and test by drawing. Engines and prompts are built on development drawings only, calibration drawings set thresholds from totals, the test split is unopened, and no answer is looked up from the public annotations of the source datasets.</p>
+  <div class="foot"><span>Not solved yet: nothing on a scan is Verified, and scans are two thirds of the dataset's questions.</span><span>7</span></div>
+</section>
+
+<!-- 8 -->
+<section class="slide">
+  <p class="eyebrow">Built to last</p>
+  <h2>Next year's model makes this system better, not obsolete.</h2>
+  <div class="cols c2" style="margin-top: 40px; gap: 34px;">
+    <div class="card">
+      <span class="tag">Why it lasts</span>
+      <ul class="plain">
+        <li>Geometry does not go out of date: 33,452 of 63,592 development questions are answered at €0 with no model at all, 94.3% of them right.</li>
+        <li>The model is a part that can be swapped. We ran the whole comparison on Claude Sonnet and on Gemini; changing it is one setting.</li>
+        <li>A better model improves only the share that needs one, and the calibration tells us when its answers have earned Verified.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <span class="tag">Partner technology in use</span>
+      <ul class="plain">
+        <li><b>Google Gemini.</b> Boxes each counted item on a scan in its native detection format; restates free-form questions for the exact engines.</li>
+        <li><b>Cloudinary.</b> Shows small scans enlarged with AI super-resolution; hosts the evidence sheet of an answer in the format that suits each viewer.</li>
+        <li><b>ElevenLabs.</b> Reads the answer aloud for hands-busy checking on site.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="foot"><span>Blueprints Talk</span><span>8</span></div>
+</section>
+
+<!-- 9 -->
+<section class="slide dark">
+  <div class="mark"><i></i>Blueprints Talk</div>
+  <div class="grow"></div>
+  <p class="eyebrow">Next</p>
+  <h2 style="max-width: 1300px;">A symbol detector for scans, so the largest share of questions can earn Verified too.</h2>
+  <div class="cols c3" style="margin-top: 48px;">
+    <div class="tile"><span style="margin-top: 0; font-size: 21px;">Scans</span><em style="font-size: 18px;">A small detector for doors, windows and fixtures as a second, independent reading beside Gemini, calibrated the same way.</em></div>
+    <div class="tile"><span style="margin-top: 0; font-size: 21px;">Building models</span><em style="font-size: 18px;">Areas from IFC models: 0 wrong in 242 held-out answers at the top score. Still too few to prove 1%; more held-out models settle it.</em></div>
+    <div class="tile"><span style="margin-top: 0; font-size: 21px;">Free text and schedules</span><em style="font-size: 18px;">An agent that queries the model for text questions, and a reader for door schedules.</em></div>
+  </div>
+  <div class="grow"></div>
+  <p class="lead" style="font-size: 21px;">Demo and source code: see the links in the Junction submission. The code is MIT-licensed.</p>
+  <div class="foot"><span>Junction 2026 · Stoa · Make Blueprints Talk</span><span>9</span></div>
+</section>
+
+</body>
+</html>

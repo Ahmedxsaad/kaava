@@ -231,11 +231,19 @@ export function Viewer2D(props: Props) {
         setTip(null);
         setT((prev) => ({ ...prev, x: prev.x + dx, y: prev.y + dy }));
       }}
-      onPointerUp={() => {
+      onPointerUp={(e) => {
         if (drawing) {
           if (Math.hypot(drawing.b[0] - drawing.a[0], drawing.b[1] - drawing.a[1]) * t.k > 6) setMeasures((list) => [...list, drawing]);
           setDrawing(null);
           return;
+        }
+        // A press that did not drag is a click on whatever mark lies under it. The frame holds the
+        // pointer while panning, so the browser would hand the click to the frame, not to the mark:
+        // find the mark here instead.
+        if (drag.current && !drag.current.moved && tool === "move") {
+          const hit = document.elementFromPoint(e.clientX, e.clientY)?.closest("[data-mark]");
+          const n = Number(hit?.getAttribute("data-mark"));
+          if (hit && Number.isFinite(n)) onToggle(n);
         }
         window.setTimeout(() => (drag.current = null), 0);
       }}
@@ -298,9 +306,9 @@ export function Viewer2D(props: Props) {
               <g
                 key={`room-${item.n}`}
                 className={`mark room${hover === item.n || focus === item.n ? " hot" : ""}${excluded.has(item.n!) ? " off" : ""}`}
+                data-mark={item.n}
                 onPointerEnter={() => onHover(item.n!)}
                 onPointerLeave={() => onHover(null)}
-                onClick={() => !drag.current?.moved && tool === "move" && onToggle(item.n!)}
               >
                 <polygon className="tint" points={pointList(item.points!)} />
                 <polygon className="edge" points={pointList(item.points!)} strokeWidth={1.6 * u} />
@@ -354,9 +362,9 @@ export function Viewer2D(props: Props) {
               <g
                 key={`count-${item.n}`}
                 className={`mark count${hot ? " hot" : ""}${excluded.has(item.n!) ? " off" : ""}`}
+                data-mark={item.n}
                 onPointerEnter={() => onHover(item.n!)}
                 onPointerLeave={() => onHover(null)}
-                onClick={(e) => { e.stopPropagation(); if (!drag.current?.moved && tool === "move") onToggle(item.n!); }}
               >
                 <rect className="ring" x={x0} y={y0} width={w} height={h} rx={isPoint ? w / 2 : 3 * u} strokeWidth={(hot ? 2.2 : 1.5) * u} />
                 <g transform={`translate(${x0},${y0}) scale(${u})`}>

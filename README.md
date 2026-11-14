@@ -43,6 +43,8 @@ All figures come from the run log in `results/` and are shown live on the app's 
 - Scans read twice. We tested whether "the labels and Gemini give the same count" could be Verified, on 800 calibration answers where the label engine was confident. The labels alone were right 94.5% of the time, Gemini 98.3%. They agreed on 762 answers, of which 10 were wrong: 1.3%, better than either alone but above the 1% bar, so it stays Check this. Where they differed (38 answers) Gemini was right 34 times, so its count is shown and the difference is flagged. The second reading is paid for only where it helps: the label engine's strictest answers (labels and type line agree, 97.0% right) stand alone and free; its other confident answers (93.0% right alone) are also counted by Gemini.
 - Not solved yet: nothing on a scan is Verified, and scans are two thirds of the dataset's questions; IFC answers are not Verified yet because too few were held out to prove 1%; free-text questions about IFC models and the US door schedules have no engine.
 
+Two cheaper settings were measured on the same 100 fresh scan questions and not adopted: Gemini 4 Hydrogen (85 right against Carbon's 90, and dearer per question because it thinks longer), and half the image budget for Carbon (89 right, 20% cheaper: a fair trade where cost matters more than one answer in a hundred; set `BLUEPRINTS_GEMINI_RESOLUTION=high`).
+
 The vision model in these runs is Gemini 4 Carbon at low thinking. Alone, it sees the image and states a number. In this system it is asked only where no exact engine covers the drawing, and on scans it marks each item instead of stating a number. Low thinking is a measured choice: at high thinking a pilot of 8 questions cost €0.10 and three minutes per question and often ran out of tokens; at low thinking a question costs €0.006 to €0.007 and takes about 8 seconds. Before the Gemini key arrived the same comparison was run with Claude Sonnet 5.5 at high effort: 65.1% alone against 92.7% (75.7% against 88.9% re-weighted), €12.41 against €3.23 per 1,000 questions.
 
 ## The app
@@ -52,7 +54,7 @@ The vision model in these runs is Gemini 4 Carbon at low thinking. Alone, it see
 Quiet and light, in the spirit of Stoa's own site. The answer reads like a short document on the left; the drawing it came from is on the right.
 
 - **The answer column:** the question, the state, the figure, why it can be trusted or needs a look, this system beside a vision model alone (answer, cost, time), how it was worked out step by step, and every counted item cut out of the drawing.
-- **On the sheet:** a fine ring and a numbered dot on each counted item, a tint and an area plate on each measured room. They appear as a reading line crosses the sheet, and the figure climbs with them. Select any mark to leave it out; the answer follows.
+- **On the sheet:** a fine ring and a numbered dot on each counted item, a tint and an area plate on each measured room. They appear as a reading line crosses the sheet, and the figure climbs with them. Click any mark to leave it out; the answer follows.
 - **In 3D:** a white model with the plan as its floor. A Swiss plan is raised from its DXF; an IFC model is cut open at the storey; an answer spread over several storeys lifts them apart and tallies each one.
 - **Checking tools:** inspect the items one by one, measure on the sheet where its scale is known, enlarge the drawing under a loupe, and see a small scan sharper with **Enhance**.
 - **Bring your own drawing:** an image or a PDF opens like any other and is read as it came. **Share** makes one image of an answer with its evidence marked.
@@ -130,6 +132,7 @@ Leave out `--env-file .env` to run without a vision model. The first time a larg
 | `src/blueprints/interpret.py`, `cloud.py`, `sheet.py` | Question restating by a language model; Cloudinary enlarged view and hosting; evidence sheets |
 | `web/` | The verification app (React, Three.js) |
 | `scripts/` | One-off measurements, each logged in `results/` |
+| `pitch/` | The pitch deck (`node pitch/build.mjs`), the narrated video (`pitch/video/make.py`) and the submission text |
 | `results/` | Log of every evaluation run |
 | `splits/` | The split, the fixed samples and the Verified thresholds |
 | `CLAUDE.md`, `01-challenge/` to `04-research/` | Challenge brief, dataset notes, strategy and research |

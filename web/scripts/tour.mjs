@@ -31,6 +31,13 @@ for (let i = 0; i < count; i++) {
     listed: document.querySelectorAll(".contact button, .chips button, .rows li").length,
   }));
   console.log(i + 1, JSON.stringify(seen));
+  if (i === 0) {  // a click on a mark leaves it out; "Put back" restores it
+    await page.locator(".mark.count .dot circle").first().click({ force: true });  // marks can overlap: the top one takes it
+    const off = await page.locator(".mark.count.off").count();
+    await page.getByRole("button", { name: "Put back" }).click();
+    const back = await page.locator(".mark.count.off").count();
+    if (off !== 1 || back !== 0) problems.push(`clicking a mark did not leave it out and put it back (${off}, ${back})`);
+  }
   if (out) await page.screenshot({ path: `${out}/stop-${String(i + 1).padStart(2, "0")}.png` });
 }
 console.log(problems.length ? `PROBLEMS:\n${problems.join("\n")}` : "no console errors, no failed requests");
