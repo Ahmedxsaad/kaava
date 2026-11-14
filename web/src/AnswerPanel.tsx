@@ -272,7 +272,7 @@ export function AnswerPanel(props: Props) {
         {base && (
           <div className={`line theirs ${base.status}`}>
             <span>
-              Vision model alone said{" "}
+              {base.model ?? "Vision model"} alone said{" "}
               <em>{base.answer === null ? "nothing" : formatValue(base.answer as number, result.unit ?? reference?.unit ?? null)}</em>
               {base.status === "wrong" ? " ✗" : base.status === "correct" ? " ✓" : ""}
             </span>
