@@ -14,6 +14,8 @@ interface Props {
   onToggle(n: number): void;
   onRestore(): void;
   onUseModel(): void;
+  starters: string[];  // questions to offer before anything has been asked
+  onAsk(question: string): void;
 }
 
 const STATE = {
@@ -180,6 +182,14 @@ export function AnswerPanel(props: Props) {
             <b className="s-declined">Can't answer reliably</b>, with the items it counted or measured drawn on the plan.
             Numbers are computed from the drawing's geometry and objects, never written by a language model.
           </p>
+          {!asking && props.starters.length > 0 && (
+            <div className="starters">
+              <h3>Try one</h3>
+              {props.starters.map((text) => (
+                <button key={text} onClick={() => props.onAsk(text)}>{text}</button>
+              ))}
+            </div>
+          )}
         </div>
       </aside>
     );

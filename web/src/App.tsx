@@ -237,6 +237,20 @@ export function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, [page, picking, detail, question, open]);
 
+  // A few of the dataset's questions about this drawing to start from: one count, one area, one in another language.
+  const starters = useMemo(() => {
+    if (!detail) return [];
+    const english = (t: string) => /^(How|What|Which|On sheet)\b/.test(t);
+    const list = detail.suggested;
+    const picks = [
+      list.find((q) => q.type === "count" && english(q.question)),
+      list.find((q) => q.type === "area" && english(q.question)),
+      list.find((q) => !english(q.question)),
+      list.find((q) => q.type === "text"),
+    ].filter((q): q is NonNullable<typeof q> => !!q).map((q) => q.question);
+    return [...new Set(picks)].slice(0, 3);
+  }, [detail]);
+
   const has2d = !!detail && detail.view.kind !== "none";
   const has3d = !!detail?.mesh;
   const effective: Mode = !has2d ? "3d" : !has3d ? "plan" : mode;
@@ -427,6 +441,8 @@ export function App() {
             onToggle={toggle}
             onRestore={() => setExcluded(new Set())}
             onUseModel={() => detail && void ask(detail, question, true)}
+            starters={starters}
+            onAsk={(text) => detail && void ask(detail, text)}
           />
         </main>
       )}
