@@ -43,22 +43,33 @@ The vision model in these runs is Claude Sonnet 5.5, image only, high effort.
 
 ## The app
 
-![32 doors marked on a blueprint and lit in the 3D model raised from it, stamped Verified](docs/screenshots/doors-verified.png)
+![Thirty-two doors marked on the plan and in the 3D model raised from it, Verified](docs/screenshots/doors-verified.png)
 
-The drawing is shown as a blueprint, or on its paper, and the evidence is marked on it the way an engineer redlines a sheet:
+Quiet and light, in the spirit of Stoa's own site. The answer reads like a short document on the left; the drawing it came from is on the right.
 
-- A pen loop and a handwritten number round every counted item; highlighter and a handwritten area on every measured room; a revision cloud round text that was read and not counted. The marks are drawn one by one as a reading line sweeps the sheet, and the count climbs with them.
-- The verdict lands as an inked stamp that carries its proof in the small print (for example "error < 0.25% · 6,354 held-out answers").
-- The plan is the floor of the 3D scene. Walls rise out of a Swiss plan; an IFC model is cut open at the storey with its plan sheet under it; an answer spread over several storeys lifts them apart and tallies each one.
-- The panel reads like a title block: the answer, this system against a vision model alone (answer, cost, time), how the answer was worked out step by step, and a contact sheet with every counted item cut out of the drawing. Items can be left out, or inspected one by one.
-- Where the sheet's scale is known you can measure on it yourself. A loupe shows the drawing as it came.
+- **The answer column:** the question, the state, the figure, why it can be trusted or needs a look, this system beside a vision model alone (answer, cost, time), how it was worked out step by step, and every counted item cut out of the drawing.
+- **On the sheet:** a fine ring and a numbered dot on each counted item, a tint and an area plate on each measured room. They appear as a reading line crosses the sheet, and the figure climbs with them. Select any mark to leave it out; the answer follows.
+- **In 3D:** a white model with the plan as its floor. A Swiss plan is raised from its DXF; an IFC model is cut open at the storey; an answer spread over several storeys lifts them apart and tallies each one.
+- **Checking tools:** inspect the items one by one, measure on the sheet where its scale is known, and enlarge the drawing under a loupe.
+- **Bring your own drawing:** an image or a PDF opens like any other. **Share** makes one image of an answer with its evidence marked.
 
 | | |
 | --- | --- |
-| ![An apartment's rooms highlighted on paper with handwritten areas](docs/screenshots/apartment-paper.png) | ![A storey of an IFC model cut open, its doors lit, the plan sheet under it](docs/screenshots/ifc-storey.png) |
-| ![An IFC model with its storeys lifted apart and a door tally beside each](docs/screenshots/ifc-storeys-apart.png) | ![Bedrooms on a scan, read from its printed labels](docs/screenshots/scan-labels.png) |
+| ![The home page](docs/screenshots/home.png) | ![An apartment's rooms tinted with their areas](docs/screenshots/apartment-paper.png) |
+| ![A storey of an IFC model cut open with its doors marked](docs/screenshots/ifc-storey.png) | ![An IFC model with its storeys lifted apart and a door tally beside each](docs/screenshots/ifc-storeys-apart.png) |
 
-The left and right arrow keys step through ten prepared examples; the play button runs them on their own.
+The left and right arrow keys step through ten prepared examples; "Play examples" runs them on their own.
+
+## Partner technology
+
+Each of these is optional and switches on when its key is in `.env` (see `.env.example`). Without any key the exact engines still answer.
+
+| Partner | What it does here | Status |
+| --- | --- | --- |
+| Google Gemini | The vision model for scans, and the language model that restates a free-form question so an exact engine can read it. The number still comes from geometry, and such an answer is never Verified. | Built; runs on Claude Sonnet until a Gemini key is set |
+| Cloudinary | Prepares a drawing someone brings before it is read: limits its size, evens out colour and contrast, and enlarges a small scan with AI super-resolution. Hosts the evidence sheets people share. | Built; not yet run against a Cloudinary account |
+| ElevenLabs | Reads the answer aloud with a natural voice; the browser's own voice is the fallback. | Built; not yet run against an ElevenLabs account |
+| Anthropic Claude | The stand-in vision and language model in the measurements above. | In use |
 
 ## Run it
 
@@ -76,7 +87,7 @@ cd web && npm install && npm run build && cd ..
 ./bp serve
 ```
 
-The exact engines need no API key. To let the app ask a vision model about scans, put `GEMINI_API_KEY` or `ANTHROPIC_API_KEY` in `.env` (see `.env.example`). The app spends at most €1 per server start (`BLUEPRINTS_UI_BUDGET_EUR`).
+The exact engines need no API key. Keys for the optional services go in `.env` (see `.env.example` and Partner technology above). The app spends at most €1 on model calls per server start (`BLUEPRINTS_UI_BUDGET_EUR`).
 
 Other commands:
 
@@ -108,6 +119,7 @@ Leave out `--env-file .env` to run without a vision model. The first time a larg
 | `src/blueprints/verify.py` | Calibrated Verified thresholds |
 | `src/blueprints/harness.py`, `scoring.py`, `split.py` | Evaluation harness, Stoa's scoring rule, the frozen split by drawing |
 | `src/blueprints/server.py`, `mesh.py` | API for the app; 3D meshes from IFC models and DXF plans |
+| `src/blueprints/interpret.py`, `cloud.py`, `sheet.py` | Question restating by a language model; Cloudinary preparation and hosting; evidence sheets |
 | `web/` | The verification app (React, Three.js) |
 | `results/` | Log of every evaluation run |
 | `splits/` | The split, the fixed samples and the Verified thresholds |
