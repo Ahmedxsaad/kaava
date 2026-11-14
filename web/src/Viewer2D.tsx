@@ -356,7 +356,18 @@ export function Viewer2D(props: Props) {
             // Measured on the sheet: a door opening left out of a length, and the scale bar it was read against.
             const opening = item.role === "door opening, left out";
             const measured = opening || item.role === "scale bar";
+            // Boxed in one of two passes over the tiles: doubtful, drawn dashed, not counted.
+            const once = item.role === "boxed in one pass only";
             const pad = opening ? 1.5 * u : 4 * u;
+            if (once) {
+              return (
+                <g key={`ctx-${i}`} className="aside once">
+                  <rect x={x0 - pad} y={y0 - pad} width={x1 - x0 + 2 * pad} height={y1 - y0 + 2 * pad} rx={3 * u}
+                    strokeWidth={1.6 * u} strokeDasharray={`${4 * u} ${3 * u}`} />
+                  <text x={x1 + pad} y={y0 - pad} fontSize={11 * u} textAnchor="middle">?</text>
+                </g>
+              );
+            }
             return (
               <g key={`ctx-${i}`} className={`aside${doubt ? " doubt" : ""}${second ? " second" : ""}${opening ? " opening" : ""}${measured && !opening ? " ruler" : ""}`}>
                 <rect x={x0 - pad} y={y0 - pad} width={x1 - x0 + 2 * pad} height={y1 - y0 + 2 * pad} rx={opening ? u : 3 * u}

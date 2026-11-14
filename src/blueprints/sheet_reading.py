@@ -21,8 +21,9 @@ What the program checks before it gives a number:
 
   * every figure the model names is read again by the program at the place marked; a
     figure the program reads differently means no number;
-  * the question is worked out twice, independently; two workings that disagree mean no
-    number, and both are shown;
+  * where there is something to work out (arithmetic over several figures, a long list
+    to count) the question is worked out twice, independently; two workings that disagree
+    mean no number, and both are shown;
   * what cannot be done is said: nothing printed for it, no scale bar, a room that is
     not a rectangle.
 
@@ -324,10 +325,15 @@ def make_engine(vlm) -> Callable[[Question, Dataset], Answer]:
         listing, cut = _listing(index)
         how_read = "the PDF's own text layer" if index["source"] == "pdf" else "the local OCR at full size"
         prompt = f"Texts printed on the sheet ({how_read}):\n{listing}\n\nQuestion: {q.question}"
-        progress.say(q.qid, f"{len(index['items'])} texts read. The model is choosing what to read, count or measure"
-                            + (", twice over" if WORKINGS > 1 else ""))
-        with ThreadPoolExecutor(max_workers=WORKINGS) as pool:
-            replies = list(pool.map(lambda _: vlm.ask(SYSTEM, [image], prompt, SCHEMA), range(WORKINGS)))
+        progress.say(q.qid, f"{len(index['items'])} texts read. The model is choosing what to read, count or measure")
+        replies = [vlm.ask(SYSTEM, [image], prompt, SCHEMA)]
+        # Where there is something to work out (arithmetic over several figures, a long list to count),
+        # the question is worked out a second time, independently. One printed figure, which the
+        # program reads again itself, is looked up once.
+        if WORKINGS > 1 and replies[0].data and worth_working_twice(replies[0].data):
+            progress.say(q.qid, "Working it out a second time, independently, to see that both come to the same result")
+            with ThreadPoolExecutor(max_workers=WORKINGS - 1) as pool:
+                replies += list(pool.map(lambda _: vlm.ask(SYSTEM, [image], prompt, SCHEMA), range(WORKINGS - 1)))
         progress.say(q.qid, "Counting, computing and checking each figure against the sheet")
         read = (f"{len(index['items'])} texts, from {how_read}" + (" (the list was cut short)" if cut else ""))
         # Many small symbols are boxed tile by tile: that is done once, whichever working asks for it.
@@ -391,31 +397,53 @@ def make_engine(vlm) -> Callable[[Question, Dataset], Answer]:
             # Many small symbols: the part of the sheet that holds the plan is searched tile by tile.
             region = _box(closer, width, height)
             picture, zoom, _ = as_pixels(path, index)
-            result = tiles.count(vlm, picture, f"{q.question}\nWhat counts as one item: {what}",
-                                 [v * zoom for v in region["bbox"]] if region else None,
-                                 note=lambda text: progress.say(q.qid, text))
+            asked = f"{q.question}\nWhat counts as one item: {what}"
+            where = [v * zoom for v in region["bbox"]] if region else None
+            # The tiles are looked at twice, independently. A symbol both passes boxed is counted; one
+            # that only one pass boxed is drawn as doubtful and left out of the count.
+            passes = max(1, min(WORKINGS, 2))
+            with ThreadPoolExecutor(max_workers=passes) as pool:
+                runs = list(pool.map(lambda n: tiles.count(vlm, picture, asked, where,
+                                                           note=(lambda text: progress.say(q.qid, text)) if n == 0 else None),
+                                     range(passes)))
+            result = runs[0]
+            once: list[dict] = []
+            if passes == 2:
+                result["boxes"], once = tiles.agree(runs[0]["boxes"], runs[1]["boxes"])
+                result["cost_usd"] += runs[1]["cost_usd"]
+                result["errors"] = runs[0]["errors"] + runs[1]["errors"]
+                result["sent"] = runs[0]["sent"]
             result["boxes"] = [_to_source(box, zoom) for box in result["boxes"]]
+            once = [{**_to_source(box, zoom), "role": "boxed in one pass only"} for box in once]
             common["cost_usd"] = (reply.cost_usd or 0.0) + result["cost_usd"]
             common["latency_ms"] = (reply.latency_ms or 0.0) + result["latency_ms"]
             meta["interpreted"] = f"count of symbols boxed tile by tile. Counted as: {what}"
             meta["basis"] = basis
             meta["trace"] += [["The model asked the program to look closer", what],
-                              ["The program boxed the symbols tile by tile and counted the boxes",
-                               f"{result['sent']} tiles at full size, {result['found_before_merge']} boxes, "
-                               f"{len(result['boxes'])} after merging the ones two tiles both found"]]
+                              ["The program had the symbols boxed tile by tile, twice, and counted the boxes both passes drew",
+                               f"{result['sent']} tiles at full size; {len(result['boxes'])} boxed in both passes, "
+                               f"{len(once)} in one pass only"]]
             common["method"] = method + ":tiles"
-            meta["checks"] = {"tiles looked at": result["sent"], "boxes before merging tiles": result["found_before_merge"],
-                              "boxes after merging": len(result["boxes"])}
-            if result["errors"] and len(result["errors"]) >= max(1, result["sent"] // 2):
+            if passes == 2:
+                meta["checks"] = {"tiles looked at, twice": result["sent"], "boxed in both passes (counted)": len(result["boxes"]),
+                                  "boxed in one pass only (not counted)": len(once)}
+            else:
+                meta["checks"] = {"tiles looked at": result["sent"], "boxes after merging tiles": len(result["boxes"])}
+            if result["errors"] and len(result["errors"]) >= max(1, passes * result["sent"] // 2):
                 return Answer.decline(f"the model failed on {len(result['errors'])} of {result['sent']} tiles: {result['errors'][0]}"[:300], **common)
             if result["errors"]:
                 meta["checks"]["tiles that failed"] = len(result["errors"])
             found = result["boxes"]
-            evidence = found or [{"kind": "formula", "text": "the model marked nothing of this kind"}]
-            return Answer(answer=len(found), unit="count", state=CHECK, confidence=0.5 if result["errors"] else 0.6,
+            evidence = (found or [{"kind": "formula", "text": "the model marked nothing of this kind"}]) + once
+            doubt = (f" {len(once)} more {'was' if len(once) == 1 else 'were'} boxed in only one of the two passes: "
+                     f"{'it is' if len(once) == 1 else 'they are'} drawn as doubtful and not counted." if once else
+                     " Both passes boxed the same items." if passes == 2 else "")
+            return Answer(answer=len(found), unit="count", state=CHECK,
+                          confidence=0.4 if result["errors"] or len(once) > 0.08 * max(1, len(found)) else 0.6,
                           evidence=evidence,
-                          explanation=f"{len(found)} boxed by the model on {result['sent']} tiles of the sheet at full size, "
-                                      f"merged and counted by the code.",
+                          explanation=f"{len(found)} boxed by the model on {result['sent']} tiles of the sheet at full size"
+                                      f"{', in both of two independent passes' if passes == 2 else ''}; merged and counted "
+                                      f"by the code.{doubt}",
                           **common)
 
         if figures:
@@ -469,6 +497,20 @@ def _form(data: dict) -> str:
     if isinstance(data.get("look_closer"), dict) and str(data["look_closer"].get("what") or "").strip():
         return "tiles"
     return "text" if str(data.get("text") or "").strip() else "none"
+
+
+LONG_LIST = 12  # a list longer than this is counted twice: a row is easily left out
+
+
+def worth_working_twice(data: dict) -> bool:
+    """Whether a reply holds something that can go wrong in the working: arithmetic, or a long list."""
+    form = _form(data)
+    if form == "figures":
+        figures = data.get("figures") or []
+        return len(figures) > 1 or any(op in str(data.get("expression") or "") for op in "+-*/×÷")
+    if form == "items":
+        return len(data.get("items") or []) > LONG_LIST
+    return False
 
 
 def _said(ans: Answer) -> str:

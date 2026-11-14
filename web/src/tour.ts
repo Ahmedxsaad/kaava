@@ -83,7 +83,7 @@ export const TOUR: Stop[] = [
     label: "Every door of a school, boxed tile by tile",
     card: true,
     hard: true,
-    note: "124 doors on 8 tiles at full size · click one to leave it out",
+    note: "118 doors boxed in both of two passes over 8 tiles · 5 doubtful ones set aside",
     state: "check",
     drawing: "uploads/072d5e992c68",
     question: "How many doors are shown on this floor plan?",

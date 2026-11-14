@@ -18,7 +18,7 @@ const TOOLS: { tool: string; gives: string; does: string }[] = [
   { tool: "The sheet's texts", gives: "nothing: it receives them", does: "Reads every text on the sheet at full size, once: the PDF's own text layer, or local OCR tile by tile. The model works from this list, because at its own resolution a 2 mm figure is a smudge." },
   { tool: "A calculator", gives: "the printed figures it uses, each with its place, and an expression over them: a × (b + c)", does: "Evaluates the expression (plus, minus, times, divide and brackets; nothing else can run), converts the unit, and reads each figure again at the place marked." },
   { tool: "A counter", gives: "the list of rows or tags that count, each by the printed text that identifies it", does: "Counts the list. The same text named twice is one item." },
-  { tool: "A closer look", gives: "one sentence on what counts as one item, and where on the sheet to search", does: "Cuts that part of the sheet into overlapping tiles, has each symbol boxed at full size, merges the boxes two tiles both found, and counts." },
+  { tool: "A closer look", gives: "one sentence on what counts as one item, and where on the sheet to search", does: "Cuts that part of the sheet into overlapping tiles and has each symbol boxed at full size, twice. Counts the boxes both passes drew; a box only one pass drew is shown as doubtful and left out." },
   { tool: "A ruler", gives: "which room, and a rough box around it", does: "Reads the scale from the scale bar, moves each side of the box onto the inner face of its wall, and measures area, perimeter, or baseboard with the door openings left out." },
 ];
 
@@ -35,7 +35,7 @@ const HARD: { label: string; why: string }[] = [
   { label: "Doors, and a door drawn twice", why: "The file lists 32 door outlines; 9 lie exactly on another. The answer is 23, and it says why." },
   { label: "Baseboards of a hall, measured on the sheet", why: "Nothing is printed. Walls from pixels, scale from the bar, 8 door openings left out of the length." },
   { label: "Slab area by type, from the printed dimensions", why: "Two dimension figures, each boxed and read again by OCR; the calculator multiplies." },
-  { label: "Every door of a school, boxed tile by tile", why: "124 small symbols on a sheet 14,000 pixels wide: eight tiles at full size, merged." },
+  { label: "Every door of a school, boxed tile by tile", why: "Over a hundred small symbols on a sheet 14,000 pixels wide: eight tiles at full size, looked at twice. Counted where both passes agree." },
   { label: "A question the plan cannot answer", why: "No number, and the reason. A wrong confident answer is the worst outcome." },
 ];
 
@@ -106,7 +106,7 @@ export function How({ onOpen }: { onOpen(stop: Stop): void }) {
           <ul className="how-no">
             {REFUSALS.map((row) => <li key={row.when}><b>{row.when}</b><span>{row.says}</span></li>)}
           </ul>
-          <p className="how-after">Every question on a sheet is worked out twice, independently. Only two workings that come to the same result give a number.</p>
+          <p className="how-after">Where there is something to work out (arithmetic over several figures, a long list, many small symbols) it is done twice, independently. Only two workings that come to the same result give a number.</p>
         </section>
 
         <section className="n-card">
@@ -151,6 +151,8 @@ export function How({ onOpen }: { onOpen(stop: Stop): void }) {
               Stoa posted four sheets without answers. We wrote an answer key for {bench.system.n} questions whose answers
               are plain from the sheet (printed in a table or a callout, added up by hand, or labels counted by hand); it
               is in <code>examples/stoa/questions.jsonl</code>, each line with where its answer comes from. The key is ours.
+              These are questions a frontier model can also read off the sheet; what differs is what happens on the one
+              it cannot: a confident wrong number, or no number.
             </p>
             <table className="how-tools how-bench">
               <thead><tr><th /><th>Right</th><th>Wrong</th><th>No number</th><th>Cost per question</th></tr></thead>

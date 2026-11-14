@@ -126,31 +126,41 @@ def test_two_workings_that_disagree_mean_no_number_and_both_are_shown(sheet):
     unsure = sheet(Reader({"cannot_tell": True, "basis": "the room's length is not printed"}, **one), "What is the area?")
     assert unsure.state == DECLINED and "the other found no way to answer" in unsure.reason
     # Two that agree within half a per cent are one result; a count must agree exactly.
-    near = dict(figures=[figure("a", 0, "6200", 6200.5, "mm")], expression="a", result_unit="mm")
-    exact = dict(figures=[figure("a", 0, "6200", 6200, "mm")], expression="a", result_unit="mm")
-    assert sheet(Reader(near, **exact), "How long is it in mm?").answer == 6200
-    pumps = [{"text_id": 3, "box_2d": [0, 0, 5, 5], "label": "pump"}, {"text_id": 4, "box_2d": [0, 0, 5, 5], "label": "pump"}]
-    counted = sheet(Reader({"items": pumps[:1]}, items=pumps), "How many pumps are shown?")
-    assert counted.state == DECLINED and "2 count" in counted.reason and "1 count" in counted.reason
+    near = dict(figures=[figure("a", 0, "6200", 6200, "mm"), figure("b", 1, "4975", 4975.2, "mm")], expression="a + b", result_unit="mm")
+    exact = dict(figures=[figure("a", 0, "6200", 6200, "mm"), figure("b", 1, "4975", 4975, "mm")], expression="a + b", result_unit="mm")
+    assert sheet(Reader(near, **exact), "How long is it in mm?").answer == 11175
+    rows = [{"text_id": -1, "box_2d": [10 * n, 10, 10 * n + 8, 18], "label": f"row {n}"} for n in range(14)]
+    counted = sheet(Reader({"items": rows[:13]}, items=rows), "How many doors are listed in the schedule?")
+    assert counted.state == DECLINED and "14 count" in counted.reason and "13 count" in counted.reason
+
+
+def test_one_printed_figure_is_looked_up_once_and_arithmetic_is_worked_out_twice(sheet):
+    lookup = Reader(figures=[figure("a", 0, "6200", 6200, "mm")], expression="a", result_unit="mm")
+    assert sheet(lookup, "How long is the slab in mm?").answer == 6200 and len(lookup.seen) == 1
+    few = Reader(items=[{"text_id": 3, "box_2d": [0, 0, 5, 5], "label": "pump"}])
+    assert sheet(few, "How many pumps are shown?").answer == 1 and len(few.seen) == 1
+    assert sr.worth_working_twice({**EMPTY, "figures": [figure("a", 0, "1", 1, "m")], "expression": "a * 2"})
+    assert not sr.worth_working_twice({**EMPTY, "text": "1:200"})
 
 
 def test_when_one_of_the_two_calls_fails_the_answer_rests_on_one_working_and_says_so(sheet):
-    vlm = Reader({"fails": True}, figures=[figure("a", 0, "6200", 6200, "mm")], expression="a", result_unit="mm")
+    vlm = Reader({"fails": True}, figures=[figure("a", 0, "6200", 6200, "mm"), figure("b", 1, "4975", 4975, "mm")],
+                 expression="a + b", result_unit="mm")
     ans = sheet(vlm, "How long is the slab in mm?")
-    assert ans.answer == 6200 and ans.meta["trace"][-1] == ["A second working", "the second call failed, so there is only one"]
+    assert ans.answer == 11175 and ans.meta["trace"][-1] == ["A second working", "the second call failed, so there is only one"]
     assert "a second, independent working" not in ans.meta["checks"]
 
 
 def test_a_figure_given_in_another_unit_of_length_still_matches(sheet):
     vlm = Reader(figures=[figure("a", 0, "6200", 6.2, "m")], expression="a", result_unit="m")
     ans = sheet(vlm, "How long is the slab in metres?")
-    assert ans.answer == 6.2 and ans.confidence == 0.9
+    assert ans.answer == 6.2 and ans.confidence == 0.85
 
 
 def test_feet_and_inches_and_table_entries(sheet):
     feet = sheet(Reader(figures=[figure("a", 6, "52'-8\"", 52.6667, "ft")], expression="a", result_unit="ft"),
                  "How wide is the north wing, in metres?")
-    assert feet.answer == pytest.approx(16.05, abs=0.01) and feet.unit == "m" and feet.confidence == 0.9
+    assert feet.answer == pytest.approx(16.05, abs=0.01) and feet.unit == "m" and feet.confidence == 0.85
     table = sheet(Reader(figures=[figure("a", 5, "1,240 SF", 1240, "ft2")], expression="sum", result_unit="ft2"),
                   "What is the common space circulation area?")
     assert table.answer == 1240 and table.unit == "ft2"
@@ -163,9 +173,8 @@ def test_a_count_is_the_number_of_listed_items_and_a_text_named_twice_is_one_ite
     ans = sheet(Reader(items=items), "How many fueling pumps are shown?")
     assert ans.answer == 3 and ans.unit == "count" and len(ans.evidence) == 3
     assert ans.evidence[0]["bbox"] == [100, 600, 140, 620]   # the printed tag's own box
-    assert ans.meta["checks"] == {"items listed": 3, "identified by a printed text": 2,
-                                  "a second, independent working": "the same result"}
-    assert ans.meta["trace"][-2][0] == "The program counted the list"
+    assert ans.meta["checks"] == {"items listed": 3, "identified by a printed text": 2}
+    assert ans.meta["trace"][-1][0] == "The program counted the list"
 
 
 def test_nothing_printed_means_no_number(sheet):

@@ -50,20 +50,34 @@ Stoa said the final evaluation uses unreleased drawings and posted four sample s
 | --- | --- | --- |
 | Linear metres of baseboard | Finds the hall's walls in the pixels, reads the scale bar (20 m = 1,010 px), leaves out 8 door openings | 2 × (17.80 + 13.76) − 12.73 = 50.4 m |
 | Floor areas | The same measurement for area; or, where the sheet prints a table, the table's entries added up | 245 m² · 914 + 913 + 1,403 + 1,240 = 4,470 ft² |
-| Counts of doors | 8 tiles of the sheet at full size, each door boxed, the boxes merged and counted | 124 doors, each one clickable |
-| Slab area by type | The 150 mm slab's printed dimensions, each read again by OCR | 6200 × 9950 mm = 61.69 m² |
+| Counts of doors | 8 tiles of the sheet at full size, each door boxed, in two independent passes | 118 doors boxed in both passes; 5 more boxed in one pass only are drawn as doubtful and not counted |
+| Slab area by type | The 150 mm slab's printed dimensions, each read again by OCR, worked out twice | 6200 × 9950 mm = 61.69 m² |
 | Piping plans | Equipment found by its printed tags; sizes read from callouts | 5 pumps (FP-1 to FP-5) · 16" suction header |
 
-All of these are "Check this": which figures matter is the model's judgement, and the working is there to be checked. What is measured:
+All of these are "Check this": which figures matter is the model's judgement, and the working is there to be checked.
 
-- On the dataset's own US drawing sets (door and finish schedules as PDF), every count and area question of the development split: **31 of 31 right** (22 counts, 9 areas) at €0.046 per question. On the 19 of them that Gemini had answered alone it got 15.
-- Stoa's sheets have no answer key, so the answers above are unscored. The door boxes and the hall's rectangle were checked by eye against the drawing. The slab with D16 bars gave three slightly different workings on three runs (217.11, 218.61, 218.64 m²): the model chose different figures for a stair landing each time, which is why such an answer asks for a look.
+**Scored against an answer key of our own.** Stoa gave no answers, so we wrote a key for 27 questions on the four sheets whose answers are plain from the sheet: printed in a table or a callout, added up by hand from printed figures, or labels counted by hand (`examples/stoa/questions.jsonl`, each line with where its answer comes from; run with `scripts/bench_examples.py`).
+
+| On Stoa's four sheets, 27 questions | Right | Wrong | No number | Cost per question |
+| --- | --- | --- | --- | --- |
+| This system | 26 | 0 | 1 | €0.020 |
+| Gemini alone, from the picture | 26 | 1 | 0 | €0.006 |
+
+These are questions a frontier model can also read off the sheet, and it does: both get 26. The difference is the 27th, the area of the 150 mm slab. Gemini alone answered 64.93 m², adding alcoves it estimated by eye. The system worked it out twice, got 61.69 and 67.69 m², and gave no number, showing both workings. (Our key says 61.69, the plain rectangle; whether a landing belongs to that slab is exactly what the two workings disagreed on.) The system costs about three times as much per question, for the text list it sends and the second working.
+
+What else is measured, and what is not:
+
+- On the dataset's own US drawing sets (door and finish schedules as PDF), every count and area question of the development split: **31 of 31 right** (22 counts, 9 areas) at €0.046 per question, each worked out once (measured before the second working was added). On the 19 of them that Gemini had answered alone it got 15. Counting rows of a schedule is where the text list pays.
+- The measured rooms and the tiled door count have no key. The hall's rectangle and the door boxes were checked by eye against the drawing. The door count differed between runs (124, 129) before it was done in two passes; now only doors both passes box are counted.
+- The slab with D16 bars gave slightly different workings on different runs (217.11 to 218.64 m²): the model chose different figures for a stair landing. That is what the second working is for.
 - Limits: only rectangular rooms on plans with solid walls and a graphic scale bar are measured; anything else gets no number.
 
 | | |
 | --- | --- |
 | ![A slab's area from two printed dimensions, both boxed](docs/screenshots/slab-working.png) | ![Four entries of a printed table boxed and added up](docs/screenshots/table-added-up.png) |
-| ![One hundred and twenty-four doors on a school plan, each boxed](docs/screenshots/doors-tiled.png) | |
+| ![The doors of a school plan, each boxed; the ones only one pass boxed are dashed](docs/screenshots/doors-tiled.png) | ![A corridor around a lift: the lift is cut out of the area and hatched](docs/screenshots/room-with-hole.png) |
+
+![The How it works page: the route a question takes and the model's tools](docs/screenshots/how-it-works.png)
 
 ## Results so far
 
@@ -113,7 +127,7 @@ The landing page opens by itself: a real drawing from the dataset answers one qu
 | ![The landing page's first screen](docs/screenshots/home.png) | ![An apartment's rooms tinted with their areas](docs/screenshots/apartment-paper.png) |
 | ![A storey of an IFC model cut open with its doors marked](docs/screenshots/ifc-storey.png) | ![An IFC model with its storeys lifted apart and a door tally beside each](docs/screenshots/ifc-storeys-apart.png) |
 
-The left and right arrow keys step through sixteen prepared examples, five of them on Stoa's sample sheets; "Play examples" runs them on their own.
+The left and right arrow keys step through seventeen prepared examples, five of them on Stoa's sample sheets; "Play examples" runs them on their own.
 
 ## Partner technology
 

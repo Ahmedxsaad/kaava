@@ -86,6 +86,21 @@ def merge(boxes: list[dict]) -> list[dict]:
     return sorted(kept, key=lambda b: (round(b["bbox"][1] / 300), b["bbox"][0]))
 
 
+def agree(first: list[dict], second: list[dict]) -> tuple[list[dict], list[dict]]:
+    """Two passes over the same tiles: the boxes both passes drew, and the ones only one of them drew."""
+    both, once, taken = [], [], set()
+    for box in first:
+        match = next((i for i, other in enumerate(second)
+                      if i not in taken and _shared(box["bbox"], other["bbox"]) > SAME), None)
+        if match is None:
+            once.append(box)
+        else:
+            taken.add(match)
+            both.append(box)
+    once += [other for i, other in enumerate(second) if i not in taken]
+    return both, once
+
+
 def count(vlm, path: Path, question: str, region: list[float] | None = None, note=None) -> dict:
     """Box what the question asks about in every tile of `region` (pixels of the file) and merge.
 

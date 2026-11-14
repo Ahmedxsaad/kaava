@@ -237,7 +237,13 @@ def test_the_sample_sheets_come_with_their_questions_and_their_answers_cost_noth
     for e in boxes:
         x0, y0, x1, y1 = e["bbox"]
         assert 0 <= x0 < x1 <= detail["view"]["width"] and 0 <= y0 < y1 <= detail["view"]["height"]
-    assert all(c["value"] == "the program reads the same figure here" for c in answer["checks"])
+    checks = {c["name"]: c["value"] for c in answer["checks"]}
+    assert checks.pop("a second, independent working") == "the same result"   # arithmetic is worked out twice
+    assert all(value == "the program reads the same figure here" for value in checks.values())
+    # The steps it took are there to be read: the model gave the working, the calculator the number.
+    steps = [step["title"] for step in answer["trace"]]
+    assert "The model named the figures and wrote the expression, not the result" in steps
+    assert "The calculator computed" in steps
     # A question nobody has asked yet is not answered without the model being asked for.
     fresh = ask(client, slab["id"], "How thick is the slab under the genset?")
     assert fresh["state"] == "declined" and fresh["cost_eur"] == 0 and fresh["can_use_model"]

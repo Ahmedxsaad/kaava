@@ -47,3 +47,12 @@ def test_empty_paper_is_not_sent_and_boxes_land_in_sheet_pixels(tmp_path):
     assert result["tiles"] >= 2 and result["sent"] == vlm.calls == 1          # the blank tiles cost nothing
     assert result["cost_usd"] == 0.01 and len(result["boxes"]) == 1
     assert result["boxes"][0]["bbox"] == [675.0, 675.0, 825.0, 825.0]         # 45-55% of a 1500-pixel tile at the origin
+
+
+def test_two_passes_agree_on_a_symbol_or_it_is_set_aside():
+    door = lambda x: {"kind": "box", "bbox": [x, 100, x + 50, 150], "label": "door"}
+    first, second = [door(100), door(400), door(900)], [door(104), door(398), door(1500)]
+    both, once = tiles.agree(first, second)
+    assert [b["bbox"][0] for b in both] == [100, 400]                   # boxed in both passes: counted
+    assert sorted(b["bbox"][0] for b in once) == [900, 1500]            # boxed in one pass only: set aside
+    assert tiles.agree([], [door(1)]) == ([], [door(1)])

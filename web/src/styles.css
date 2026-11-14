@@ -302,6 +302,8 @@ h1, h2 { font-family: var(--serif); font-weight: 650; letter-spacing: -0.028em; 
 .aside rect { fill: none; stroke: var(--ink-4); }
 .aside.doubt rect { stroke: var(--warn); }
 .aside.opening rect { stroke: #e8690a; fill: rgb(232 105 10 / .55); }
+.aside.once rect { stroke: #b45309; fill: rgb(180 83 9 / .08); }
+.aside.once text { fill: #b45309; font-weight: 700; font-family: var(--sans); }
 .aside.ruler rect { stroke: #12903d; fill: rgb(22 163 74 / .12); }
 .aside.second rect { stroke: var(--ink-2); stroke-opacity: .75; fill: rgba(1, 30, 1, .04); }
 .sweep { pointer-events: none; }

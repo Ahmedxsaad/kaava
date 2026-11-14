@@ -97,7 +97,7 @@ function why(result: AskResult): { title: string; text: React.ReactNode } {
         : result.family
           ? notVerified(result)
           : result.method.startsWith("sheet-working") && result.method.endsWith(":tiles")
-            ? "Each box was drawn by a vision model on a tile of the sheet at full size; the program merged and counted them. Look over the boxes: a click leaves one out and the count follows."
+            ? "Each box was drawn by a vision model on a tile of the sheet at full size, in two independent passes. The count is of the boxes both passes drew; a box only one pass drew is dashed with a question mark and not counted. Look over both kinds: a click leaves a counted one out and the count follows."
           : result.method.startsWith("sheet-working") && result.method.endsWith(":measured")
             ? "A vision model said which room and drew a rough box; the program moved each side onto the wall and measured against the scale bar. Check that the rectangle is the room and that the marked openings are doors."
           : result.method.startsWith("sheet-working")
