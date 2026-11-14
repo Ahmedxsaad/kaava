@@ -1,8 +1,8 @@
 {
- "calibrated": "2026-11-13T22:56:23+00:00",
+ "calibrated": "2026-11-14T07:37:21+00:00",
  "dataset": "junction-dataset",
  "calibration_runs": [
-  "20261113-225519-router-v1-raw-bb00"
+  "20261114-073656-router-v1-raw-a363"
  ],
  "alpha": 0.01,
  "bound_confidence": 0.95,
@@ -148,6 +148,36 @@
      "answers": 30,
      "errors": 0,
      "upper_bound": 0.09503385285530412,
+     "passed": false
+    }
+   ]
+  },
+  "raster-labels:v1/count": {
+   "threshold": null,
+   "answers_at_threshold": 0,
+   "errors_at_threshold": null,
+   "upper_bound": null,
+   "calibration_answers": 5058,
+   "levels_tested": [
+    {
+     "score": 0.99,
+     "answers": 880,
+     "errors": 18,
+     "upper_bound": 0.03320824832322915,
+     "passed": false
+    },
+    {
+     "score": 0.9,
+     "answers": 2072,
+     "errors": 90,
+     "upper_bound": 0.05397987163211582,
+     "passed": false
+    },
+    {
+     "score": 0.6,
+     "answers": 5058,
+     "errors": 752,
+     "upper_bound": 0.1596537272034971,
      "passed": false
     }
    ]

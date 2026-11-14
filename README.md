@@ -36,10 +36,14 @@ All figures come from the run log in `results/` and are shown live on the app's 
 - Swiss floor plans, held-out: counts 99.9% correct (6,346 of 6,354), areas 97.6% (2,962 of 3,034).
 - Verified answers on held-out drawings: 8 wrong in 6,354 counts and 6 wrong in 2,612 areas, so the error rate is below 0.25% and 0.53% with 95% confidence.
 - Development split, exact engines only, no model: 33,452 of 63,592 questions answered at €0, 94.3% of them right; 18,198 Verified answers, none wrong.
-- Scans: where the printed labels and the type line agree, the label engine answers on its own. That is 12.7% of the scan questions on the development split (96.0% right) and about 94% right on held-out plans. It is never Verified: no score level stays under 1% wrong.
+- Scans: where the printed labels and the type line agree, the label engine answers on its own. That is 12.7% of the scan questions on the development split (96.0% right) and 95.7% right on held-out plans (2,072 answers). It is never Verified: its best level is 2.0% wrong on held-out plans, above the 1% bar.
 - Not solved yet: symbol counts on scans (doors, windows, toilets, sinks, showers; about a third of the dataset's questions) and the number of floors a scan shows (7%) are answered by the vision model at roughly 80% and are never Verified; IFC answers are not Verified yet because too few were held out to prove 1%; free-text questions about IFC models and the US door schedules have no engine.
 
 The vision model in these runs is Claude Sonnet 5.5, image only, high effort.
+
+![32 doors pinned on the plan and lit in a 3D model raised from the DXF](docs/screenshots/doors-verified.png)
+
+More screenshots are in `docs/screenshots/`.
 
 ## Run it
 

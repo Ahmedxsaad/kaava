@@ -133,7 +133,7 @@ function Routing({ mix, labels, onTip }: { mix: Stats["full_set_mix"]; labels: S
 
 function Proof({ stats }: { stats: Stats }) {
   const alpha = stats.thresholds.alpha ?? 0.01;
-  const engines: Record<string, string> = { "dxf-engine:v1": "Swiss floors", "ifc-engine:v1": "IFC models" };
+  const engines: Record<string, string> = { "dxf-engine:v1": "Swiss floors", "ifc-engine:v1": "IFC models", "raster-labels:v1": "Scans, printed labels" };
   const rows = Object.entries(stats.thresholds.families).map(([key, f]) => {
     const [method, kind] = key.split("/");
     const passed = f.threshold != null;
