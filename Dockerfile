@@ -28,6 +28,8 @@ im = Image.new('RGB', (640, 480), 'white'); ImageDraw.Draw(im).text((200, 220), 
 im.save('/tmp/warm.png'); ocr_index.build_index(Path('/tmp/warm.png'))" && rm /tmp/warm.png
 COPY splits ./splits
 COPY results ./results
+# Stoa's sample sheets and what their example questions answered: taken in at start, shown at no cost.
+COPY examples ./examples
 COPY --from=web /web/dist ./web/dist
 ENV BLUEPRINTS_UI_BUDGET_EUR=1.0
 EXPOSE 8000
