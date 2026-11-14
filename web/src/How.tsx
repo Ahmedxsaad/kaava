@@ -126,6 +126,7 @@ export function How({ onOpen }: { onOpen(stop: Stop): void }) {
             {REFUSALS.map((row) => <li key={row.when}><b>{row.when}</b><span>{row.says}</span></li>)}
           </ul>
           <p className="how-after">Where there is something to work out (arithmetic over several figures, a long list, many small symbols) it is done twice, independently. Only two workings that come to the same result give a number.</p>
+          <p className="how-after">An area or a volume that was multiplied out is then given to two <b>examiners</b>: second readers who get the working and an enlarged view of that part of the sheet, and look inside the thing measured for what is not part of it (a trench, a pit, a shaft, a zone of another type) or was left out. A part whose size is printed is taken out by the calculator, when both examiners make the same correction. A part whose size is not printed is not estimated: it is marked on the sheet and the answer says "at most", with what was not taken out.</p>
         </section>
 
         <section className="n-card">

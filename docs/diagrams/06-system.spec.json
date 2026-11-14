@@ -1,8 +1,8 @@
 {
   "title": "Blueprints Talk: how it is built",
-  "subtitle": "One FastAPI app in a container: exact engines first, one vision model behind them, every paid answer kept",
+  "subtitle": "One FastAPI app in a container on a 2-vCPU VM: exact engines first, one vision model behind them, every paid answer kept",
   "destination": "slide",
-  "theme": "clean",
+  "theme": "sketch",
   "zones": [
     {
       "id": "front",
@@ -10,24 +10,20 @@
       "color": "client"
     },
     {
-      "id": "app",
-      "label": "The app · Docker",
+      "id": "vm",
+      "label": "Azure VM · Docker",
       "color": "service"
     },
     {
       "id": "engines",
       "label": "Engines · plain code, on CPU",
-      "color": "data"
+      "color": "data",
+      "parent": "vm"
     },
     {
       "id": "outside",
       "label": "Outside · paid",
       "color": "ai"
-    },
-    {
-      "id": "kept",
-      "label": "Kept on disk",
-      "color": "infra"
     }
   ],
   "nodes": [
@@ -45,55 +41,61 @@
       "icon": "logos:React"
     },
     {
+      "id": "cf",
+      "label": "Cloudflare Tunnel",
+      "sub": "no open port on the VM",
+      "icon": "brands:Cloudflare",
+      "color": "infra"
+    },
+    {
       "id": "api",
       "label": "Router + verifier",
       "sub": "FastAPI · Python 3.12",
-      "zone": "app",
-      "icon": "logos:Python",
+      "zone": "vm",
+      "icon": "brands:FastAPI",
       "highlight": true
     },
     {
       "id": "ifc",
       "label": "IFC engine",
       "sub": "IfcOpenShell",
-      "zone": "engines"
+      "zone": "engines",
+      "icon": "logos:Python"
     },
     {
       "id": "dxf",
       "label": "DXF engine",
       "sub": "ezdxf + shapely",
-      "zone": "engines"
+      "zone": "engines",
+      "icon": "logos:Python"
     },
     {
       "id": "ocr",
       "label": "Label reader",
       "sub": "RapidOCR (PP-OCR)",
-      "zone": "engines"
+      "zone": "engines",
+      "icon": "it:Document"
     },
     {
       "id": "tools",
       "label": "Sheet tools",
       "sub": "calculator · ruler · tiles",
-      "zone": "engines"
+      "zone": "engines",
+      "icon": "brands:NumPy"
+    },
+    {
+      "id": "cache",
+      "label": "Cache on disk",
+      "sub": "indexes · meshes · readings",
+      "zone": "vm",
+      "icon": "sysdesign:Key-value store"
     },
     {
       "id": "gemini",
       "label": "Gemini 4 Carbon",
-      "sub": "boxes, workings, queries",
+      "sub": "boxes, workings, examiners",
       "zone": "outside",
       "icon": "brands:Google Gemini"
-    },
-    {
-      "id": "cache",
-      "label": "Cache",
-      "sub": "indexes · meshes · readings",
-      "zone": "kept"
-    },
-    {
-      "id": "log",
-      "label": "Run log",
-      "sub": "accuracy and cost per run",
-      "zone": "kept"
     }
   ],
   "edges": [
@@ -105,9 +107,14 @@
     },
     {
       "from": "web",
-      "to": "api",
+      "to": "cf",
       "step": 2,
-      "label": "Question goes to the app",
+      "label": "Request goes through the tunnel",
+      "both": true
+    },
+    {
+      "from": "cf",
+      "to": "api",
       "both": true
     },
     {
@@ -142,17 +149,12 @@
       "to": "cache",
       "style": "dashed",
       "label": "kept"
-    },
-    {
-      "from": "api",
-      "to": "log",
-      "style": "dashed",
-      "label": "logged"
     }
   ],
   "legend": {
     "highlight": "decides the method and the state",
     "dotted": "paid call, only when needed",
-    "dashed": "written to disk"
+    "dashed": "written to disk",
+    "infra": "the way in from the internet"
   }
 }

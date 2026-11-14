@@ -1066,6 +1066,9 @@ class Service:
             "interpreted": ans.meta.get("interpreted"),
             # A measurement whose scale was not printed (taken from a standard door, say): the range it leaves open.
             "estimate": ans.meta.get("estimate"),
+            # What examiners found inside the thing measured and could not take into account (examiner.py).
+            "caveat": ans.meta.get("caveat"),
+            "bound": ans.meta.get("bound"),
             "basis": ans.meta.get("basis"),
             # What the program and the model each did, step by step (sheet_reading.py).
             "trace": [{"title": title, "body": body} for title, body in ans.meta.get("trace") or []],

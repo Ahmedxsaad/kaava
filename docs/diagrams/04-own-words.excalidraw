@@ -16,7 +16,7 @@
       "fillStyle": "solid",
       "strokeWidth": 1,
       "strokeStyle": "dashed",
-      "roughness": 0,
+      "roughness": 1,
       "opacity": 100,
       "groupIds": [],
       "frameId": null,
@@ -48,7 +48,7 @@
       "fillStyle": "solid",
       "strokeWidth": 1,
       "strokeStyle": "solid",
-      "roughness": 0,
+      "roughness": 1,
       "opacity": 100,
       "groupIds": [],
       "frameId": null,
@@ -64,7 +64,7 @@
       "text": "ALT · readings differ: no number, both readings shown",
       "originalText": "ALT · readings differ: no number, both readings shown",
       "fontSize": 16,
-      "fontFamily": 2,
+      "fontFamily": 5,
       "textAlign": "left",
       "verticalAlign": "top",
       "containerId": null,
@@ -271,7 +271,7 @@
       "fillStyle": "solid",
       "strokeWidth": 2,
       "strokeStyle": "solid",
-      "roughness": 0,
+      "roughness": 1,
       "opacity": 100,
       "groupIds": [
         "eng-group"
@@ -310,7 +310,7 @@
       "fillStyle": "solid",
       "strokeWidth": 1,
       "strokeStyle": "solid",
-      "roughness": 0,
+      "roughness": 1,
       "opacity": 100,
       "groupIds": [],
       "frameId": null,
@@ -326,7 +326,7 @@
       "text": "\nEngineer",
       "originalText": "\nEngineer",
       "fontSize": 18,
-      "fontFamily": 2,
+      "fontFamily": 5,
       "textAlign": "center",
       "verticalAlign": "middle",
       "containerId": "eng",
@@ -707,9 +707,11 @@
       "fillStyle": "solid",
       "strokeWidth": 2,
       "strokeStyle": "solid",
-      "roughness": 0,
+      "roughness": 1,
       "opacity": 100,
-      "groupIds": [],
+      "groupIds": [
+        "rules-group"
+      ],
       "frameId": null,
       "roundness": {
         "type": 3
@@ -735,16 +737,16 @@
       "id": "rules-label",
       "type": "text",
       "x": 497.4,
-      "y": 177.5,
+      "y": 155,
       "width": 162,
-      "height": 45,
+      "height": 90,
       "angle": 0,
       "strokeColor": "#5938bb",
       "backgroundColor": "transparent",
       "fillStyle": "solid",
       "strokeWidth": 1,
       "strokeStyle": "solid",
-      "roughness": 0,
+      "roughness": 1,
       "opacity": 100,
       "groupIds": [],
       "frameId": null,
@@ -757,16 +759,390 @@
       "updated": 1,
       "link": null,
       "locked": false,
-      "text": "Rules + guard\nfixed phrasings",
-      "originalText": "Rules + guard\nfixed phrasings",
+      "text": "\n\nRules + guard\nfixed phrasings",
+      "originalText": "\n\nRules + guard\nfixed phrasings",
       "fontSize": 18,
-      "fontFamily": 2,
+      "fontFamily": 5,
       "textAlign": "center",
       "verticalAlign": "middle",
       "containerId": "rules",
       "autoResize": true,
       "lineHeight": 1.25,
       "customData": {
+        "reveal": 2
+      }
+    },
+    {
+      "type": "line",
+      "version": 1,
+      "versionNonce": 1602223021,
+      "isDeleted": false,
+      "id": "rules-icon-0",
+      "fillStyle": "cross-hatch",
+      "strokeWidth": 1,
+      "strokeStyle": "solid",
+      "roughness": 1,
+      "opacity": 100,
+      "angle": 0,
+      "x": 593.76,
+      "y": 157.15,
+      "strokeColor": "#f7c31d",
+      "backgroundColor": "#f7c31d",
+      "width": 34.13853047529306,
+      "height": 34.8517923543524,
+      "seed": 888726477,
+      "groupIds": [
+        "rules-icon-g0",
+        "rules-icon-all",
+        "rules-group"
+      ],
+      "frameId": null,
+      "roundness": {
+        "type": 2
+      },
+      "boundElements": null,
+      "updated": 1,
+      "link": null,
+      "locked": false,
+      "startBinding": null,
+      "endBinding": null,
+      "lastCommittedPoint": null,
+      "startArrowhead": null,
+      "endArrowhead": null,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          4.961188963424698,
+          0.4179160063645333
+        ],
+        [
+          7.376146957137868,
+          3.484162946850502
+        ],
+        [
+          8.338945439783743,
+          10.761279830387442
+        ],
+        [
+          7.08046956119785,
+          17.336097064312934
+        ],
+        [
+          2.256813798975925,
+          20.919537735240954
+        ],
+        [
+          -5.106045794596495,
+          21.51479142251139
+        ],
+        [
+          -12.601968214547796,
+          21.54233069069774
+        ],
+        [
+          -15.242279565627403,
+          21.870318642274306
+        ],
+        [
+          -15.642357808269992,
+          22.193190287659267
+        ],
+        [
+          -15.584813279761242,
+          24.408654635246304
+        ],
+        [
+          -14.360281490678297,
+          24.61977132304905
+        ],
+        [
+          -4.234016157715771,
+          25.036855454374713
+        ],
+        [
+          -3.035696157082891,
+          28.52723979188831
+        ],
+        [
+          -4.446677103173892,
+          31.75080978495555
+        ],
+        [
+          -9.055190938669593,
+          34.626322936707616
+        ],
+        [
+          -17.32012853602329,
+          34.8517923543524
+        ],
+        [
+          -23.265499905595483,
+          32.54905381536164
+        ],
+        [
+          -25.246937739274387,
+          29.053711242227315
+        ],
+        [
+          -25.799585035509317,
+          23.56673465276229
+        ],
+        [
+          -25.567315793226058,
+          16.93291357435297
+        ],
+        [
+          -22.14983703963649,
+          12.903159981821268
+        ],
+        [
+          -15.921120519714309,
+          12.838627604016171
+        ],
+        [
+          -9.47438512293178,
+          12.902555108918529
+        ],
+        [
+          -4.661377656203597,
+          11.806272087924366
+        ],
+        [
+          -0.6097129381059572,
+          7.3892424989718535
+        ],
+        [
+          0,
+          0
+        ]
+      ],
+      "customData": {
+        "icon": "logos:Python",
+        "reveal": 2
+      }
+    },
+    {
+      "type": "line",
+      "version": 1,
+      "versionNonce": 1589509645,
+      "isDeleted": false,
+      "id": "rules-icon-1",
+      "fillStyle": "cross-hatch",
+      "strokeWidth": 1,
+      "strokeStyle": "solid",
+      "roughness": 1,
+      "opacity": 100,
+      "angle": 0,
+      "x": 564.92,
+      "y": 180.01,
+      "strokeColor": "#3276af",
+      "backgroundColor": "#3276af",
+      "width": 35.91715553228306,
+      "height": 36.00631459407882,
+      "seed": 1092936237,
+      "groupIds": [
+        "rules-icon-g0",
+        "rules-icon-all",
+        "rules-group"
+      ],
+      "frameId": null,
+      "roundness": {
+        "type": 2
+      },
+      "boundElements": null,
+      "updated": 1,
+      "link": null,
+      "locked": false,
+      "startBinding": null,
+      "endBinding": null,
+      "lastCommittedPoint": null,
+      "startArrowhead": null,
+      "endArrowhead": null,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          -5.3066492312969435,
+          -0.022379209026897814
+        ],
+        [
+          -8.803253192127249,
+          -3.539367667034099
+        ],
+        [
+          -10.224463848058138,
+          -10.916092217232027
+        ],
+        [
+          -8.907077304557253,
+          -17.790678751908768
+        ],
+        [
+          -4.470113375979489,
+          -22.008634976317687
+        ],
+        [
+          3.6139989551972214,
+          -22.404841840710272
+        ],
+        [
+          12.042414239213473,
+          -22.118938674712684
+        ],
+        [
+          14.310015403477761,
+          -22.049461287298087
+        ],
+        [
+          15.878313843793343,
+          -22.281107657122977
+        ],
+        [
+          15.78956760122949,
+          -25.076614297884085
+        ],
+        [
+          14.111254723194206,
+          -25.707917563453904
+        ],
+        [
+          3.042345392075081,
+          -26.007665011124686
+        ],
+        [
+          1.7440143439803275,
+          -28.39269533672229
+        ],
+        [
+          2.6657257949708404,
+          -33.067827099358105
+        ],
+        [
+          7.893631840029747,
+          -35.686305549234945
+        ],
+        [
+          16.511312536376686,
+          -36.00631459407882
+        ],
+        [
+          22.755473975164527,
+          -33.85425614344542
+        ],
+        [
+          25.43848732532316,
+          -30.253648834534392
+        ],
+        [
+          25.692691684224922,
+          -24.295412737628627
+        ],
+        [
+          24.82214685764246,
+          -17.55173578686728
+        ],
+        [
+          21.582053251450134,
+          -13.191294541372727
+        ],
+        [
+          15.030876126507147,
+          -13.123421322878547
+        ],
+        [
+          8.250393289171411,
+          -13.190658354204588
+        ],
+        [
+          3.186249893598591,
+          -11.435277063254494
+        ],
+        [
+          0.09827042202806946,
+          -6.716734728618144
+        ],
+        [
+          0,
+          0
+        ]
+      ],
+      "customData": {
+        "icon": "logos:Python",
+        "reveal": 2
+      }
+    },
+    {
+      "type": "ellipse",
+      "version": 1,
+      "versionNonce": 533509229,
+      "isDeleted": false,
+      "id": "rules-icon-2",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "strokeStyle": "solid",
+      "roughness": 1,
+      "opacity": 100,
+      "angle": 0,
+      "x": 575.37,
+      "y": 146.68,
+      "strokeColor": "transparent",
+      "backgroundColor": "#ffffff",
+      "width": 4.54733502421994,
+      "height": 4.847609831656595,
+      "seed": 939660429,
+      "groupIds": [
+        "rules-icon-g0",
+        "rules-icon-all",
+        "rules-group"
+      ],
+      "frameId": null,
+      "roundness": null,
+      "boundElements": null,
+      "updated": 1,
+      "link": null,
+      "locked": false,
+      "customData": {
+        "icon": "logos:Python",
+        "reveal": 2
+      }
+    },
+    {
+      "type": "ellipse",
+      "version": 1,
+      "versionNonce": 242589389,
+      "isDeleted": false,
+      "id": "rules-icon-3",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "strokeStyle": "solid",
+      "roughness": 1,
+      "opacity": 100,
+      "angle": 0,
+      "x": 576.9,
+      "y": 184.87,
+      "strokeColor": "transparent",
+      "backgroundColor": "#ffffff",
+      "width": 4.54733502421994,
+      "height": 4.847609831656595,
+      "seed": 357169901,
+      "groupIds": [
+        "rules-icon-g0",
+        "rules-icon-all",
+        "rules-group"
+      ],
+      "frameId": null,
+      "roundness": null,
+      "boundElements": null,
+      "updated": 1,
+      "link": null,
+      "locked": false,
+      "customData": {
+        "icon": "logos:Python",
         "reveal": 2
       }
     },
@@ -783,7 +1159,7 @@
       "fillStyle": "solid",
       "strokeWidth": 2,
       "strokeStyle": "solid",
-      "roughness": 0,
+      "roughness": 1,
       "opacity": 100,
       "groupIds": [
         "llm-group"
@@ -822,7 +1198,7 @@
       "fillStyle": "solid",
       "strokeWidth": 1,
       "strokeStyle": "solid",
-      "roughness": 0,
+      "roughness": 1,
       "opacity": 100,
       "groupIds": [],
       "frameId": null,
@@ -838,7 +1214,7 @@
       "text": "\n\nGemini 4 Carbon\nreads, never counts",
       "originalText": "\n\nGemini 4 Carbon\nreads, never counts",
       "fontSize": 18,
-      "fontFamily": 2,
+      "fontFamily": 5,
       "textAlign": "center",
       "verticalAlign": "middle",
       "containerId": "llm",
@@ -1176,9 +1552,11 @@
       "fillStyle": "solid",
       "strokeWidth": 4,
       "strokeStyle": "solid",
-      "roughness": 0,
+      "roughness": 1,
       "opacity": 100,
-      "groupIds": [],
+      "groupIds": [
+        "geo-group"
+      ],
       "frameId": null,
       "roundness": {
         "type": 3
@@ -1204,16 +1582,16 @@
       "id": "geo-label",
       "type": "text",
       "x": 1328,
-      "y": 177.5,
+      "y": 155,
       "width": 194.4,
-      "height": 45,
+      "height": 90,
       "angle": 0,
       "strokeColor": "#096877",
       "backgroundColor": "transparent",
       "fillStyle": "solid",
       "strokeWidth": 1,
       "strokeStyle": "solid",
-      "roughness": 0,
+      "roughness": 1,
       "opacity": 100,
       "groupIds": [],
       "frameId": null,
@@ -1226,16 +1604,390 @@
       "updated": 1,
       "link": null,
       "locked": false,
-      "text": "Plan query\nshapely on the DXF",
-      "originalText": "Plan query\nshapely on the DXF",
+      "text": "\n\nPlan query\nshapely on the DXF",
+      "originalText": "\n\nPlan query\nshapely on the DXF",
       "fontSize": 18,
-      "fontFamily": 2,
+      "fontFamily": 5,
       "textAlign": "center",
       "verticalAlign": "middle",
       "containerId": "geo",
       "autoResize": true,
       "lineHeight": 1.25,
       "customData": {
+        "reveal": 4
+      }
+    },
+    {
+      "type": "line",
+      "version": 1,
+      "versionNonce": 1602223021,
+      "isDeleted": false,
+      "id": "geo-icon-0",
+      "fillStyle": "cross-hatch",
+      "strokeWidth": 1,
+      "strokeStyle": "solid",
+      "roughness": 1,
+      "opacity": 100,
+      "angle": 0,
+      "x": 1440.56,
+      "y": 157.15,
+      "strokeColor": "#f7c31d",
+      "backgroundColor": "#f7c31d",
+      "width": 34.13853047529306,
+      "height": 34.8517923543524,
+      "seed": 888726477,
+      "groupIds": [
+        "geo-icon-g0",
+        "geo-icon-all",
+        "geo-group"
+      ],
+      "frameId": null,
+      "roundness": {
+        "type": 2
+      },
+      "boundElements": null,
+      "updated": 1,
+      "link": null,
+      "locked": false,
+      "startBinding": null,
+      "endBinding": null,
+      "lastCommittedPoint": null,
+      "startArrowhead": null,
+      "endArrowhead": null,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          4.961188963424698,
+          0.4179160063645333
+        ],
+        [
+          7.376146957137868,
+          3.484162946850502
+        ],
+        [
+          8.338945439783743,
+          10.761279830387442
+        ],
+        [
+          7.08046956119785,
+          17.336097064312934
+        ],
+        [
+          2.256813798975925,
+          20.919537735240954
+        ],
+        [
+          -5.106045794596495,
+          21.51479142251139
+        ],
+        [
+          -12.601968214547796,
+          21.54233069069774
+        ],
+        [
+          -15.242279565627403,
+          21.870318642274306
+        ],
+        [
+          -15.642357808269992,
+          22.193190287659267
+        ],
+        [
+          -15.584813279761242,
+          24.408654635246304
+        ],
+        [
+          -14.360281490678297,
+          24.61977132304905
+        ],
+        [
+          -4.234016157715771,
+          25.036855454374713
+        ],
+        [
+          -3.035696157082891,
+          28.52723979188831
+        ],
+        [
+          -4.446677103173892,
+          31.75080978495555
+        ],
+        [
+          -9.055190938669593,
+          34.626322936707616
+        ],
+        [
+          -17.32012853602329,
+          34.8517923543524
+        ],
+        [
+          -23.265499905595483,
+          32.54905381536164
+        ],
+        [
+          -25.246937739274387,
+          29.053711242227315
+        ],
+        [
+          -25.799585035509317,
+          23.56673465276229
+        ],
+        [
+          -25.567315793226058,
+          16.93291357435297
+        ],
+        [
+          -22.14983703963649,
+          12.903159981821268
+        ],
+        [
+          -15.921120519714309,
+          12.838627604016171
+        ],
+        [
+          -9.47438512293178,
+          12.902555108918529
+        ],
+        [
+          -4.661377656203597,
+          11.806272087924366
+        ],
+        [
+          -0.6097129381059572,
+          7.3892424989718535
+        ],
+        [
+          0,
+          0
+        ]
+      ],
+      "customData": {
+        "icon": "logos:Python",
+        "reveal": 4
+      }
+    },
+    {
+      "type": "line",
+      "version": 1,
+      "versionNonce": 1589509645,
+      "isDeleted": false,
+      "id": "geo-icon-1",
+      "fillStyle": "cross-hatch",
+      "strokeWidth": 1,
+      "strokeStyle": "solid",
+      "roughness": 1,
+      "opacity": 100,
+      "angle": 0,
+      "x": 1411.72,
+      "y": 180.01,
+      "strokeColor": "#3276af",
+      "backgroundColor": "#3276af",
+      "width": 35.91715553228306,
+      "height": 36.00631459407882,
+      "seed": 1092936237,
+      "groupIds": [
+        "geo-icon-g0",
+        "geo-icon-all",
+        "geo-group"
+      ],
+      "frameId": null,
+      "roundness": {
+        "type": 2
+      },
+      "boundElements": null,
+      "updated": 1,
+      "link": null,
+      "locked": false,
+      "startBinding": null,
+      "endBinding": null,
+      "lastCommittedPoint": null,
+      "startArrowhead": null,
+      "endArrowhead": null,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          -5.3066492312969435,
+          -0.022379209026897814
+        ],
+        [
+          -8.803253192127249,
+          -3.539367667034099
+        ],
+        [
+          -10.224463848058138,
+          -10.916092217232027
+        ],
+        [
+          -8.907077304557253,
+          -17.790678751908768
+        ],
+        [
+          -4.470113375979489,
+          -22.008634976317687
+        ],
+        [
+          3.6139989551972214,
+          -22.404841840710272
+        ],
+        [
+          12.042414239213473,
+          -22.118938674712684
+        ],
+        [
+          14.310015403477761,
+          -22.049461287298087
+        ],
+        [
+          15.878313843793343,
+          -22.281107657122977
+        ],
+        [
+          15.78956760122949,
+          -25.076614297884085
+        ],
+        [
+          14.111254723194206,
+          -25.707917563453904
+        ],
+        [
+          3.042345392075081,
+          -26.007665011124686
+        ],
+        [
+          1.7440143439803275,
+          -28.39269533672229
+        ],
+        [
+          2.6657257949708404,
+          -33.067827099358105
+        ],
+        [
+          7.893631840029747,
+          -35.686305549234945
+        ],
+        [
+          16.511312536376686,
+          -36.00631459407882
+        ],
+        [
+          22.755473975164527,
+          -33.85425614344542
+        ],
+        [
+          25.43848732532316,
+          -30.253648834534392
+        ],
+        [
+          25.692691684224922,
+          -24.295412737628627
+        ],
+        [
+          24.82214685764246,
+          -17.55173578686728
+        ],
+        [
+          21.582053251450134,
+          -13.191294541372727
+        ],
+        [
+          15.030876126507147,
+          -13.123421322878547
+        ],
+        [
+          8.250393289171411,
+          -13.190658354204588
+        ],
+        [
+          3.186249893598591,
+          -11.435277063254494
+        ],
+        [
+          0.09827042202806946,
+          -6.716734728618144
+        ],
+        [
+          0,
+          0
+        ]
+      ],
+      "customData": {
+        "icon": "logos:Python",
+        "reveal": 4
+      }
+    },
+    {
+      "type": "ellipse",
+      "version": 1,
+      "versionNonce": 533509229,
+      "isDeleted": false,
+      "id": "geo-icon-2",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "strokeStyle": "solid",
+      "roughness": 1,
+      "opacity": 100,
+      "angle": 0,
+      "x": 1422.17,
+      "y": 146.68,
+      "strokeColor": "transparent",
+      "backgroundColor": "#ffffff",
+      "width": 4.54733502421994,
+      "height": 4.847609831656595,
+      "seed": 939660429,
+      "groupIds": [
+        "geo-icon-g0",
+        "geo-icon-all",
+        "geo-group"
+      ],
+      "frameId": null,
+      "roundness": null,
+      "boundElements": null,
+      "updated": 1,
+      "link": null,
+      "locked": false,
+      "customData": {
+        "icon": "logos:Python",
+        "reveal": 4
+      }
+    },
+    {
+      "type": "ellipse",
+      "version": 1,
+      "versionNonce": 242589389,
+      "isDeleted": false,
+      "id": "geo-icon-3",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "strokeStyle": "solid",
+      "roughness": 1,
+      "opacity": 100,
+      "angle": 0,
+      "x": 1423.7,
+      "y": 184.87,
+      "strokeColor": "transparent",
+      "backgroundColor": "#ffffff",
+      "width": 4.54733502421994,
+      "height": 4.847609831656595,
+      "seed": 357169901,
+      "groupIds": [
+        "geo-icon-g0",
+        "geo-icon-all",
+        "geo-group"
+      ],
+      "frameId": null,
+      "roundness": null,
+      "boundElements": null,
+      "updated": 1,
+      "link": null,
+      "locked": false,
+      "customData": {
+        "icon": "logos:Python",
         "reveal": 4
       }
     },
@@ -1287,7 +2039,7 @@
       "fillStyle": "solid",
       "strokeWidth": 1,
       "strokeStyle": "solid",
-      "roughness": 0,
+      "roughness": 1,
       "opacity": 100,
       "groupIds": [],
       "frameId": null,
@@ -1303,7 +2055,7 @@
       "text": "1",
       "originalText": "1",
       "fontSize": 14,
-      "fontFamily": 2,
+      "fontFamily": 5,
       "textAlign": "center",
       "verticalAlign": "middle",
       "containerId": "msg-1-badge",
@@ -1326,7 +2078,7 @@
       "fillStyle": "solid",
       "strokeWidth": 2,
       "strokeStyle": "solid",
-      "roughness": 0,
+      "roughness": 1,
       "opacity": 100,
       "groupIds": [],
       "frameId": null,
@@ -1372,7 +2124,7 @@
       "fillStyle": "solid",
       "strokeWidth": 1,
       "strokeStyle": "solid",
-      "roughness": 0,
+      "roughness": 1,
       "opacity": 100,
       "groupIds": [],
       "frameId": null,
@@ -1388,7 +2140,7 @@
       "text": "windows in Stanza?",
       "originalText": "windows in Stanza?",
       "fontSize": 16,
-      "fontFamily": 2,
+      "fontFamily": 5,
       "textAlign": "center",
       "verticalAlign": "top",
       "containerId": null,
@@ -1446,7 +2198,7 @@
       "fillStyle": "solid",
       "strokeWidth": 1,
       "strokeStyle": "solid",
-      "roughness": 0,
+      "roughness": 1,
       "opacity": 100,
       "groupIds": [],
       "frameId": null,
@@ -1462,7 +2214,7 @@
       "text": "2",
       "originalText": "2",
       "fontSize": 14,
-      "fontFamily": 2,
+      "fontFamily": 5,
       "textAlign": "center",
       "verticalAlign": "middle",
       "containerId": "msg-2-badge",
@@ -1539,7 +2291,7 @@
       "fillStyle": "solid",
       "strokeWidth": 1,
       "strokeStyle": "solid",
-      "roughness": 0,
+      "roughness": 1,
       "opacity": 100,
       "groupIds": [],
       "frameId": null,
@@ -1555,7 +2307,7 @@
       "text": "names a room: not a whole-floor count",
       "originalText": "names a room: not a whole-floor count",
       "fontSize": 16,
-      "fontFamily": 2,
+      "fontFamily": 5,
       "textAlign": "left",
       "verticalAlign": "top",
       "containerId": null,
@@ -1615,7 +2367,7 @@
       "fillStyle": "solid",
       "strokeWidth": 1,
       "strokeStyle": "solid",
-      "roughness": 0,
+      "roughness": 1,
       "opacity": 100,
       "groupIds": [],
       "frameId": null,
@@ -1631,7 +2383,7 @@
       "text": "the rule that stopped a wrong Verified 14",
       "originalText": "the rule that stopped a wrong Verified 14",
       "fontSize": 16,
-      "fontFamily": 2,
+      "fontFamily": 5,
       "textAlign": "center",
       "verticalAlign": "middle",
       "containerId": "msg-2-note",
@@ -1689,7 +2441,7 @@
       "fillStyle": "solid",
       "strokeWidth": 1,
       "strokeStyle": "solid",
-      "roughness": 0,
+      "roughness": 1,
       "opacity": 100,
       "groupIds": [],
       "frameId": null,
@@ -1705,7 +2457,7 @@
       "text": "3",
       "originalText": "3",
       "fontSize": 14,
-      "fontFamily": 2,
+      "fontFamily": 5,
       "textAlign": "center",
       "verticalAlign": "middle",
       "containerId": "msg-3-badge",
@@ -1728,7 +2480,7 @@
       "fillStyle": "solid",
       "strokeWidth": 2,
       "strokeStyle": "solid",
-      "roughness": 0,
+      "roughness": 1,
       "opacity": 100,
       "groupIds": [],
       "frameId": null,
@@ -1774,7 +2526,7 @@
       "fillStyle": "solid",
       "strokeWidth": 1,
       "strokeStyle": "solid",
-      "roughness": 0,
+      "roughness": 1,
       "opacity": 100,
       "groupIds": [],
       "frameId": null,
@@ -1790,7 +2542,7 @@
       "text": "question + the plan's 30 rooms, asked twice",
       "originalText": "question + the plan's 30 rooms, asked twice",
       "fontSize": 16,
-      "fontFamily": 2,
+      "fontFamily": 5,
       "textAlign": "center",
       "verticalAlign": "top",
       "containerId": null,
@@ -1813,7 +2565,7 @@
       "fillStyle": "solid",
       "strokeWidth": 2,
       "strokeStyle": "dashed",
-      "roughness": 0,
+      "roughness": 1,
       "opacity": 100,
       "groupIds": [],
       "frameId": null,
@@ -1859,7 +2611,7 @@
       "fillStyle": "solid",
       "strokeWidth": 1,
       "strokeStyle": "solid",
-      "roughness": 0,
+      "roughness": 1,
       "opacity": 100,
       "groupIds": [],
       "frameId": null,
@@ -1875,7 +2627,7 @@
       "text": "two queries: windows of 13 rooms",
       "originalText": "two queries: windows of 13 rooms",
       "fontSize": 16,
-      "fontFamily": 2,
+      "fontFamily": 5,
       "textAlign": "center",
       "verticalAlign": "top",
       "containerId": null,
@@ -1935,7 +2687,7 @@
       "fillStyle": "solid",
       "strokeWidth": 1,
       "strokeStyle": "solid",
-      "roughness": 0,
+      "roughness": 1,
       "opacity": 100,
       "groupIds": [],
       "frameId": null,
@@ -1951,7 +2703,7 @@
       "text": "a query names rooms; it has no field for a number",
       "originalText": "a query names rooms; it has no field for a number",
       "fontSize": 16,
-      "fontFamily": 2,
+      "fontFamily": 5,
       "textAlign": "center",
       "verticalAlign": "middle",
       "containerId": "msg-4-note",
@@ -2009,7 +2761,7 @@
       "fillStyle": "solid",
       "strokeWidth": 1,
       "strokeStyle": "solid",
-      "roughness": 0,
+      "roughness": 1,
       "opacity": 100,
       "groupIds": [],
       "frameId": null,
@@ -2025,7 +2777,7 @@
       "text": "4",
       "originalText": "4",
       "fontSize": 14,
-      "fontFamily": 2,
+      "fontFamily": 5,
       "textAlign": "center",
       "verticalAlign": "middle",
       "containerId": "msg-5-badge",
@@ -2102,7 +2854,7 @@
       "fillStyle": "solid",
       "strokeWidth": 1,
       "strokeStyle": "solid",
-      "roughness": 0,
+      "roughness": 1,
       "opacity": 100,
       "groupIds": [],
       "frameId": null,
@@ -2118,7 +2870,7 @@
       "text": "both readings the same?",
       "originalText": "both readings the same?",
       "fontSize": 16,
-      "fontFamily": 2,
+      "fontFamily": 5,
       "textAlign": "left",
       "verticalAlign": "top",
       "containerId": null,
@@ -2176,7 +2928,7 @@
       "fillStyle": "solid",
       "strokeWidth": 1,
       "strokeStyle": "solid",
-      "roughness": 0,
+      "roughness": 1,
       "opacity": 100,
       "groupIds": [],
       "frameId": null,
@@ -2192,7 +2944,7 @@
       "text": "5",
       "originalText": "5",
       "fontSize": 14,
-      "fontFamily": 2,
+      "fontFamily": 5,
       "textAlign": "center",
       "verticalAlign": "middle",
       "containerId": "msg-6-badge",
@@ -2215,7 +2967,7 @@
       "fillStyle": "solid",
       "strokeWidth": 2,
       "strokeStyle": "solid",
-      "roughness": 0,
+      "roughness": 1,
       "opacity": 100,
       "groupIds": [],
       "frameId": null,
@@ -2261,7 +3013,7 @@
       "fillStyle": "solid",
       "strokeWidth": 1,
       "strokeStyle": "solid",
-      "roughness": 0,
+      "roughness": 1,
       "opacity": 100,
       "groupIds": [],
       "frameId": null,
@@ -2277,7 +3029,7 @@
       "text": "run the query on the geometry",
       "originalText": "run the query on the geometry",
       "fontSize": 16,
-      "fontFamily": 2,
+      "fontFamily": 5,
       "textAlign": "center",
       "verticalAlign": "top",
       "containerId": null,
@@ -2335,7 +3087,7 @@
       "fillStyle": "solid",
       "strokeWidth": 1,
       "strokeStyle": "solid",
-      "roughness": 0,
+      "roughness": 1,
       "opacity": 100,
       "groupIds": [],
       "frameId": null,
@@ -2351,7 +3103,7 @@
       "text": "6",
       "originalText": "6",
       "fontSize": 14,
-      "fontFamily": 2,
+      "fontFamily": 5,
       "textAlign": "center",
       "verticalAlign": "middle",
       "containerId": "msg-7-badge",
@@ -2428,7 +3180,7 @@
       "fillStyle": "solid",
       "strokeWidth": 1,
       "strokeStyle": "solid",
-      "roughness": 0,
+      "roughness": 1,
       "opacity": 100,
       "groupIds": [],
       "frameId": null,
@@ -2444,7 +3196,7 @@
       "text": "does each window run along a wall?",
       "originalText": "does each window run along a wall?",
       "fontSize": 16,
-      "fontFamily": 2,
+      "fontFamily": 5,
       "textAlign": "left",
       "verticalAlign": "top",
       "containerId": null,
@@ -2504,7 +3256,7 @@
       "fillStyle": "solid",
       "strokeWidth": 1,
       "strokeStyle": "solid",
-      "roughness": 0,
+      "roughness": 1,
       "opacity": 100,
       "groupIds": [],
       "frameId": null,
@@ -2520,7 +3272,7 @@
       "text": "half its length, not a touch at a corner",
       "originalText": "half its length, not a touch at a corner",
       "fontSize": 16,
-      "fontFamily": 2,
+      "fontFamily": 5,
       "textAlign": "center",
       "verticalAlign": "middle",
       "containerId": "msg-7-note",
@@ -2543,7 +3295,7 @@
       "fillStyle": "solid",
       "strokeWidth": 2,
       "strokeStyle": "dashed",
-      "roughness": 0,
+      "roughness": 1,
       "opacity": 100,
       "groupIds": [],
       "frameId": null,
@@ -2589,7 +3341,7 @@
       "fillStyle": "solid",
       "strokeWidth": 1,
       "strokeStyle": "solid",
-      "roughness": 0,
+      "roughness": 1,
       "opacity": 100,
       "groupIds": [],
       "frameId": null,
@@ -2605,7 +3357,7 @@
       "text": "13 kept, 1 left out, 4 elsewhere",
       "originalText": "13 kept, 1 left out, 4 elsewhere",
       "fontSize": 16,
-      "fontFamily": 2,
+      "fontFamily": 5,
       "textAlign": "center",
       "verticalAlign": "top",
       "containerId": null,
@@ -2628,7 +3380,7 @@
       "fillStyle": "solid",
       "strokeWidth": 2,
       "strokeStyle": "dashed",
-      "roughness": 0,
+      "roughness": 1,
       "opacity": 100,
       "groupIds": [],
       "frameId": null,
@@ -2674,7 +3426,7 @@
       "fillStyle": "solid",
       "strokeWidth": 1,
       "strokeStyle": "solid",
-      "roughness": 0,
+      "roughness": 1,
       "opacity": 100,
       "groupIds": [],
       "frameId": null,
@@ -2690,7 +3442,7 @@
       "text": "Check this: 13, rooms and windows drawn",
       "originalText": "Check this: 13, rooms and windows drawn",
       "fontSize": 16,
-      "fontFamily": 2,
+      "fontFamily": 5,
       "textAlign": "center",
       "verticalAlign": "top",
       "containerId": null,
@@ -2713,7 +3465,7 @@
       "fillStyle": "solid",
       "strokeWidth": 1,
       "strokeStyle": "solid",
-      "roughness": 0,
+      "roughness": 1,
       "opacity": 100,
       "groupIds": [],
       "frameId": null,
@@ -2729,7 +3481,7 @@
       "text": "LEGEND",
       "originalText": "LEGEND",
       "fontSize": 20,
-      "fontFamily": 2,
+      "fontFamily": 5,
       "textAlign": "left",
       "verticalAlign": "top",
       "containerId": null,
@@ -2752,7 +3504,7 @@
       "fillStyle": "solid",
       "strokeWidth": 2,
       "strokeStyle": "solid",
-      "roughness": 0,
+      "roughness": 1,
       "opacity": 100,
       "groupIds": [],
       "frameId": null,
@@ -2798,7 +3550,7 @@
       "fillStyle": "solid",
       "strokeWidth": 1,
       "strokeStyle": "solid",
-      "roughness": 0,
+      "roughness": 1,
       "opacity": 100,
       "groupIds": [],
       "frameId": null,
@@ -2814,7 +3566,7 @@
       "text": "request / call",
       "originalText": "request / call",
       "fontSize": 18,
-      "fontFamily": 2,
+      "fontFamily": 5,
       "textAlign": "left",
       "verticalAlign": "top",
       "containerId": null,
@@ -2837,7 +3589,7 @@
       "fillStyle": "solid",
       "strokeWidth": 2,
       "strokeStyle": "dashed",
-      "roughness": 0,
+      "roughness": 1,
       "opacity": 100,
       "groupIds": [],
       "frameId": null,
@@ -2883,7 +3635,7 @@
       "fillStyle": "solid",
       "strokeWidth": 1,
       "strokeStyle": "solid",
-      "roughness": 0,
+      "roughness": 1,
       "opacity": 100,
       "groupIds": [],
       "frameId": null,
@@ -2899,7 +3651,7 @@
       "text": "response / reply",
       "originalText": "response / reply",
       "fontSize": 18,
-      "fontFamily": 2,
+      "fontFamily": 5,
       "textAlign": "left",
       "verticalAlign": "top",
       "containerId": null,
@@ -2922,7 +3674,7 @@
       "fillStyle": "solid",
       "strokeWidth": 2,
       "strokeStyle": "solid",
-      "roughness": 0,
+      "roughness": 1,
       "opacity": 100,
       "groupIds": [],
       "frameId": null,
@@ -2954,7 +3706,7 @@
       "fillStyle": "solid",
       "strokeWidth": 1,
       "strokeStyle": "solid",
-      "roughness": 0,
+      "roughness": 1,
       "opacity": 100,
       "groupIds": [],
       "frameId": null,
@@ -2970,7 +3722,7 @@
       "text": "person",
       "originalText": "person",
       "fontSize": 18,
-      "fontFamily": 2,
+      "fontFamily": 5,
       "textAlign": "left",
       "verticalAlign": "top",
       "containerId": null,
@@ -2993,7 +3745,7 @@
       "fillStyle": "solid",
       "strokeWidth": 2,
       "strokeStyle": "solid",
-      "roughness": 0,
+      "roughness": 1,
       "opacity": 100,
       "groupIds": [],
       "frameId": null,
@@ -3025,7 +3777,7 @@
       "fillStyle": "solid",
       "strokeWidth": 1,
       "strokeStyle": "solid",
-      "roughness": 0,
+      "roughness": 1,
       "opacity": 100,
       "groupIds": [],
       "frameId": null,
@@ -3041,7 +3793,7 @@
       "text": "our code: rules",
       "originalText": "our code: rules",
       "fontSize": 18,
-      "fontFamily": 2,
+      "fontFamily": 5,
       "textAlign": "left",
       "verticalAlign": "top",
       "containerId": null,
@@ -3064,7 +3816,7 @@
       "fillStyle": "solid",
       "strokeWidth": 2,
       "strokeStyle": "solid",
-      "roughness": 0,
+      "roughness": 1,
       "opacity": 100,
       "groupIds": [],
       "frameId": null,
@@ -3096,7 +3848,7 @@
       "fillStyle": "solid",
       "strokeWidth": 1,
       "strokeStyle": "solid",
-      "roughness": 0,
+      "roughness": 1,
       "opacity": 100,
       "groupIds": [],
       "frameId": null,
@@ -3112,7 +3864,7 @@
       "text": "language model: reads, never counts",
       "originalText": "language model: reads, never counts",
       "fontSize": 18,
-      "fontFamily": 2,
+      "fontFamily": 5,
       "textAlign": "left",
       "verticalAlign": "top",
       "containerId": null,
@@ -3135,7 +3887,7 @@
       "fillStyle": "solid",
       "strokeWidth": 2,
       "strokeStyle": "solid",
-      "roughness": 0,
+      "roughness": 1,
       "opacity": 100,
       "groupIds": [],
       "frameId": null,
@@ -3167,7 +3919,7 @@
       "fillStyle": "solid",
       "strokeWidth": 1,
       "strokeStyle": "solid",
-      "roughness": 0,
+      "roughness": 1,
       "opacity": 100,
       "groupIds": [],
       "frameId": null,
@@ -3183,7 +3935,7 @@
       "text": "our code: geometry",
       "originalText": "our code: geometry",
       "fontSize": 18,
-      "fontFamily": 2,
+      "fontFamily": 5,
       "textAlign": "left",
       "verticalAlign": "top",
       "containerId": null,
@@ -3206,7 +3958,7 @@
       "fillStyle": "solid",
       "strokeWidth": 1,
       "strokeStyle": "solid",
-      "roughness": 0,
+      "roughness": 1,
       "opacity": 100,
       "groupIds": [],
       "frameId": null,
@@ -3222,7 +3974,7 @@
       "text": "A question in your own words",
       "originalText": "A question in your own words",
       "fontSize": 36,
-      "fontFamily": 2,
+      "fontFamily": 5,
       "textAlign": "left",
       "verticalAlign": "top",
       "containerId": null,
@@ -3245,7 +3997,7 @@
       "fillStyle": "solid",
       "strokeWidth": 1,
       "strokeStyle": "solid",
-      "roughness": 0,
+      "roughness": 1,
       "opacity": 100,
       "groupIds": [],
       "frameId": null,
@@ -3261,7 +4013,7 @@
       "text": "\"What is the number of windows in Stanza?\" on a Swiss floor plan with 30 rooms and 18 windows",
       "originalText": "\"What is the number of windows in Stanza?\" on a Swiss floor plan with 30 rooms and 18 windows",
       "fontSize": 20,
-      "fontFamily": 2,
+      "fontFamily": 5,
       "textAlign": "left",
       "verticalAlign": "top",
       "containerId": null,

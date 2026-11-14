@@ -1,9 +1,9 @@
 {
   "type": "sequence",
-  "title": "The model never writes the number",
-  "subtitle": "A real question on one of Stoa's sample sheets: the area of the 150 mm slab-on-grade",
-  "theme": "clean",
+  "theme": "sketch",
   "numbered": true,
+  "title": "The model never writes the number",
+  "subtitle": "A real question on one of Stoa's sample sheets: the area of the 150 mm slab, which has two trenches cut into it",
   "participants": [
     {
       "id": "eng",
@@ -15,27 +15,35 @@
       "id": "app",
       "label": "Program",
       "sub": "plain code",
+      "icon": "logos:Python",
       "color": "service",
       "highlight": true
     },
     {
       "id": "ocr",
       "label": "Sheet reader",
-      "sub": "PDF text or local OCR",
+      "sub": "local OCR",
       "icon": "it:Document",
       "color": "data"
     },
     {
       "id": "llm",
-      "label": "Gemini 4 Carbon",
-      "sub": "vision model",
+      "label": "Reader",
+      "sub": "Gemini 4 Carbon",
+      "icon": "brands:Google Gemini",
+      "color": "ai"
+    },
+    {
+      "id": "exam",
+      "label": "Two examiners",
+      "sub": "Gemini, independent",
       "icon": "brands:Google Gemini",
       "color": "ai"
     },
     {
       "id": "calc",
       "label": "Calculator",
-      "sub": "also: counter, ruler, tiles",
+      "sub": "and a ruler in pixels",
       "color": "output"
     }
   ],
@@ -53,31 +61,25 @@
     {
       "from": "ocr",
       "to": "app",
-      "label": "259 texts, each with its box",
+      "label": "274 texts, each with its box",
       "reply": true
     },
     {
       "from": "app",
       "to": "llm",
-      "label": "sheet image + the 259 texts"
+      "label": "sheet image + the 274 texts"
     },
     {
       "from": "llm",
       "to": "app",
-      "label": "a = 6200, b = 9950, formula: a * b",
+      "label": "a = 6200, b = 9950, formula a * b",
       "reply": true,
       "note": "the reply format has no field for the answer"
     },
     {
       "from": "app",
-      "to": "ocr",
-      "label": "re-read a and b where it pointed",
-      "note": "a figure that reads differently: no number"
-    },
-    {
-      "from": "app",
       "to": "calc",
-      "label": "6200 * 9950, mm2 to m2"
+      "label": "6200 * 9950, after re-reading both figures"
     },
     {
       "from": "calc",
@@ -87,28 +89,40 @@
     },
     {
       "from": "app",
-      "to": "llm",
-      "label": "work it out again, independently"
+      "to": "exam",
+      "label": "the working + an enlarged view: what is inside?"
     },
     {
-      "from": "llm",
+      "from": "exam",
       "to": "app",
-      "label": "second working: also 61.69 m2",
+      "label": "two trenches, widths not printed",
+      "reply": true,
+      "note": "nobody estimates by eye: they point at the 9950 dimension as the scale"
+    },
+    {
+      "from": "app",
+      "to": "calc",
+      "label": "measure both trenches in the pixels"
+    },
+    {
+      "from": "calc",
+      "to": "app",
+      "label": "61.69 - 1.70 - 0.67 = 59.32 m2",
       "reply": true
     },
     {
       "from": "app",
       "to": "eng",
-      "label": "Check this: 61.69 m2, both figures boxed",
+      "label": "Check this: 59.32 m2, trenches marked",
       "reply": true
     }
   ],
   "groups": [
     {
-      "kind": "alt",
-      "label": "workings differ: no number, both shown",
-      "from": 9,
-      "to": 10
+      "kind": "critical",
+      "label": "both examiners must find the same parts, or nothing is taken out",
+      "from": 8,
+      "to": 9
     }
   ],
   "legend": {
@@ -116,6 +130,6 @@
     "service": "our code",
     "data": "our code: reads the sheet",
     "ai": "language model: points, never computes",
-    "output": "our code: does the arithmetic"
+    "output": "our code: arithmetic and pixels"
   }
 }

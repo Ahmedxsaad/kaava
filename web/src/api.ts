@@ -114,6 +114,9 @@ export interface AskResult {
   trace?: { title: string; body: string }[];  // what the program and the model each did, in order
   // A measurement whose scale was not printed on the sheet (taken from the doors, say): the range it leaves open.
   estimate?: { low: number; high: number; from: string; unit?: string } | null;
+  // What examiners found inside the thing measured that could not be taken into account, and which way that moves the number.
+  caveat?: string | null;
+  bound?: "at most" | "at least" | null;
   // `twice`: the question was read as a query two times, independently, and the readings had to match.
   restated: { question: string | null; reason: string; model: string; cost_eur: number; latency_ms: number; twice?: boolean } | null;
   checks: { name: string; value: number | string }[];

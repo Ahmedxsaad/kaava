@@ -230,16 +230,23 @@ def test_the_sample_sheets_come_with_their_questions_and_their_answers_cost_noth
     assert "What is the area of the 150 mm slab-on-grade in m²?" in questions
     answer = ask(client, slab["id"], "What is the area of the 150 mm slab-on-grade in m²?")
     assert answer["state"] == "check" and answer["cost_eur"] == 0 and answer["replayed_from"]
-    assert answer["answer"] == 61.69 and answer["unit"] == "m2" and answer["method"].startswith("sheet-working")
+    # 6200 × 9950 mm by the printed dimensions, less the two trenches the examiners found inside the slab,
+    # which the program measured where they are drawn (their widths are not printed).
+    assert answer["answer"] == 59.28 and answer["unit"] == "m2" and answer["method"].startswith("sheet-working")
     boxes = [e for e in answer["evidence"] if e["kind"] == "box"]
     formula = next(e["text"] for e in answer["evidence"] if e["kind"] == "formula")
-    assert len(boxes) == 2 and formula == "6200 × 9950 = 61,690,000 mm² = 61.69 m²"   # each figure is a box on the sheet
+    assert len(boxes) == 2 and formula == "61.69 m² − 2.41 m² = 59.28 m²"   # each printed figure is a box on the sheet
+    taken = [e for e in answer["evidence"] if e["kind"] == "context" and e["role"].startswith("taken out")]
+    assert len(taken) == 2 and "MOTOR CONTROL CENTER TRENCH" in answer["caveat"]      # both trenches, drawn as taken out
     for e in boxes:
         x0, y0, x1, y1 = e["bbox"]
         assert 0 <= x0 < x1 <= detail["view"]["width"] and 0 <= y0 < y1 <= detail["view"]["height"]
     checks = {c["name"]: c["value"] for c in answer["checks"]}
     assert checks.pop("a second, independent working") == "the same result"   # arithmetic is worked out twice
-    assert all(value == "the program reads the same figure here" for value in checks.values())
+    figures = {name: value for name, value in checks.items() if name.startswith(("a =", "b ="))}
+    assert len(figures) == 2 and all(value == "the program reads the same figure here" for value in figures.values())
+    assert checks["before what stands inside it was taken out"] == "61.69 m²"
+    assert "ends of the dimension line found in the pixels" in checks              # the scale the trenches were measured against
     # The steps it took are there to be read: the model gave the working, the calculator the number.
     steps = [step["title"] for step in answer["trace"]]
     assert "The model named the figures and wrote the expression, not the result" in steps

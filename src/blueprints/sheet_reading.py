@@ -43,7 +43,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Callable
 
-from . import measure, progress, scale, sheet_text, tiles
+from . import examiner, measure, progress, scale, sheet_text, tiles
 from .answer import Answer
 from .data import Dataset, Question
 from .pointing import _box
@@ -55,6 +55,8 @@ MAX_TEXTS = 1100
 # How many times a question is worked out, independently. Two workings that disagree give no number.
 WORKINGS = max(1, int(os.environ.get("BLUEPRINTS_WORKINGS", "2")))
 AGREE_WITHIN = 0.005  # two quantities this close (relative) are the same result
+# How many examiners look inside an area or a volume for what must be taken out of it (examiner.py). 0 turns them off.
+EXAMINERS = max(0, int(os.environ.get("BLUEPRINTS_EXAMINERS", "2")))
 
 SYSTEM = """You answer a question about one sheet of a construction drawing set. You get the sheet as an image and a list of the texts printed on it. The list was read by a program at full resolution; each line is `id | text | y x`, where y and x give the centre of the text on a 0-1000 grid (y from the top edge, x from the left edge). Small text may be unreadable in the image: trust the list for what a text says, and the image for where things are and how they belong together.
 
@@ -350,7 +352,13 @@ def make_engine(vlm) -> Callable[[Question, Dataset], Answer]:
             done.cost_usd = (done.cost_usd or 0.0) + sum(r.cost_usd or 0.0 for r in replies if r is not closer)
             return done
         workings = [work(q, path, index, image, cut, reply, read) for reply in replies]
-        return settle(workings)
+        settled = settle(workings)
+        first = replies[0].data or {}
+        if (EXAMINERS and isinstance(settled.answer, (int, float)) and not isinstance(settled.answer, bool)
+                and examiner.worth_examining(first, unit_of(first.get("result_unit")))):
+            progress.say(q.qid, "Examiners are looking inside the area for what must be taken out of it")
+            settled = _examined(q, path, index, image, listing, first, settled, vlm)
+        return settled
 
     def work(q: Question, path: Path, index: dict, image, cut: bool, reply, read: str) -> Answer:
         """One working: what one reply of the model comes to, once the code has counted, computed and checked."""
@@ -661,6 +669,204 @@ def _quantity(q: Question, figures: list[dict], expression: str, result_unit, te
                   explanation=f"{working}. Computed from {len(figures)} figure{'' if len(figures) == 1 else 's'} "
                               f"printed on the sheet. {note}",
                   **common)
+
+
+def _examined(q: Question, path, index: dict, image, listing: str, data: dict, settled: Answer, vlm) -> Answer:
+    """Have examiners look inside the thing a working measured, and apply or report what they find (examiner.py)."""
+    texts = {item["id"]: item for item in index["items"]}
+    width, height = image.width / image.scale, image.height / image.scale
+    figures = [f for f in data.get("figures") or [] if isinstance(f, dict)]
+    expression = str(data.get("expression") or "").strip()
+    if expression.lower() == "sum":
+        expression = " + ".join(str(f.get("name")) for f in figures)
+
+    def place(entry: dict, label: str, role: str | None = None) -> dict | None:
+        item = texts.get(entry.get("text_id", -1))
+        if item is not None:
+            box = {"kind": "box", "space": "image_px", "bbox": item["box"], "label": label[:80], "read": item["text"]}
+        else:
+            box = _box(entry, width, height)
+            if box is None:
+                return None
+            box["label"] = label[:80]
+            box.pop("inside", None)
+        if role:
+            box["role"] = role
+        return box
+
+    picture, zoom, _ = as_pixels(path, index)
+    spots = [[v * zoom for v in box["bbox"]] for box in (place(f, "") for f in figures) if box]
+    view = examiner.enlarged(picture, spots, vlm.max_edge)
+    if view is None:
+        return settled
+    close_up, shown = view
+    corner = lambda x, y: f"{round(1000 * y / zoom / height)} {round(1000 * x / zoom / width)}"  # noqa: E731
+    working = "; ".join(f"{f.get('name')} = {f.get('printed') or f.get('value')} {f.get('unit') or ''} ({f.get('what') or ''})" for f in figures)
+    prompt = (f"Texts printed on the sheet:\n{listing}\n\nQuestion: {q.question}\n\nThe working to check: {working}. "
+              f"Expression: {expression}. Result unit: {data.get('result_unit')}.\n"
+              f"The enlarged view (second image) shows the sheet from y x = {corner(shown[0], shown[1])} to "
+              f"{corner(shown[2], shown[3])} on the grid of the whole sheet.")
+    with ThreadPoolExecutor(max_workers=EXAMINERS) as pool:
+        replies = list(pool.map(lambda _: vlm.ask(examiner.SYSTEM, [image, close_up], prompt, examiner.SCHEMA), range(EXAMINERS)))
+    settled.cost_usd = (settled.cost_usd or 0.0) + sum(r.cost_usd or 0.0 for r in replies)
+    trace = settled.meta.setdefault("trace", [])
+    checks = settled.meta.setdefault("checks", {})
+    reports = [[p for p in (r.data or {}).get("parts") or [] if isinstance(p, dict)] for r in replies if not r.error and r.data is not None]
+    title = f"{len(reports)} examiner{'' if len(reports) == 1 else 's'} looked inside what was measured, on an enlarged view"
+    if not reports:
+        trace.append(["Examiners could not be asked", "the calls failed: the inside of what was measured was not checked"])
+        return settled
+    if not any(reports):
+        trace.append([title, "nothing found that must be taken out or added"])
+        checks["examined for openings, pits and missing parts"] = f"nothing found ({len(reports)} examiners)"
+        return settled
+
+    # A correction that can be computed: every part of a report has printed figures and a term.
+    def corrected(parts: list[dict]) -> Answer | None:
+        sized = [p for p in parts if p.get("figures") and str(p.get("term") or "").strip()]
+        if not sized or len(sized) != len(parts):
+            return None
+        used = {str(f.get("name")) for f in figures}
+        extra, formula = [], f"({expression})"
+        for n, part in enumerate(sized):
+            rename = {}
+            for f in part["figures"]:
+                name = str(f.get("name") or "")
+                fresh = name if name and name not in used else f"x{n}_{len(extra)}"
+                rename[name] = fresh
+                used.add(fresh)
+                extra.append({**f, "name": fresh, "what": f"{f.get('what') or ''} · {str(part.get('what') or '')[:40]}".strip(" ·")})
+            term = re.sub(r"[A-Za-z_]\w*", lambda m: rename.get(m.group(0), m.group(0)), str(part["term"]))
+            formula += f" {'+' if part.get('effect') == 'add' else '-'} ({term})"
+        scratch = dict(method=settled.method, cost_usd=0.0, latency_ms=0.0, meta={"trace": []})
+        answer = _quantity(q, [dict(f) for f in figures] + extra, formula, data.get("result_unit"), texts, index, place, "", scratch)
+        return answer if isinstance(answer.answer, (int, float)) else None
+
+    fixes = [corrected(parts) for parts in reports]
+    said = lambda parts: "; ".join(f"{'take out' if p.get('effect') != 'add' else 'add'} {str(p.get('what') or 'a part')[:70]}" for p in parts)  # noqa: E731
+    agreed = (len(reports) >= 2 and all(fix is not None for fix in fixes)
+              and all(same(float(fixes[0].answer), float(fix.answer)) for fix in fixes[1:]))
+    if agreed or (len(reports) == 1 and fixes[0] is not None):
+        fix = fixes[0]
+        before = f"{_fmt(float(settled.answer))} {pretty(settled.unit)}".strip()
+        fix.cost_usd, fix.latency_ms = settled.cost_usd, settled.latency_ms
+        fix.confidence = 0.6 if agreed else 0.45
+        fix.explanation = (f"{fix.meta.get('working')}. The dimensions alone give {before}; inside it: {said(reports[0])}. "
+                           f"{'Both examiners made the same correction' if agreed else 'One examiner made this correction'}, "
+                           f"from figures printed on the sheet that the program read again.")
+        fix.meta = {**settled.meta, **{k: v for k, v in fix.meta.items() if k != "trace"},
+                    "checks": {**checks, **(fix.meta.get("checks") or {}), "before the examiners' correction": before},
+                    "trace": [*trace, [title, said(reports[0])], *fix.meta.get("trace", [])]}
+        for part in reports[0]:
+            box = _box(part, width, height)
+            if box:
+                fix.evidence.append({**box, "label": str(part.get("what") or "")[:60],
+                                     "role": "added" if part.get("effect") == "add" else "taken out"})
+        return fix
+
+    # Parts with no printed size, drawn as rectangles: measured on the drawing against a printed dimension.
+    def measured(reply, parts: list[dict]) -> tuple[dict | None, str]:
+        out = [p for p in parts if p.get("effect") != "add"]
+        ref = (reply.data or {}).get("scale_from")
+        if not out:
+            return None, "nothing to take out"
+        if settled.unit not in ("m2", "ft2"):
+            return None, "only areas are measured on the drawing"
+        if not isinstance(ref, dict):
+            return None, "no printed dimension was pointed at to take the scale from"
+        item, unit = texts.get(ref.get("text_id", -1)), unit_of(str(ref.get("unit") or "")) or "mm"
+        ends = [e for e in (ref.get("from"), ref.get("to")) if isinstance(e, list) and len(e) == 2]
+        value = number_in(item["text"], unit) if item is not None and unit in _LINEAR else None
+        if not value or len(ends) != 2:
+            return None, "no printed dimension was pointed at to take the scale from"
+        to_px = lambda yx: (float(yx[1]) / 1000.0 * width * zoom, float(yx[0]) / 1000.0 * height * zoom)  # noqa: E731
+        ruler = scale.from_dimension(picture, to_px(ends[0]), to_px(ends[1]), value * _LINEAR[unit],
+                                     f"{item['text'].strip()} {unit}", max(width, height) * zoom / 1000.0)
+        if ruler is None or ruler["estimate"]:
+            return None, f"the ends of the dimension line of '{item['text'].strip()}' were not found in the pixels"
+        taken, total = [], 0.0
+        for part in out:
+            box = _box(part, width, height)
+            found = measure.drawn_rectangle(picture, [v * zoom for v in box["bbox"]]) if box else None
+            if found is None:
+                return None, f"no rectangle in solid lines was found where '{str(part.get('what') or 'a part')[:40]}' is"
+            a, b = sorted(((found[2] - found[0]) / ruler["px_per_m"], (found[3] - found[1]) / ruler["px_per_m"]))
+            total += a * b
+            taken.append({"what": str(part.get("what") or "a part")[:60], "short_m": a, "long_m": b, "area_m2": a * b,
+                          "bbox": [v / zoom for v in found]})
+        return {"ruler": ruler, "parts": taken, "area_m2": total}, ""
+
+    answered = [r for r in replies if not r.error and r.data is not None]
+    attempts = [measured(reply, parts) for reply, parts in zip(answered, reports)]
+    sized_up = [m for m, _ in attempts]
+    not_measured = next((why for m, why in attempts if m is None), "")
+    if (all(m is not None for m in sized_up)
+            and all(abs(m["area_m2"] - sized_up[0]["area_m2"]) <= 0.15 * sized_up[0]["area_m2"] for m in sized_up[1:])):
+        got = sized_up[0]
+        gone, _ = convert(got["area_m2"], "m2", settled.unit)
+        before = float(settled.answer)
+        listed = "; ".join(f"{m['what']}: {m['long_m']:.2f} m × {m['short_m']:.2f} m = {m['area_m2']:.2f} m²" for m in got["parts"])
+        sign = pretty(settled.unit)
+        working = f"{_fmt(before)} {sign} − {_fmt(gone)} {sign} = {_fmt(before - gone)} {sign}"
+        # What an examiner would add and could not size stays out, and is said.
+        extra = []
+        for parts in reports:
+            for part in parts:
+                box = _box(part, width, height) if part.get("effect") == "add" else None
+                if box and not any(examiner.same_place(box["bbox"], other["bbox"]) for other in extra):
+                    extra.append({**box, "label": str(part.get("what") or "")[:60], "role": "may belong to it, not added"})
+        also = (f" Also seen and not added, its size not being printed: {'; '.join(e['label'] or 'a part' for e in extra)}."
+                if extra else "")
+        settled.answer = round(before - gone, 2)
+        settled.confidence = min(settled.confidence or 0.6, 0.45)
+        settled.evidence = [*[e for e in settled.evidence if e.get("kind") != "formula"],
+                            *[{"kind": "box", "space": "image_px", "bbox": m["bbox"], "role": "taken out, measured on the drawing",
+                               "label": f"{m['long_m']:.2f} m × {m['short_m']:.2f} m"} for m in got["parts"]],
+                            *[{**e, "bbox": [v / zoom for v in e["bbox"]]} for e in got["ruler"]["evidence"]],
+                            *extra, {"kind": "formula", "text": working}]
+        caveat = (f"{_fmt(before)} {sign} by the printed dimensions. Taken out: {listed}. Their size is not printed on this "
+                  f"sheet, so each was measured where it is drawn, against {got['ruler']['said']}. "
+                  f"{'Both examiners' if len(sized_up) > 1 else 'The examiner'} found them and the measurements agree.{also}")
+        settled.explanation = f"{working}. {caveat}"
+        settled.meta["caveat"] = caveat
+        settled.meta["working"] = working
+        checks["before what stands inside it was taken out"] = f"{_fmt(before)} {sign}"
+        checks["taken out, measured on the drawing"] = listed
+        checks.update(got["ruler"]["checks"])
+        trace.extend([[title, f"found inside it: {'; '.join(m['what'] for m in got['parts'])}. Their size is not printed"],
+                      got["ruler"]["trace"],
+                      ["The program measured each part where it is drawn, and the calculator took it out", f"{listed}. {working}"]])
+        return settled
+
+    # Not applied: parts with no printed size, or corrections the examiners do not share. Marked and said.
+    marked: list[dict] = []
+    for parts in reports:
+        for part in parts:
+            box = _box(part, width, height)
+            if box and not any(examiner.same_place(box["bbox"], other["bbox"]) for other in marked):
+                marked.append({**box, "label": str(part.get("what") or "")[:60], "effect": part.get("effect") or "deduct",
+                               "role": "may belong to it, not added" if part.get("effect") == "add" else "inside it, not taken out"})
+    names = "; ".join(m["label"] or "a part" for m in marked[:6]) or said(reports[0])
+    less = [m for m in marked if m["effect"] != "add"]
+    more = [m for m in marked if m["effect"] == "add"]
+    unsized = any(not (p.get("figures") and str(p.get("term") or "").strip()) for parts in reports for p in parts)
+    why = ("their size is not printed on this sheet" if unsized else "the examiners did not make the same correction")
+    figure_said = f"{_fmt(float(settled.answer))} {pretty(settled.unit)}"
+    bound = (f"the true figure is smaller than {figure_said}" if less and not more else
+             f"the true figure is larger than {figure_said}" if more and not less else
+             f"the true figure may differ from {figure_said}")
+    tried = f" The program tried to measure them on the drawing: {not_measured}." if not_measured and less else ""
+    caveat = (f"Not taken into account: {names}. The examiners found {'this' if len(marked) == 1 else 'these'} inside what was "
+              f"measured, and {why}, so nothing was {'taken out' if less and not more else 'changed'} for "
+              f"{'it' if len(marked) == 1 else 'them'}: {bound}.{tried}")
+    settled.evidence = [*settled.evidence, *[{k: v for k, v in m.items() if k != "effect"} for m in marked]]
+    settled.confidence = min(settled.confidence or 0.6, 0.4)
+    settled.explanation = f"{settled.explanation} {caveat}".strip()
+    settled.meta["caveat"] = caveat
+    settled.meta["bound"] = "at most" if less and not more else "at least" if more and not less else None
+    checks["found inside what was measured, not taken into account"] = names
+    trace.append([title, f"found: {names}. {why.capitalize()}, so the number is left as it is and this is said"])
+    return settled
 
 
 def _poly_to_source(points: list[list[float]], zoom: float) -> list[list[float]]:

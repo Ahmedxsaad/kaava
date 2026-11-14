@@ -2,7 +2,7 @@
   "title": "Blueprints Talk: from a question to an answer you can check",
   "subtitle": "Numbers are computed by code from the drawing, never written by a model · 95.8% right on 200 held-out questions (vision model alone: 62.5%)",
   "destination": "slide",
-  "theme": "clean",
+  "theme": "sketch",
   "zones": [
     {
       "id": "ask",
@@ -49,19 +49,22 @@
       "id": "ifc",
       "label": "IFC query",
       "sub": "IfcOpenShell",
-      "zone": "exact"
+      "zone": "exact",
+      "icon": "logos:Python"
     },
     {
       "id": "dxf",
       "label": "DXF geometry",
       "sub": "ezdxf + shapely",
-      "zone": "exact"
+      "zone": "exact",
+      "icon": "logos:Python"
     },
     {
       "id": "labels",
       "label": "Printed labels",
       "sub": "local OCR (PP-OCR)",
-      "zone": "exact"
+      "zone": "exact",
+      "icon": "it:Document"
     },
     {
       "id": "boxes",
@@ -80,7 +83,7 @@
     {
       "id": "verify",
       "label": "Checks",
-      "sub": "2nd method + thresholds",
+      "sub": "2nd method · examiners",
       "zone": "decide",
       "highlight": true
     },
@@ -89,7 +92,8 @@
       "label": "Verified",
       "sub": "no need to double-check",
       "zone": "answer",
-      "color": "output"
+      "color": "output",
+      "icon": "ui:Check mark"
     },
     {
       "id": "check",

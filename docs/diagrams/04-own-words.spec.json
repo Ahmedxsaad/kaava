@@ -1,9 +1,9 @@
 {
   "type": "sequence",
+  "theme": "sketch",
+  "numbered": true,
   "title": "A question in your own words",
   "subtitle": "\"What is the number of windows in Stanza?\" on a Swiss floor plan with 30 rooms and 18 windows",
-  "theme": "clean",
-  "numbered": true,
   "participants": [
     {
       "id": "eng",
@@ -15,6 +15,7 @@
       "id": "rules",
       "label": "Rules + guard",
       "sub": "fixed phrasings",
+      "icon": "logos:Python",
       "color": "service"
     },
     {
@@ -28,6 +29,7 @@
       "id": "geo",
       "label": "Plan query",
       "sub": "shapely on the DXF",
+      "icon": "logos:Python",
       "color": "data",
       "highlight": true
     }

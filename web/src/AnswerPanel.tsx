@@ -74,6 +74,12 @@ function why(result: AskResult): { title: string; text: React.ReactNode } {
     if (two) {
       return { title: "Why it needs a look", text: `The printed labels and the vision model give the same count. ${notVerified(result)}` };
     }
+    if (result.caveat) {
+      return {
+        title: "Why it needs a look",
+        text: `${result.caveat} The parts are marked on the sheet. The rest of the working stands: the figures were read again by the program and the arithmetic is the program's.`,
+      };
+    }
     if (result.estimate) {
       return {
         title: "Why it needs a look",
@@ -424,6 +430,10 @@ export function AnswerPanel(props: Props) {
       {result.estimate && settled && (
         // The scale was not printed on the sheet: the number rests on a standard, and the range that leaves is said.
         <p className="twice">An estimate: between <b>{formatValue(result.estimate.low, result.unit)}</b> and <b>{formatValue(result.estimate.high, result.unit)}</b> {result.estimate.unit}. The scale is taken from {result.estimate.from}.</p>
+      )}
+      {result.caveat && settled && !(result.explanation ?? "").includes(result.caveat) && (
+        // What examiners found inside the thing measured and could not take out: the number is a bound, and says so.
+        <p className="twice">{result.bound ? <><b>{result.bound === "at most" ? "At most" : "At least"}</b> this much. </> : null}{result.caveat}</p>
       )}
       {result.coinciding && settled && (result.coinciding.counted === "distinct" ? (
         <p className="twice">The file holds <b>{result.coinciding.outlines}</b> outlines, {result.coinciding.extra} exactly on another. The dataset's answer counts outlines: {result.coinciding.outlines}.</p>

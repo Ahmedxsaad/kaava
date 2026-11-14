@@ -40,6 +40,7 @@ class Reader(MockVLM):
 @pytest.fixture
 def sheet(tiny, monkeypatch):
     monkeypatch.setattr(sheet_text, "read", lambda path, page=0: INDEX)
+    monkeypatch.setattr(sr, "EXAMINERS", 0)  # the examiners have their own tests (test_examiner.py)
     scan = next(q for q in tiny.questions if q.source == "cubicasa5k")
 
     def ask(vlm, question):

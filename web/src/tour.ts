@@ -53,7 +53,7 @@ export const TOUR: Stop[] = [
     label: "Slab area by type, from the printed dimensions",
     card: true,
     hard: true,
-    note: "6200 × 9950 mm · both figures boxed and read again by the program",
+    note: "6200 × 9950 mm, less two trenches the examiners found inside it and the program measured on the drawing",
     state: "check",
     drawing: "uploads/10dd368cb9f8",
     question: "What is the area of the 150 mm slab-on-grade in m²?",

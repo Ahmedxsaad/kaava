@@ -92,3 +92,20 @@ def test_a_window_is_wall_drawn_thin_and_does_not_let_the_room_out(tmp_path):
     shape = measure.room_shape(path, [215, 215, 785, 585], PPM)
     assert shape["ok"] and shape["area_m2"] == pytest.approx(11.6 * 7.6, rel=0.01)
     assert shape["openings"] == []           # a window is not a door opening: the baseboard runs under it
+
+
+def test_a_rectangle_drawn_in_solid_lines_is_found_inside_a_rough_box_and_a_dashed_one_is_not(tmp_path):
+    im = Image.new("L", (600, 800), 255)
+    d = ImageDraw.Draw(im)
+    d.rectangle([250, 200, 310, 620], outline=0, width=2)        # a trench: 60 px by 420 px, in solid lines
+    d.line([100, 400, 500, 400], fill=0, width=5)                # a joint crossing it
+    for y in range(160, 660, 24):                                # a dashed outline around it: what is hidden below
+        d.line([210, y, 210, y + 12], fill=0, width=1)
+        d.line([350, y, 350, y + 12], fill=0, width=1)
+    path = tmp_path / "trench.png"
+    im.save(path)
+    measure._grey.cache_clear()
+    found = measure.drawn_rectangle(path, [225, 180, 335, 640])  # a rough box around it, as a reader would point
+    assert found is not None
+    assert found[2] - found[0] == pytest.approx(60, abs=3) and found[3] - found[1] == pytest.approx(420, abs=3)
+    assert measure.drawn_rectangle(path, [20, 20, 120, 120]) is None        # nothing is drawn there

@@ -2,7 +2,7 @@
   "title": "How \"Verified\" is earned",
   "subtitle": "A wrong Verified answer is the worst outcome, so the bar is set on drawings the system never tuned on",
   "destination": "slide",
-  "theme": "clean",
+  "theme": "sketch",
   "zones": [
     {
       "id": "compute",
@@ -25,7 +25,8 @@
       "id": "engine",
       "label": "Exact engine",
       "sub": "IFC query, DXF geometry",
-      "zone": "compute"
+      "zone": "compute",
+      "icon": "logos:Python"
     },
     {
       "id": "checks",
@@ -55,14 +56,16 @@
       "id": "model",
       "label": "A model took part",
       "sub": "vision or reading",
-      "color": "ai"
+      "color": "ai",
+      "icon": "brands:Google Gemini"
     },
     {
       "id": "ok",
       "label": "Verified",
       "sub": "16,982 on dev · 0 wrong",
       "zone": "state",
-      "color": "output"
+      "color": "output",
+      "icon": "ui:Check mark"
     },
     {
       "id": "check",

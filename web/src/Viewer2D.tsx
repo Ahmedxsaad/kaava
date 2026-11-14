@@ -360,7 +360,8 @@ export function Viewer2D(props: Props) {
             const doubt = item.role === "not counted";
             const second = item.role === "marked by the vision model";  // the same thing, counted a second way
             // Measured on the sheet: a door opening left out of a length, and the scale bar it was read against.
-            const opening = item.role === "door opening, left out";
+            // Left out of a length (a door opening) or taken out of an area (a trench the program measured where it is drawn).
+            const opening = item.role === "door opening, left out" || (item.role ?? "").startsWith("taken out");
             // A door measured in the pixels and taken as a standard door: the ruler, when no scale is printed.
             const measured = opening || item.role === "scale bar" || item.role === "door used as the ruler";
             // Boxed in one of two passes over the tiles: doubtful, drawn dashed, not counted.

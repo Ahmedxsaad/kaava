@@ -1,19 +1,114 @@
 {
   "type": "mindmap",
+  "theme": "sketch",
   "title": "What Blueprints Talk answers",
-  "theme": "clean",
-  "root": { "label": "Blueprints Talk", "sub": "ask a drawing anything", "children": [
-    { "label": "Building models (IFC)", "color": "data", "children": [
-      { "label": "elements per storey" }, { "label": "areas, volumes, lengths" }, { "label": "rooms by name" }, { "label": "evidence lit up in 3D" } ] },
-    { "label": "CAD plans (DXF)", "color": "infra", "children": [
-      { "label": "room areas, holes cut out" }, { "label": "a door drawn twice counts once" }, { "label": "baseboard less door openings" }, { "label": "windows of one named room" } ] },
-    { "label": "Scans (PNG, JPEG)", "color": "client", "children": [
-      { "label": "rooms from printed labels" }, { "label": "doors, windows, fixtures boxed" } ] },
-    { "label": "Big sheets (PDF)", "color": "ai", "icon": "brands:Google Gemini", "children": [
-      { "label": "slab area by thickness" }, { "label": "door schedules" }, { "label": "piping: pumps, valves, headers" }, { "label": "118 doors, tile by tile" } ] },
-    { "label": "Every answer", "color": "output", "children": [
-      { "label": "Verified / Check this / No number" }, { "label": "evidence drawn on the sheet" }, { "label": "cost per question shown" } ] },
-    { "label": "Says no when", "color": "risk", "children": [
-      { "label": "a figure reads two ways" }, { "label": "two workings differ" }, { "label": "the sheet does not print it" } ] }
-  ] }
+  "root": {
+    "label": "Blueprints Talk",
+    "sub": "ask a drawing anything",
+    "children": [
+      {
+        "label": "Building models (IFC)",
+        "color": "data",
+        "children": [
+          {
+            "label": "elements per storey"
+          },
+          {
+            "label": "areas, volumes, lengths"
+          },
+          {
+            "label": "rooms by name"
+          },
+          {
+            "label": "evidence lit up in 3D"
+          }
+        ]
+      },
+      {
+        "label": "CAD plans (DXF)",
+        "color": "infra",
+        "children": [
+          {
+            "label": "room areas, holes cut out"
+          },
+          {
+            "label": "a door drawn twice counts once"
+          },
+          {
+            "label": "baseboard less door openings"
+          },
+          {
+            "label": "windows of one named room"
+          }
+        ]
+      },
+      {
+        "label": "Scans (PNG, JPEG)",
+        "color": "client",
+        "children": [
+          {
+            "label": "rooms from printed labels"
+          },
+          {
+            "label": "doors, windows, fixtures boxed"
+          },
+          {
+            "label": "walls raised to 3D from pixels"
+          },
+          {
+            "label": "room area, doors as the ruler"
+          }
+        ]
+      },
+      {
+        "label": "Big sheets (PDF)",
+        "color": "ai",
+        "icon": "brands:Google Gemini",
+        "children": [
+          {
+            "label": "slab area, trenches taken out"
+          },
+          {
+            "label": "door schedules"
+          },
+          {
+            "label": "piping: pumps, valves, headers"
+          },
+          {
+            "label": "118 doors, tile by tile"
+          }
+        ]
+      },
+      {
+        "label": "Every answer",
+        "color": "output",
+        "children": [
+          {
+            "label": "Verified / Check this / No number"
+          },
+          {
+            "label": "evidence drawn on the sheet"
+          },
+          {
+            "label": "cost per question shown"
+          }
+        ]
+      },
+      {
+        "label": "Says no when",
+        "color": "risk",
+        "children": [
+          {
+            "label": "a figure reads two ways"
+          },
+          {
+            "label": "two workings differ"
+          },
+          {
+            "label": "the sheet does not print it"
+          }
+        ]
+      }
+    ]
+  }
 }

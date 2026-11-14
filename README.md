@@ -50,6 +50,16 @@ The exact engines read a fixed set of phrasings. Anything else ("the windows in 
 
 ![A question in your own words: read twice as a query, run on the geometry, 13 windows kept and 1 left out](docs/diagrams/04-own-words.png)
 
+### Examiners: what lies inside the thing measured
+
+A working that multiplies a slab's printed length by its printed width is right about the rectangle and can still be wrong about the slab. So an area or a volume that was multiplied out goes to two examiners: second readers who get the working and an enlarged view of that part of the sheet, and look inside the thing measured for what is not part of it (a trench, a pit, a shaft, a zone of another type) or was left out. They never state a result either.
+
+- A part whose size is printed comes back as figures and a term; the program re-reads the figures and the calculator recomputes, when both examiners make the same correction.
+- A part whose size is not printed is measured where it is drawn, when it is a rectangle in solid lines: the examiner points at a dimension printed nearby, the program finds the ends of that dimension line and the rectangle in the pixels, and takes it out as a measured deduction, said as one.
+- Otherwise the part is marked on the sheet and the answer says "at most", with what was not taken out.
+
+On Stoa's slab sheet: the 150 mm slab is 6200 × 9950 mm = 61.69 m² by its printed dimensions, and two trenches are cut into it whose widths are not printed. The examiners find both; measured against the printed 9950 dimension they are 4.28 m × 0.40 m and 1.75 m × 0.39 m (the first one's printed length is 4275 mm), and the answer is 61.69 − 2.37 = 59.32 m², with the trenches drawn as taken out.
+
 ### Rooms of any shape, holes, and a scale from standards
 
 On a sheet with no model or DXF, a room is measured as the free space inside its walls: an L-shaped room by its own outline, a corridor around a lift without the lift, a hall without its columns. What was taken out is drawn on the sheet and listed in the working. A plain rectangular room is still measured as its rectangle, and that is checked against the outline.
@@ -65,6 +75,7 @@ Scans get the same treatment, and a 3D view of their own: the walls are found in
 | [How "Verified" is earned](docs/diagrams/03-verified.png) | the checks, the bar set on held-out drawings, and the rule that a model's answer is never Verified |
 | [What it answers](docs/diagrams/05-what-it-answers.png) | the kinds of question by kind of drawing, and when it says no |
 | [How it is built](docs/diagrams/06-system.png) | browser, app, engines, the one outside model, what is kept on disk |
+| [Where the scale comes from](docs/diagrams/07-scale.png) | scale bar, printed dimension, doors as a standard; the door check; estimates said as estimates |
 
 Each diagram is in `docs/diagrams/` as a spec, an editable Excalidraw scene, PNG, SVG and an animated SVG that reveals it step by step.
 
@@ -88,10 +99,10 @@ All of these are "Check this": which figures matter is the model's judgement, an
 
 | On Stoa's four sheets, 27 questions | Right | Wrong | No number | Cost per question |
 | --- | --- | --- | --- | --- |
-| This system | 27 | 0 | 0 | €0.021 |
+| This system | 27 | 0 | 0 | €0.022 |
 | Gemini alone, from the picture | 26 | 1 | 0 | €0.006 |
 
-These are questions a frontier model can also read off the sheet, and it mostly does: it gets 26, the system 27. The difference is the area of the 150 mm slab. Gemini alone answered 64.93 m², adding alcoves it estimated by eye. The system computes 6200 × 9950 mm = 61.69 m² from the two printed figures, re-reads both where they are printed, and works it out a second time. In an earlier run its two workings disagreed (61.69 and 67.69 m²) and it gave no number, showing both: that is the behaviour we want when the model is unsure, and why the figure above was 26 right and 1 refused before the last run. The system costs about three times as much per question, for the text list it sends and the second working.
+These are questions a frontier model can also read off the sheet, and it mostly does. The one that separates them is the area of the 150 mm slab. By its printed dimensions the slab is 6200 × 9950 mm = 61.69 m², and two trenches are cut into it whose widths are not printed. Our key for it is the area with the trenches taken out (59.27 m²; until the evening of 14 Nov it was the plain rectangle, and the system's 61.69 counted as right). Gemini alone answered 64.93 m², adding alcoves it estimated by eye. The system computes the rectangle from the two printed figures, then its examiners find the trenches and the program measures them on the drawing: 59.31 m². The Gemini-alone row was scored against the earlier key and has not been re-run; against the new key its slab answer is still wrong. The system costs about three times as much per question, for the text list it sends, the second working and the examiners.
 
 What else is measured, and what is not:
 

@@ -1,0 +1,154 @@
+{
+  "title": "Where the scale comes from",
+  "subtitle": "A plan can be measured once one length on it is known. The program takes the best one the sheet has, and says which",
+  "destination": "slide",
+  "theme": "sketch",
+  "zones": [
+    {
+      "id": "known",
+      "label": "Known size · best first",
+      "color": "data"
+    },
+    {
+      "id": "use",
+      "label": "Measure",
+      "color": "service"
+    },
+    {
+      "id": "out",
+      "label": "Answer",
+      "color": "output"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "sheet",
+      "label": "Sheet drawn to scale",
+      "sub": "no figure for the room",
+      "icon": "it:Document",
+      "color": "client"
+    },
+    {
+      "id": "bar",
+      "label": "Scale bar",
+      "sub": "labels read, ends in pixels",
+      "zone": "known"
+    },
+    {
+      "id": "dim",
+      "label": "Printed dimension",
+      "sub": "model points, ends snapped",
+      "zone": "known",
+      "icon": "brands:Google Gemini"
+    },
+    {
+      "id": "doors",
+      "label": "Doors: 0.9 m",
+      "sub": "a standard, measured in px",
+      "zone": "known",
+      "color": "highlight",
+      "icon": "brands:Google Gemini"
+    },
+    {
+      "id": "check",
+      "label": "Door check",
+      "sub": "openings must be door-wide",
+      "zone": "use"
+    },
+    {
+      "id": "room",
+      "label": "Room inside its walls",
+      "sub": "any shape, holes taken out",
+      "zone": "use",
+      "highlight": true
+    },
+    {
+      "id": "exact",
+      "label": "Check this",
+      "sub": "measured on the sheet",
+      "zone": "out",
+      "color": "output"
+    },
+    {
+      "id": "estimate",
+      "label": "An estimate",
+      "sub": "with the range it leaves",
+      "zone": "out",
+      "color": "highlight"
+    },
+    {
+      "id": "no",
+      "label": "Nothing measured",
+      "sub": "the scale is in doubt",
+      "zone": "out",
+      "color": "risk"
+    }
+  ],
+  "edges": [
+    {
+      "from": "sheet",
+      "to": "bar",
+      "step": 1,
+      "label": "A scale bar is read first"
+    },
+    {
+      "from": "sheet",
+      "to": "dim",
+      "step": 2,
+      "label": "Else a printed dimension"
+    },
+    {
+      "from": "sheet",
+      "to": "doors",
+      "step": 3,
+      "label": "Else doors, as standard doors",
+      "style": "dotted"
+    },
+    {
+      "from": "bar",
+      "to": "check"
+    },
+    {
+      "from": "dim",
+      "to": "check",
+      "step": 4,
+      "label": "Doors must come out door-wide"
+    },
+    {
+      "from": "doors",
+      "to": "room",
+      "style": "dotted"
+    },
+    {
+      "from": "check",
+      "to": "room",
+      "step": 5,
+      "label": "The room's free space is measured"
+    },
+    {
+      "from": "room",
+      "to": "exact",
+      "step": 6,
+      "label": "Area, perimeter or baseboard"
+    },
+    {
+      "from": "room",
+      "to": "estimate",
+      "style": "dotted"
+    },
+    {
+      "from": "check",
+      "to": "no",
+      "style": "dashed",
+      "label": "not door-wide"
+    }
+  ],
+  "legend": {
+    "highlight": "the room, not a rectangle around it",
+    "dotted": "an assumed standard: an estimate, never Verified",
+    "dashed": "refused rather than guessed",
+    "client": "the sheet being measured",
+    "risk": "refused, with the reason"
+  },
+  "direction": "RIGHT"
+}

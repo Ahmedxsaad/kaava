@@ -491,3 +491,56 @@ def room_shape(path: Path, box: list[float], px_per_m: float, texts: list[dict] 
             "perimeter_m": length(contours[outer]) + sum(hole["perimeter_m"] for hole in holes),
             "openings": openings, "seal_m": side / px_per_m,
             "bbox": [float(xs.min() + wx0), float(ys.min() + wy0), float(xs.max() + wx0), float(ys.max() + wy0)]}
+
+
+# ----------------------------------------------------------------- a rectangle drawn on the sheet
+
+def drawn_rectangle(path: Path, box: list[float]) -> list[float] | None:
+    """The rectangle drawn in solid lines inside a rough box: a pit, a trench, an opening.
+
+    What a solid outline encloses is paper that no path leads out of. A dashed outline (something
+    hidden below) encloses nothing, so it is not taken for the thing itself. A line that crosses the
+    rectangle (a joint, a dimension's extension) cuts its inside in two: pieces that line up are one.
+    Returns [x0, y0, x1, y1] in the picture's pixels, or None when no such rectangle is drawn there.
+    """
+    import cv2
+    import numpy as np
+
+    grey = _grey(str(path))
+    height, width = grey.shape
+    x0, y0, x1, y1 = box
+    grow = 0.12 * max(x1 - x0, y1 - y0)
+    cx0, cy0 = int(max(0, x0 - grow)), int(max(0, y0 - grow))
+    cx1, cy1 = int(min(width, x1 + grow)), int(min(height, y1 + grow))
+    if cx1 - cx0 < 8 or cy1 - cy0 < 8:
+        return None
+    paper = (grey[cy0:cy1, cx0:cx1] >= 170).astype(np.uint8)  # a thin grey line is still a line
+    count, labels, stats, _ = cv2.connectedComponentsWithStats(paper, connectivity=4)
+    least = 0.015 * (x1 - x0) * (y1 - y0)
+    pieces = []
+    for n in range(1, count):
+        left, top, w, h, area = stats[n]
+        if left == 0 or top == 0 or left + w == cx1 - cx0 or top + h == cy1 - cy0:
+            continue  # reaches the edge of the view: not enclosed
+        if area < least or area < 0.85 * w * h:
+            continue  # a speck, or not a rectangle
+        pieces.append((int(area), int(left), int(top), int(left + w), int(top + h)))
+    if not pieces:
+        return None
+    pieces.sort(reverse=True)
+    _, gx0, gy0, gx1, gy1 = pieces[0]
+    near = 10  # a crossing line's thickness, at most
+    grown = True
+    while grown:
+        grown = False
+        for piece in pieces[1:]:
+            _, px0, py0, px1, py1 = piece
+            if (px0, py0, px1, py1) == (gx0, gy0, gx1, gy1) or (px0 >= gx0 and py0 >= gy0 and px1 <= gx1 and py1 <= gy1):
+                continue
+            same_columns = abs(px0 - gx0) <= 3 and abs(px1 - gx1) <= 3 and (0 <= py0 - gy1 <= near or 0 <= gy0 - py1 <= near)
+            same_rows = abs(py0 - gy0) <= 3 and abs(py1 - gy1) <= 3 and (0 <= px0 - gx1 <= near or 0 <= gx0 - px1 <= near)
+            if same_columns or same_rows:
+                gx0, gy0, gx1, gy1 = min(gx0, px0), min(gy0, py0), max(gx1, px1), max(gy1, py1)
+                grown = True
+    # The inside of the outline, and half the line that draws it on each side.
+    return [float(cx0 + gx0 - 1), float(cy0 + gy0 - 1), float(cx0 + gx1 + 1), float(cy0 + gy1 + 1)]
