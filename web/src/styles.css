@@ -259,7 +259,7 @@ ul { list-style: none; }
 .hatch-line { stroke: var(--pen-off); stroke-opacity: 0.6; }
 
 /* The reading line. */
-.sweep { transition: transform 0.12s linear; pointer-events: none; }
+.sweep { pointer-events: none; }
 .sweep line { stroke: var(--sweep); filter: drop-shadow(0 0 6px var(--sweep)); }
 .sweep-stop-0 { stop-color: var(--sweep); stop-opacity: 0; }
 .sweep-stop-1 { stop-color: var(--sweep); stop-opacity: 0.26; }

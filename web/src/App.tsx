@@ -82,7 +82,7 @@ export function App() {
   const [asking, setAsking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<Mode>("plan");
-  const [revealed, setRevealed] = useState(0);
+  const [progress, setProgress] = useState(1);  // how far the reading line has crossed the evidence, 0 to 1
   const [excluded, setExcluded] = useState<Set<number>>(new Set());
   const [hover, setHover] = useState<number | null>(null);
   const [focus, setFocus] = useState<number | null>(null);
@@ -116,7 +116,7 @@ export function App() {
       setExcluded(new Set());
       setHover(null);
       setFocus(null);
-      setRevealed(0);
+      setProgress(0);
       setResult(answer);
       setMeter((m) => ({
         answers: m.answers + 1,
@@ -149,7 +149,7 @@ export function App() {
       const next = await api.drawing(id);
       setDetail(next);
       setResult(null);
-      setRevealed(0);
+      setProgress(1);
       setExcluded(new Set());
       setFocus(null);
       setFocusKey("");
@@ -187,21 +187,37 @@ export function App() {
     return { order: (onSheet ? [...placed].sort((a, b) => a.x! - b.x!) : placed), onSheet };
   }, [units]);
   useEffect(() => {
-    if (!result || !units.length) return;
-    // By the clock, not by counting ticks: a busy page must not slow the count down.
-    const step = Math.min(170, Math.max(16, 1700 / units.length));
+    if (!result || !units.length) {
+      setProgress(1);
+      return;
+    }
+    // By the clock, not by counting frames: a busy page must not slow the reading down.
+    const duration = Math.min(2300, Math.max(900, units.length * 70));
     const began = performance.now() + 450;
+    setProgress(0);
     const timer = window.setInterval(() => {
-      const n = Math.min(units.length, Math.floor((performance.now() - began) / step));
-      if (n > 0) setRevealed(n);
-      if (n >= units.length) window.clearInterval(timer);
+      const p = Math.min(1, Math.max(0, (performance.now() - began) / duration));
+      setProgress(p);
+      if (p >= 1) window.clearInterval(timer);
     }, 16);
     return () => window.clearInterval(timer);
   }, [result, units.length]);
+  // The line moves across the evidence at a steady pace; an item is marked as the line passes it.
+  const reading = useMemo(() => {
+    const n = sequence.order.length;
+    if (!n || progress >= 1) return { revealed: n, at: null as number | null };
+    if (!sequence.onSheet) return { revealed: Math.floor(progress * n), at: null };
+    const lo = sequence.order[0].x!, hi = sequence.order[n - 1].x!;
+    const pad = (hi - lo) * 0.05 + 2;
+    const at = lo - pad + progress * (hi - lo + 2 * pad);
+    let revealed = 0;
+    while (revealed < n && sequence.order[revealed].x! <= at) revealed++;
+    return { revealed, at };
+  }, [sequence, progress]);
+  const revealed = reading.revealed;
   const visible = useMemo(() => new Set(sequence.order.slice(0, revealed).map((p) => p.n)), [sequence, revealed]);
-  const settled = !result || revealed >= units.length;
-  const sweepAt = !settled && sequence.onSheet && detail
-    ? (revealed === 0 ? 0 : sequence.order[revealed - 1].x!) : null;
+  const settled = !result || progress >= 1;
+  const sweepAt = settled ? null : reading.at;
 
   // The pen ticks as items are marked; the stamp lands when the last one is in.
   useEffect(() => {

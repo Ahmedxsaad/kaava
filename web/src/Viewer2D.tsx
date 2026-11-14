@@ -120,7 +120,7 @@ export function Viewer2D(props: Props) {
     const item = evidence.find((e) => e.n === focus);
     const box = item && boxOf(item);
     if (!box) return;
-    const reach = Math.max(box[2] - box[0], box[3] - box[1], 40) * 2.2 + 120;
+    const reach = Math.max(box[2] - box[0], box[3] - box[1]) * 3 + 0.16 * Math.max(width, height);  // the item and the rooms around it
     const cx = (box[0] + box[2]) / 2, cy = (box[1] + box[3]) / 2;
     glide(fitTo([cx - reach / 2, cy - reach / 2, cx + reach / 2, cy + reach / 2], 1));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -290,7 +290,7 @@ export function Viewer2D(props: Props) {
 
           {/* The reading line that sweeps the sheet while items are marked. */}
           {sweepAt !== null && (
-            <g className="sweep" style={{ transform: `translateX(${sweepAt}px)` }}>
+            <g className="sweep" transform={`translate(${sweepAt},0)`}>
               <rect x={-90 * u} y={0} width={90 * u} height={height} fill="url(#sweep-glow)" />
               <line x1={0} y1={0} x2={0} y2={height} strokeWidth={1.6 * u} />
             </g>

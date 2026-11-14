@@ -635,7 +635,7 @@ export function Viewer3D({ meshUrl, groundUrl, imageUrl, theme, highlights, visi
     const lift = item.storey != null ? s.offsets.get(item.storey)?.target ?? 0 : 0;
     const box = item.box.clone().translate(new THREE.Vector3(0, lift, 0));
     s.spin(false);
-    s.fly(box.expandByScalar(Math.max(2.2, box.getSize(new THREE.Vector3()).length() * 0.9)), { low: true, ms: 800 });
+    s.fly(box.expandByScalar(Math.max(3.6, box.getSize(new THREE.Vector3()).length() * 1.5)), { low: true, ms: 800 });
   }, [focus]);
 
   return (
