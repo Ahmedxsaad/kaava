@@ -20,8 +20,36 @@ A router sends each question to the cheapest method that can answer it exactly.
 | Floor plan with a DXF | Room outlines, door, window and fixture entities from the DXF, cross-checked against the PDF's text | €0 |
 | Scan, counting labelled rooms | Local OCR reads the room labels printed on the plan and the code counts them; the apartment's type line (3H+K+S) is the cross-check | €0 |
 | Scan, anything else | A vision model points at each item and the code counts the points. Never Verified | a fraction of a cent |
+| Sheet of a drawing set with no model or DXF (a schedule, a structural plan, a piping plan) | **Working shown.** Every text is read at full size by a program (the PDF's text layer, or local OCR). A vision model names the printed figures and rows that matter; the code counts, computes, converts units and reads each figure again where it is marked. Never Verified | 1 to 5 cents |
+| The same sheet, many small symbols (every door of a school) | Cut into overlapping tiles; the model boxes the symbols at full size; the code merges and counts the boxes | about 15 cents |
+| A plan drawn to scale that prints no dimensions | **Measured on the sheet.** The model points at the room; the code finds the walls in the pixels, reads the scale from the scale bar, and measures area, perimeter or baseboard length | about 1.5 cents |
 
 An answer becomes Verified only when its independent checks agree and answers of that kind stayed under 1% wrong (95% upper bound) on a calibration split of drawings that the engines were not built on.
+
+## Stoa's harder sheets
+
+Stoa said the final evaluation uses unreleased drawings and posted four sample sheets with the kind of question to expect: floor areas, linear metres of baseboard, door and window counts, slab area by type, piping. None has a model or a DXF behind it. On these the vision model is never allowed to state the number: it says what to read and how it combines, and the code does the rest, with every figure boxed on the sheet.
+
+![Baseboard of a hall: the room's rectangle on its walls, eight door openings with their widths, and the scale bar](docs/screenshots/baseboards-measured.png)
+
+| Stoa's example | What the system does on their sheet | Answer |
+| --- | --- | --- |
+| Linear metres of baseboard | Finds the hall's walls in the pixels, reads the scale bar (20 m = 1,010 px), leaves out 8 door openings | 2 × (17.80 + 13.76) − 12.73 = 50.4 m |
+| Floor areas | The same measurement for area; or, where the sheet prints a table, the table's entries added up | 245 m² · 914 + 913 + 1,403 + 1,240 = 4,470 ft² |
+| Counts of doors | 8 tiles of the sheet at full size, each door boxed, the boxes merged and counted | 124 doors, each one clickable |
+| Slab area by type | The 150 mm slab's printed dimensions, each read again by OCR | 6200 × 9950 mm = 61.69 m² |
+| Piping plans | Equipment found by its printed tags; sizes read from callouts | 5 pumps (FP-1 to FP-5) · 16" suction header |
+
+All of these are "Check this": which figures matter is the model's judgement, and the working is there to be checked. What is measured:
+
+- On the dataset's own US drawing sets (door and finish schedules as PDF), every count and area question of the development split: **31 of 31 right** (22 counts, 9 areas) at €0.046 per question. On the 19 of them that Gemini had answered alone it got 15.
+- Stoa's sheets have no answer key, so the answers above are unscored. The door boxes and the hall's rectangle were checked by eye against the drawing. The slab with D16 bars gave three slightly different workings on three runs (217.11, 218.61, 218.64 m²): the model chose different figures for a stair landing each time, which is why such an answer asks for a look.
+- Limits: only rectangular rooms on plans with solid walls and a graphic scale bar are measured; anything else gets no number.
+
+| | |
+| --- | --- |
+| ![A slab's area from two printed dimensions, both boxed](docs/screenshots/slab-working.png) | ![Four entries of a printed table boxed and added up](docs/screenshots/table-added-up.png) |
+| ![One hundred and twenty-four doors on a school plan, each boxed](docs/screenshots/doors-tiled.png) | |
 
 ## Results so far
 
@@ -43,6 +71,7 @@ These figures are scored against the dataset's answers, which count a door betwe
 - A door the file holds twice. On the development plans, 128 of 805 door outlines (16%) lie exactly on top of another outline: a door between two flats is listed once for each. The dataset's answers count every outline, so its answer for one floor is 32 doors where the drawing shows 23. The app answers 23: each place is counted once and marked once (×2 or ×3 beside its number), the answer says how many outlines the file holds and what the dataset's answer is, and it is never marked Verified, since no score measured against the dataset can vouch for it. This touches 1,216 of the 12,850 Swiss count questions on the development split (9.5%), about 2% of all questions. `BLUEPRINTS_COUNT=outlines` makes the engine count as the dataset does, for scoring against it.
 - Scans: where the printed labels and the type line agree, the label engine answers on its own. That is 12.7% of the scan questions on the development split (96.0% right) and 95.7% right on held-out plans (2,072 answers). It is never Verified: its best level is 2.0% wrong on held-out plans, above the 1% bar.
 - Scans, everything else: Gemini draws a box around each item the question asks about and the code counts the boxes, so the number is still a count of things you can see. That is right about nine times in ten and never Verified.
+- A scan read once (measured, not adopted as it stands). The dataset asks about 17 questions of each scan, and the picture is what costs. One model call that marks every countable kind at once answers them all: on 44 development scans (764 questions) that is 84.0% right at €0.0009 per question, against about 90% at €0.0064 when each question is asked on its own. It reads rooms and storeys well (92 to 100% of counts right) and openings badly (windows 55%, doors 70%); splitting it into four calls did not help (84.7% on 22 scans). So the accurate path stays, and the one-reading path is kept for rooms and storeys.
 - Scans read twice. We tested whether "the labels and Gemini give the same count" could be Verified, on 800 calibration answers where the label engine was confident. The labels alone were right 94.5% of the time, Gemini 98.3%. They agreed on 762 answers, of which 10 were wrong: 1.3%, better than either alone but above the 1% bar, so it stays Check this. Where they differed (38 answers) Gemini was right 34 times, so its count is shown and the difference is flagged. The second reading is paid for only where it helps: the label engine's strictest answers (labels and type line agree, 97.0% right) stand alone and free; its other confident answers (93.0% right alone) are also counted by Gemini.
 - Not solved yet: nothing on a scan is Verified, and scans are two thirds of the dataset's questions; IFC answers are not Verified yet because too few were held out to prove 1%; free-text questions about IFC models and the US door schedules have no engine.
 
@@ -70,7 +99,7 @@ The landing page opens by itself: a real drawing from the dataset answers one qu
 | ![The landing page's first screen](docs/screenshots/home.png) | ![An apartment's rooms tinted with their areas](docs/screenshots/apartment-paper.png) |
 | ![A storey of an IFC model cut open with its doors marked](docs/screenshots/ifc-storey.png) | ![An IFC model with its storeys lifted apart and a door tally beside each](docs/screenshots/ifc-storeys-apart.png) |
 
-The left and right arrow keys step through ten prepared examples; "Play examples" runs them on their own.
+The left and right arrow keys step through sixteen prepared examples, five of them on Stoa's sample sheets; "Play examples" runs them on their own.
 
 ## Partner technology
 
@@ -78,7 +107,7 @@ Each of these is optional and switches on when its key is in `.env` (see `.env.e
 
 | Partner | What it does here | Status |
 | --- | --- | --- |
-| Google Gemini | **On scans:** Gemini 4 Carbon boxes each counted item in its native detection format (`[ymin, xmin, ymax, xmax]` on a 0 to 1000 grid); the code counts the boxes and draws them on the sheet, so the number never comes from the model and every item can be checked or left out. **For free-form questions:** Gemini 4 Hydrogen restates the question so an exact engine can read it (about €0.003); the number still comes from geometry, and such an answer is never Verified. | In use; all figures above are measured on it |
+| Google Gemini | **On sheets:** Gemini 4 Carbon names the printed figures, rows and rooms that answer a question, working from the image and the list of texts a program read at full size; it boxes small symbols tile by tile. It never states the number. **On scans:** Gemini 4 Carbon boxes each counted item in its native detection format (`[ymin, xmin, ymax, xmax]` on a 0 to 1000 grid); the code counts the boxes and draws them on the sheet, so the number never comes from the model and every item can be checked or left out. **For free-form questions:** Gemini 4 Hydrogen restates the question so an exact engine can read it (about €0.003); the number still comes from geometry, and such an answer is never Verified. | In use; all figures above are measured on it |
 | Cloudinary | **Enhance:** a small scan is shown enlarged with AI super-resolution, loaded straight from Cloudinary in the format that suits the browser and laid over the original so every mark keeps its place. **Share:** hosts the evidence sheet of an answer and delivers it in the format and quality that suit whoever opens it. | In use, checked against a Cloudinary account |
 | ElevenLabs | Reads the answer aloud with a natural voice (Flash v2.5, about half a second per answer), for hands-busy checking on site; the browser's own voice is the fallback. | In use, checked against an ElevenLabs account |
 | Anthropic Claude | The vision and language model when no Gemini key is set, and the model of the earlier measurements. | Fallback |
@@ -110,6 +139,8 @@ Other commands:
 ```bash
 ./bp ask <drawing> "<question>" --out answer.png   # one question, evidence drawn to a PNG
 ./bp run router --split dev                        # evaluate and log a run to results/
+./bp run sheet --sample splits/dev_us_sheets_graded_31.json --effort low       # working shown, on the US schedule sheets
+./bp run scanindex --sample splits/dev_scan_drawings_44.json --effort low      # one reading per scan
 BLUEPRINTS_COUNT=outlines ./bp run router --split dev   # the same, counting repeated outlines as the dataset does
 ./bp calibrate                                     # set the Verified thresholds on the calibration split
 .venv/bin/python -m pytest                         # tests
