@@ -18,7 +18,8 @@ A router sends each question to the cheapest method that can answer it exactly.
 | --- | --- | --- |
 | IFC model, or a plan rendered from one | IfcOpenShell query: enumerated elements, geometry and the model's own quantities | €0 |
 | Floor plan with a DXF | Room outlines, door, window and fixture entities from the DXF, cross-checked against the PDF's text | €0 |
-| Scan with no vector data | A vision model points at each item and the code counts the points. Never Verified | a fraction of a cent |
+| Scan, counting labelled rooms | Local OCR reads the room labels printed on the plan and the code counts them; the apartment's type line (3H+K+S) is the cross-check | €0 |
+| Scan, anything else | A vision model points at each item and the code counts the points. Never Verified | a fraction of a cent |
 
 An answer becomes Verified only when its independent checks agree and answers of that kind stayed under 1% wrong (95% upper bound) on a calibration split of drawings that the engines were not built on.
 
@@ -28,14 +29,15 @@ All figures come from the run log in `results/` and are shown live on the app's 
 
 | | Vision model alone | This system |
 | --- | --- | --- |
-| Correct, same 200 development questions | 65.1% | 91.7% |
-| Re-weighted to the dataset's question mix | 75.7% | 86.8% |
-| Cost per 1,000 questions | €12.41 | €3.49 |
+| Correct, same 200 development questions | 65.1% | 92.7% |
+| Re-weighted to the dataset's question mix | 75.7% | 88.9% |
+| Cost per 1,000 questions | €12.41 | €3.23 |
 
 - Swiss floor plans, held-out: counts 99.9% correct (6,346 of 6,354), areas 97.6% (2,962 of 3,034).
 - Verified answers on held-out drawings: 8 wrong in 6,354 counts and 6 wrong in 2,612 areas, so the error rate is below 0.25% and 0.53% with 95% confidence.
-- Development split: 18,198 Verified answers, none wrong.
-- Not solved yet: scans (67% of the dataset's questions) are answered by the vision model and are never Verified; IFC answers are not Verified yet because too few were held out to prove 1%.
+- Development split, exact engines only, no model: 33,452 of 63,592 questions answered at €0, 94.3% of them right; 18,198 Verified answers, none wrong.
+- Scans: where the printed labels and the type line agree, the label engine answers on its own. That is 12.7% of the scan questions on the development split (96.0% right) and about 94% right on held-out plans. It is never Verified: no score level stays under 1% wrong.
+- Not solved yet: symbol counts on scans (doors, windows, toilets, sinks, showers; about 40% of the dataset's questions) are answered by the vision model at roughly 80% and are never Verified; IFC answers are not Verified yet because too few were held out to prove 1%; free-text questions about IFC models and the US door schedules have no engine.
 
 The vision model in these runs is Claude Sonnet 5.5, image only, high effort.
 
