@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnswerPanel } from "./AnswerPanel";
-import { api, type AskResult, type DrawingDetail, type Evidence, euro, formatValue, headlineRun, type Source, SOURCE_NAMES } from "./api";
+import { api, type AskResult, type DrawingDetail, type Evidence, euro, formatValue, headlineRun, type Source, SOURCE_NAMES, spoken } from "./api";
 import { Home } from "./Home";
 import { Numbers } from "./Numbers";
 import { Picker } from "./Picker";
@@ -136,7 +136,8 @@ export function App() {
       setFocusKey("");
       setQuestion("");
       setAsked("");
-      setMode(next.view.kind === "none" ? "3d" : wanted.current ?? "plan");
+      // A drawing that comes with a model opens with the model standing beside it.
+      setMode(next.view.kind === "none" ? "3d" : wanted.current ?? (next.mesh && window.innerWidth >= 1180 ? "both" : "plan"));
       writeRoute({ drawing: id, question: then ?? "", page: "ask" });
       if (then) void ask(next, then);
     } catch (e) {
@@ -239,13 +240,10 @@ export function App() {
   const settled = !result || progress >= 1;
   const sweepAt = settled ? null : reading.at;
 
-  // "Make blueprints talk", literally: read the verdict and the number aloud once the evidence is in.
+  // "Make blueprints talk", literally: the drawing answers aloud, in the first person, once the evidence is in.
   useEffect(() => {
     if (!speaking || !result || !settled || !("speechSynthesis" in window)) return;
-    const verdict = result.state === "verified" ? "Verified." : result.state === "check" ? "Check this." : "I can't answer that reliably.";
-    const unit = result.unit === "m2" ? "square metres" : result.unit === "m3" ? "cubic metres" : result.unit === "m" ? "metres" : "";
-    const value = result.answer === null ? result.reason : `${formatValue(result.answer, result.unit)} ${unit}`;
-    const sentence = `${verdict} ${value}`;
+    const sentence = spoken(result);
     const browserVoice = () => {
       const utterance = new SpeechSynthesisUtterance(sentence);
       utterance.lang = "en-GB";
@@ -366,20 +364,39 @@ export function App() {
     return list.length ? list : detail.suggested;
   }, [detail, question]);
 
-  const listen = () => {
+  // Asked aloud, answered aloud: the words appear as they are heard, and the drawing replies by voice.
+  const listen = (target: DrawingDetail | null = detail) => {
     const Recognition = (window as unknown as Record<string, any>).SpeechRecognition ?? (window as unknown as Record<string, any>).webkitSpeechRecognition;
-    if (!Recognition || !detail) return;
+    if (!Recognition || !target) return;
     const recognition = new Recognition();
     recognition.lang = navigator.language || "en-US";
-    recognition.interimResults = false;
+    recognition.interimResults = true;
     recognition.onresult = (event: any) => {
-      const text = event.results[0][0].transcript as string;
-      void ask(detail, text);
+      const heard = event.results[event.results.length - 1];
+      const text = heard[0].transcript as string;
+      setQuestion(text);
+      if (heard.isFinal) {
+        setSpeaking(true);
+        void ask(target, text);
+      }
     };
     recognition.onend = () => setListening(false);
     recognition.onerror = () => setListening(false);
     setListening(true);
-    recognition.start();
+    try { recognition.start(); } catch { setListening(false); }
+  };
+  // "Ask it aloud" on the landing page: open the drawing, then listen.
+  const talkNext = useRef(false);
+  useEffect(() => {
+    if (!detail || !talkNext.current) return;
+    talkNext.current = false;
+    listen(detail);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detail]);
+  const talk = (stop: Stop) => {
+    talkNext.current = true;
+    setSpeaking(true);
+    void open(stop.drawing, undefined, "both");
   };
   const canListen = typeof window !== "undefined" && ("SpeechRecognition" in window || "webkitSpeechRecognition" in window);
   const go = (next: Page) => {
@@ -418,7 +435,7 @@ export function App() {
         </div>
       </header>
 
-      {page === "home" && <Home onOpen={(stop) => void openStop(stop)} onBrowse={() => setPicking(true)} onNumbers={() => go("numbers")} onBring={(file) => void bring(file)} />}
+      {page === "home" && <Home onOpen={(stop) => void openStop(stop)} onBrowse={() => setPicking(true)} onNumbers={() => go("numbers")} onBring={(file) => void bring(file)} onTalk={talk} canTalk={canListen} />}
       {bringing && <div className="toast">Reading your drawing…</div>}
       {shared && shared !== "working" && <div className="toast">{shared}</div>}
       {page === "numbers" && <Numbers />}
@@ -465,7 +482,7 @@ export function App() {
               )}
               <input
                 value={question}
-                placeholder={detail?.suggested.length ? "Ask about this drawing, in any language" : "Ask anything about this drawing"}
+                placeholder={listening ? "Listening…" : detail?.suggested.length ? "Ask about this drawing, in any language" : "Ask anything about this drawing"}
                 onChange={(e) => { setQuestion(e.target.value); setSuggesting(true); }}
                 onFocus={() => setSuggesting(true)}
                 onBlur={() => window.setTimeout(() => setSuggesting(false), 160)}
@@ -473,7 +490,7 @@ export function App() {
               />
               <div className="row">
                 {canListen && (
-                  <button type="button" className={`tool${listening ? " on" : ""}`} onClick={listen} aria-label="Ask by voice" title="Ask by voice">
+                  <button type="button" className={`tool${listening ? " on hearing" : ""}`} onClick={() => listen()} aria-label="Ask by voice" title="Ask by voice">
                     <svg viewBox="0 0 24 24" aria-hidden><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" /></svg>
                   </button>
                 )}

@@ -4,6 +4,15 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { CSS2DObject, CSS2DRenderer } from "three/examples/jsm/renderers/CSS2DRenderer.js";
 import { api } from "./api";
 
+// The page can direct the model itself (a story told by scrolling): how far the walls have risen,
+// and where the camera stands. The model then follows these, softly, instead of moving on its own.
+export interface Direction {
+  rise: number;  // 0: flat on the sheet, 1: standing
+  turn: number;  // where the camera stands around the model, radians
+  tilt: number;  // how high it stands: about 1.5 looks straight down, 0.6 is a three-quarter view
+  back: number;  // its distance, as a multiple of the distance that just fits the model
+}
+
 export interface Highlight {
   id: string;
   n: number;
@@ -20,6 +29,11 @@ interface Props {
   focus: number | null;
   excluded: Set<number>;
   focusKey: string;
+  theme?: "paper" | "night";  // night: a lit white model on a dark stage, for the landing page
+  bare?: boolean;  // no captions or tools, no zoom: the stage alone, as a backdrop
+  shift?: number;  // move the model sideways by this share of the width (text stands beside it)
+  direct?: Direction;
+  onReady?(): void;
 }
 
 interface MeshElement {
@@ -81,17 +95,42 @@ function styleOf(cls: string): Style {
   return { kind: "other", paper: 0x86aaa3 };
 }
 
-// A white architectural model: soft shading, fine dark edges, one warm accent for the answer.
-const LOOK = {
-  background: 0xfafbfb, edge: 0x2a302b, edgeOpacity: 0.26, grid: 0xdfe2e0,
+// A white architectural model: sunlight and soft shadows, fine dark edges, one warm accent for the answer.
+const PAPER = {
+  background: 0xfafbfb as number | null, edge: 0x2a302b, edgeOpacity: 0.26, grid: 0xdfe2e0, gridOpacity: 0.7,
   count: new THREE.Color(0xc46103), area: new THREE.Color(0xe8843a), off: new THREE.Color(0xa9b0a9),
   countEdge: 0x7a3a00, areaEdge: 0xa65100, sheet: "#ffffff",
+  sky: 0xffffff, bounce: 0xe9ebe9, ambient: 2.35, sun: 2.1, fill: 0.5, shadow: 0.26,
 };
-// Face colours: nearly white, with glass and floors only a shade apart.
+// The same model at night: one key light on a dark table, so the paper and the walls stand out.
+const NIGHT: typeof PAPER = {
+  ...PAPER, background: null, edge: 0x0c1f0e, edgeOpacity: 0.34, grid: 0x2f5a34, gridOpacity: 0.32,
+  count: new THREE.Color(0xf07a14), area: new THREE.Color(0xf0903f), sheet: "#f4f6f1",
+  sky: 0xf2f6f2, bounce: 0x2c5a31, ambient: 2.0, sun: 2.7, fill: 0.42, shadow: 0.5,
+};
+// A painted model: white walls, and one clear colour for each kind of thing.
 const FACE: Record<string, number> = {
-  wall: 0xffffff, slab: 0xf3f4f3, floor: 0xf6f7f6, glass: 0xe6eef2, door: 0xefebe3, furniture: 0xededec,
-  stair: 0xeaecea, frame: 0xe6e8e6, fixture: 0xe9eef1, proxy: 0xededec, other: 0xe7ebe8, space: 0xe8843a, site: 0xededec,
+  wall: 0xfffdf8, slab: 0xf0e8da, floor: 0xffffff, glass: 0x7cc4ff, door: 0xdfa368, furniture: 0xf4c25a,
+  stair: 0xe58a6b, frame: 0x7f93b3, fixture: 0x4fc3e0, proxy: 0xe0d8cc, other: 0xb9d9c6, space: 0xe8843a, site: 0xcfe3bf,
 };
+
+// Rooms are tinted by what they are for, read from the name printed in them (German, French, Italian, English).
+const ROOM_TINTS: [RegExp, number][] = [
+  [/wohn|séjour|sejour|soggiorno|essen|repas|pranzo|living|dining/i, 0xffd45e],            // living and dining: sun yellow
+  [/küche|kueche|cuisine|cucina|kitchen/i, 0xff9a76],                                         // kitchen: coral
+  [/bad|bain|bagno|wc|dusch|douche|wasch|buanderie|lavanderia|bath|toilet/i, 0x62d2ea],       // bath: aqua
+  [/balkon|balcon|loggia|terrass|giardino|arkade|balcony|garden/i, 0x86d98f],                 // outdoors: green
+  [/korridor|couloir|corridoio|halle|entr|flur|gang|hall|corridor/i, 0xf6e2b8],               // circulation: sand
+  [/treppe|escalier|scala|lift|ascens|aufzug|stair|elevator/i, 0xc8ccd6],                     // stairs and lifts: grey
+  [/reduit|réduit|ripostiglio|abstell|keller|storage|velo|kinderwagen/i, 0xdcc7b4],           // storage: taupe
+  [/zimmer|pièce|piece|stanza|chambre|camera|schlaf|raum|room|büro|bureau|office/i, 0xb7a8f7], // rooms and bedrooms: lavender
+];
+const ROOM_PLAIN = 0xf3ede2;
+
+function tintOf(name: string): number {
+  for (const [test, colour] of ROOM_TINTS) if (test.test(name)) return colour;
+  return ROOM_PLAIN;
+}
 
 const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 const easeOutBack = (t: number) => 1 + 2.2 * Math.pow(t - 1, 3) + 1.2 * Math.pow(t - 1, 2);
@@ -101,9 +140,30 @@ interface BaseEntry {
   edges?: THREE.LineSegments;
   style: Style;
   storey: number | null;
+  raise?: number;  // held this far above its place (a plan's room tints lie on the sheet)
+}
+
+// Where a door hangs: the end of its longest side, found from its own outline.
+function hingeOf(positions: Float32Array): { x: number; y: number } {
+  const n = positions.length / 3;
+  let mx = 0, my = 0;
+  for (let k = 0; k < positions.length; k += 3) { mx += positions[k]; my += positions[k + 1]; }
+  mx /= n; my /= n;
+  let sxx = 0, sxy = 0, syy = 0;
+  for (let k = 0; k < positions.length; k += 3) {
+    const dx = positions[k] - mx, dy = positions[k + 1] - my;
+    sxx += dx * dx; sxy += dx * dy; syy += dy * dy;
+  }
+  const angle = 0.5 * Math.atan2(2 * sxy, sxx - syy);
+  const ax = Math.cos(angle), ay = Math.sin(angle);
+  let low = Infinity;
+  for (let k = 0; k < positions.length; k += 3) low = Math.min(low, (positions[k] - mx) * ax + (positions[k + 1] - my) * ay);
+  return { x: mx + low * ax, y: my + low * ay };
 }
 
 interface Lit {
+  node: THREE.Group;  // what is placed, lifted and shown; a door turns about it
+  swing: number;  // how far a door opens when it is counted (radians), 0 for anything else
   mesh: THREE.Mesh;
   label?: CSS2DObject;
   tone: "count" | "area";
@@ -130,14 +190,16 @@ interface Stage {
   spin(on: boolean): void;
 }
 
-export function Viewer3D({ meshUrl, groundUrl, imageUrl, highlights, visible, hover, focus, excluded, focusKey }: Props) {
+export function Viewer3D({ meshUrl, groundUrl, imageUrl, highlights, visible, hover, focus, excluded, focusKey, theme = "paper", bare, shift = 0, direct, onReady }: Props) {
+  const directed = useRef(direct);
+  directed.current = direct;
   const host = useRef<HTMLDivElement>(null);
   const stage = useRef<Stage | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | string>("loading");
   const [info, setInfo] = useState("");
   const [exploded, setExploded] = useState<boolean | null>(null);  // null: decided by the answer
   const [storeys, setStoreys] = useState(0);
-  const look = LOOK;
+  const look = theme === "night" ? NIGHT : PAPER;
 
   // ---- scene, once per mesh
   useEffect(() => {
@@ -146,8 +208,10 @@ export function Viewer3D({ meshUrl, groundUrl, imageUrl, highlights, visible, ho
     let disposed = false;
     setStatus("loading");
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+    const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true, alpha: look.background === null });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.setSize(el.clientWidth, el.clientHeight);
     el.appendChild(renderer.domElement);
     const labels = new CSS2DRenderer();
@@ -156,18 +220,34 @@ export function Viewer3D({ meshUrl, groundUrl, imageUrl, highlights, visible, ho
     el.appendChild(labels.domElement);
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(look.background);
+    if (look.background !== null) scene.background = new THREE.Color(look.background);
     const camera = new THREE.PerspectiveCamera(38, el.clientWidth / Math.max(el.clientHeight, 1), 0.1, 5000);
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.08;
     controls.maxPolarAngle = Math.PI * 0.495;
-    controls.autoRotateSpeed = 0.55;
-    scene.add(new THREE.HemisphereLight(0xffffff, 0xe6e8e6, 1.5));
-    const sun = new THREE.DirectionalLight(0xffffff, 1.15);
+    controls.autoRotateSpeed = bare ? 0.38 : 0.55;
+    controls.enableZoom = !bare;  // a backdrop must not take the page's scroll
+    controls.enablePan = !bare;
+    controls.enabled = !directed.current;
+    // Where the directed camera is now. It starts far off and to one side, so the model glides in on arrival.
+    const now3 = { rise: directed.current?.rise ?? 1, turn: (directed.current?.turn ?? 0) - 0.55, tilt: directed.current?.tilt ?? 0.8, back: (directed.current?.back ?? 1) * 1.7 };
+    const middle3 = new THREE.Vector3(), size3 = new THREE.Vector3();
+    const frameView = (w: number, h: number) => {
+      camera.aspect = w / h;
+      if (shift) camera.setViewOffset(w, h, -shift * w, 0, w, h);
+      camera.updateProjectionMatrix();
+    };
+    frameView(el.clientWidth, Math.max(el.clientHeight, 1));
+    scene.add(new THREE.HemisphereLight(look.sky, look.bounce, look.ambient));
+    const sun = new THREE.DirectionalLight(0xffffff, look.sun);  // the one light that casts shadows
     sun.position.set(0.55, 1, 0.4);
-    scene.add(sun);
-    const fill = new THREE.DirectionalLight(0xffffff, 0.35);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(2048, 2048);
+    sun.shadow.bias = -0.0012;
+    sun.shadow.normalBias = 0.14;
+    scene.add(sun, sun.target);
+    const fill = new THREE.DirectionalLight(0xffffff, look.fill);
     fill.position.set(-0.6, 0.5, -0.7);
     scene.add(fill);
 
@@ -181,6 +261,36 @@ export function Viewer3D({ meshUrl, groundUrl, imageUrl, highlights, visible, ho
     const tick = (now: number) => {
       frame = requestAnimationFrame(tick);
       const s = stage.current;
+      const want = directed.current;
+      if (want && s) {  // the page directs: follow it softly
+        let moved = false;
+        for (const key of ["rise", "turn", "tilt", "back"] as const) {
+          const gap = want[key] - now3[key];
+          if (Math.abs(gap) > 0.0004) { now3[key] += gap * 0.13; moved = true; } else now3[key] = want[key];
+        }
+        if (moved || dirty) {
+          s.root.scale.z = Math.max(0.001, now3.rise);
+          s.modelBox.getCenter(middle3);
+          const radius = Math.max(s.modelBox.getSize(size3).length() / 2, 1.5);
+          const vertical = (camera.fov * Math.PI) / 360;
+          const half = Math.min(vertical, Math.atan(Math.tan(vertical) * camera.aspect));
+          const distance = (radius / Math.sin(half)) * now3.back;
+          camera.position.set(
+            middle3.x + distance * Math.cos(now3.tilt) * Math.sin(now3.turn),
+            distance * Math.sin(now3.tilt),
+            middle3.z + distance * Math.cos(now3.tilt) * Math.cos(now3.turn));
+          controls.target.set(middle3.x, 0, middle3.z);
+          camera.near = Math.max(0.05, distance / 500);
+          camera.far = distance * 40;
+          camera.updateProjectionMatrix();
+          camera.lookAt(controls.target);
+          // The sun keeps to the viewer's side, a little to the left: the faces in view stay lit and
+          // the shadows turn with the scroll, like a day passing.
+          const reach = radius * 2.6;
+          sun.position.set(middle3.x + reach * 0.62 * Math.sin(now3.turn - 0.75), reach * 0.78, middle3.z + reach * 0.62 * Math.cos(now3.turn - 0.75));
+          dirty = true;
+        }
+      }
       if (flight) {
         dirty = true;
         const p = Math.min(1, (now - flight.t0) / flight.ms);
@@ -206,7 +316,7 @@ export function Viewer3D({ meshUrl, groundUrl, imageUrl, highlights, visible, ho
         }
         if (moving || dirty) {
           for (const entry of s.base) {
-            const lift = entry.storey != null ? s.offsets.get(entry.storey)?.now ?? 0 : 0;
+            const lift = (entry.storey != null ? s.offsets.get(entry.storey)?.now ?? 0 : 0) + (entry.raise ?? 0);
             entry.mesh.position.z = lift;
             if (entry.edges) entry.edges.position.z = lift;
           }
@@ -217,10 +327,15 @@ export function Viewer3D({ meshUrl, groundUrl, imageUrl, highlights, visible, ho
         }
         for (const item of s.items.values()) {
           const lift = item.storey != null ? s.offsets.get(item.storey)?.now ?? 0 : 0;
-          item.mesh.position.z = item.rest + lift;
+          item.node.position.z = item.rest + lift;
+          if (item.swing && item.node.visible) {  // a counted door swings open and stays open
+            const turn = Math.min(1, Math.max(0, (now - item.born) / 760));
+            const angle = item.swing * (turn >= 1 ? 1 : easeOutBack(turn));
+            if (item.node.rotation.z !== angle) { item.node.rotation.z = angle; dirty = true; }
+          }
           const age = (now - item.born) / 420;
-          if (age < 1 && item.mesh.visible) {  // a newly marked element swells into place
-            item.mesh.scale.setScalar(1 + 0.4 * Math.sin(Math.min(1, Math.max(0, age)) * Math.PI));
+          if (age < 1 && item.node.visible) {  // a newly marked element swells into place
+            item.mesh.scale.setScalar(1 + (item.swing ? 0.12 : 0.4) * Math.sin(Math.min(1, Math.max(0, age)) * Math.PI));
             dirty = true;
           } else if (item.mesh.scale.x !== 1) {
             item.mesh.scale.setScalar(1);
@@ -242,8 +357,7 @@ export function Viewer3D({ meshUrl, groundUrl, imageUrl, highlights, visible, ho
       const w = el.clientWidth, h = Math.max(el.clientHeight, 1);
       renderer.setSize(w, h);
       labels.setSize(w, h);
-      camera.aspect = w / h;
-      camera.updateProjectionMatrix();
+      frameView(w, h);
       dirty = true;
     });
     observer.observe(el);
@@ -256,6 +370,15 @@ export function Viewer3D({ meshUrl, groundUrl, imageUrl, highlights, visible, ho
       scene.add(root);
       const shared = new THREE.BufferAttribute(parsed.positions, 3);
       const isPlan = parsed.header.kind === "plan";
+      // Each room's floor takes the tint of its use; everything else is coloured by its material.
+      const tints = new Float32Array(parsed.header.vertices * 3).fill(1);
+      const tint = new THREE.Color();
+      for (const element of parsed.header.elements) {
+        if (element.cls !== "room") continue;
+        tint.setHex(tintOf(element.name ?? ""));
+        for (let k = element.v[0]; k < element.v[0] + element.v[1]; k++) tint.toArray(tints, k * 3);
+      }
+      const tinted = new THREE.BufferAttribute(tints, 3);
 
       // One merged mesh per kind of element and storey: few draw calls, one vertex buffer,
       // and a storey can be lifted off as a whole.
@@ -281,14 +404,18 @@ export function Viewer3D({ meshUrl, groundUrl, imageUrl, highlights, visible, ho
         }
         const geometry = new THREE.BufferGeometry();
         geometry.setAttribute("position", shared);
+        if (group.style.kind === "floor") geometry.setAttribute("color", tinted);
         geometry.setIndex(new THREE.BufferAttribute(index, 1));
         const material = new THREE.MeshStandardMaterial({
-          color: FACE[group.style.kind] ?? FACE.other, roughness: 0.95, metalness: 0, flatShading: true, side: THREE.DoubleSide,
-          transparent: !!group.style.glass, opacity: group.style.glass ? 0.4 : 1, depthWrite: !group.style.glass,
+          color: FACE[group.style.kind] ?? FACE.other, roughness: 0.9, metalness: 0, flatShading: true, side: THREE.DoubleSide,
+          vertexColors: group.style.kind === "floor",
+          transparent: !!group.style.glass, opacity: group.style.glass ? 0.5 : 1, depthWrite: !group.style.glass,
           polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1,
         });
         const mesh = new THREE.Mesh(geometry, material);
         mesh.visible = !group.style.hidden;
+        mesh.castShadow = !group.style.glass;
+        mesh.receiveShadow = true;
         root.add(mesh);
         const entry: BaseEntry = { mesh, style: group.style, storey: group.storey };
         if (withEdges && !group.style.hidden) {
@@ -328,22 +455,46 @@ export function Viewer3D({ meshUrl, groundUrl, imageUrl, highlights, visible, ho
       const grid = new THREE.GridHelper(reach, cells, look.grid, look.grid);
       const gridMaterial = grid.material as THREE.LineBasicMaterial;
       gridMaterial.transparent = true;
-      gridMaterial.opacity = 0.7;
+      gridMaterial.opacity = look.gridOpacity;
       grid.position.set((modelBox.min.x + modelBox.max.x) / 2, modelBox.min.y - 0.03, (modelBox.min.z + modelBox.max.z) / 2);
       scene.add(grid);
 
+      // The sun stands over the model; its shadow camera covers the model with room for lifted storeys.
+      const middle = modelBox.getCenter(new THREE.Vector3());
+      const radius = Math.max(span.length() / 2, 2);
+      sun.position.copy(middle).add(new THREE.Vector3(0.5, 1, 0.36).normalize().multiplyScalar(radius * 2.6));
+      sun.target.position.copy(middle);
+      const shade = sun.shadow.camera;
+      shade.left = shade.bottom = -radius * 1.5;
+      shade.right = shade.top = radius * 1.5;
+      shade.near = 0.5;
+      shade.far = radius * 7;
+      shade.updateProjectionMatrix();
+      // What the model stands on takes its shadow: on the sheet, or on the table when there is none.
+      const catcher = new THREE.Mesh(new THREE.PlaneGeometry(reach, reach), new THREE.ShadowMaterial({ opacity: look.shadow, depthWrite: false }));
+      catcher.position.set(middle.x, -middle.z, modelBox.min.y + 0.012);
+      catcher.receiveShadow = true;
+      catcher.renderOrder = 1;
+      root.add(catcher);
+      if (theme === "night" && !directed.current) scene.fog = new THREE.Fog(0x021803, radius * 4.2, radius * 10);  // the table fades into the dark
+
       const fly: Stage["fly"] = (box, options = {}) => {
+        if (directed.current) return;  // the page holds the camera
         const centre = box.getCenter(new THREE.Vector3());
         const radius = Math.max(box.getSize(new THREE.Vector3()).length() / 2, 1.5);
         // Fit the narrower of the two view angles, so a tall pane does not crop the model.
         const vertical = (camera.fov * Math.PI) / 360;
         const half = Math.min(vertical, Math.atan(Math.tan(vertical) * camera.aspect));
-        const distance = (radius / Math.sin(half)) * 0.8;
+        const distance = (radius / Math.sin(half)) * (bare ? 1.22 : 0.92);  // as a backdrop the model keeps its distance
         // Keep the side the viewer is on; come lower to look at one item.
         const side = new THREE.Vector3().subVectors(camera.position, controls.target).setY(0);
-        if (side.lengthSq() < 1e-6 || options.fromAbove) side.set(0.62, 0, 0.78);
+        if (side.lengthSq() < 1e-6 || options.fromAbove) {  // stand facing the model's long side, a little off square
+          const size = box.getSize(new THREE.Vector3());
+          if (size.z > size.x) side.set(0.84, 0, 0.54); else side.set(0.54, 0, 0.84);
+        }
         side.normalize();
-        const direction = side.multiplyScalar(Math.cos(options.low ? 0.5 : 0.8)).setY(Math.sin(options.low ? 0.5 : 0.8)).normalize();
+        const height = options.low ? 0.5 : bare ? 0.6 : 0.8;  // how high the camera stands, as an angle
+        const direction = side.multiplyScalar(Math.cos(height)).setY(Math.sin(height)).normalize();
         const end = centre.clone().addScaledVector(direction, distance);
         if (options.fromAbove) {  // start looking straight down, as on the plan, then come round
           camera.position.copy(centre).add(new THREE.Vector3(0, distance * 1.1, 0.001));
@@ -352,7 +503,7 @@ export function Viewer3D({ meshUrl, groundUrl, imageUrl, highlights, visible, ho
         camera.near = Math.max(0.05, distance / 500);
         camera.far = distance * 40;
         camera.updateProjectionMatrix();
-        flight = { t0: performance.now() + (options.fromAbove ? 350 : 0), ms: options.ms ?? (options.fromAbove ? 2000 : 1100),
+        flight = { t0: performance.now() + (options.fromAbove ? (bare ? 150 : 350) : 0), ms: options.ms ?? (options.fromAbove ? (bare ? 3000 : 2000) : bare ? 2200 : 1100),
                    p0: camera.position.clone(), p1: end, q0: controls.target.clone(), q1: centre };
         dirty = true;
       };
@@ -361,20 +512,22 @@ export function Viewer3D({ meshUrl, groundUrl, imageUrl, highlights, visible, ho
       const offsets: Stage["offsets"] = new Map();
       const order = parsed.header.storeys.map((storey, i) => ({ i, z: storey.z ?? 0 })).sort((a, b) => a.z - b.z);
       order.forEach(({ i }, rank) => offsets.set(i, { now: isPlan ? 0 : 14 + rank * 9, target: 0 }));
-      if (isPlan) {
+      if (isPlan && !directed.current) {
         root.scale.z = 0.001;
-        rise = { t0: performance.now() + 900, ms: 1300 };
+        rise = { t0: performance.now() + (bare ? 300 : 900), ms: bare ? 1600 : 1300 };
       }
+      if (directed.current) grid.visible = false;  // on a coloured page the paper needs no table
 
       stage.current = {
         parsed, root, base, lit, items: new Map(), tallies, byId, modelBox, offsets, ground: null, groundStorey: null, fly,
         redraw: () => { dirty = true; },
-        spin: (on) => { controls.autoRotate = on; dirty = true; },
+        spin: (on) => { controls.autoRotate = on && !directed.current; dirty = true; },
       };
       fly(modelBox, { fromAbove: true });
       setStoreys(isPlan ? 0 : order.length);
       setInfo(`${parsed.header.elements.length.toLocaleString("en")} elements · ${parsed.header.triangles.toLocaleString("en")} triangles`);
       setStatus("ready");
+      onReady?.();
 
       // The drawing itself as the floor the model stands on.
       if (groundUrl && imageUrl) {
@@ -404,7 +557,26 @@ export function Viewer3D({ meshUrl, groundUrl, imageUrl, highlights, visible, ho
             s.root.add(sheet);
             s.ground = sheet;
             s.groundStorey = isPlan ? null : placed.storey;
-            if (isPlan) for (const entry of s.base) if (entry.style.kind === "floor") entry.mesh.visible = false;
+            if (isPlan) {
+              // From the table up: the paper, each room's tint lying on it like a wash, then the shadows.
+              const paper = placed.corners[0][2];
+              catcher.position.z = paper + 0.03;
+              for (const entry of s.base) {
+                if (entry.style.kind !== "floor") continue;
+                const material = entry.mesh.material as THREE.MeshStandardMaterial;
+                material.transparent = true;
+                material.opacity = 0.6;
+                material.depthWrite = false;
+                material.polygonOffsetFactor = -2;  // towards the eye: the wash must win against the paper under it
+                material.polygonOffsetUnits = -2;
+                material.needsUpdate = true;
+                entry.raise = paper + 0.015 - (modelBox.min.y + 0.05);  // the floors' top comes just above the paper
+                entry.mesh.castShadow = false;
+                entry.mesh.receiveShadow = false;
+                entry.mesh.renderOrder = 0;
+                if (entry.edges) entry.edges.visible = false;
+              }
+            }
             dirty = true;
           };
           image.src = imageUrl;
@@ -440,6 +612,7 @@ export function Viewer3D({ meshUrl, groundUrl, imageUrl, highlights, visible, ho
       (item.mesh.material as THREE.Material).dispose();
       if (item.label) item.mesh.remove(item.label);
     }
+    const lookNow = look;
     s.lit.clear();
     s.items.clear();
     for (const child of [...s.tallies.children]) s.tallies.remove(child);
@@ -459,16 +632,25 @@ export function Viewer3D({ meshUrl, groundUrl, imageUrl, highlights, visible, ho
       const z = entry.storey != null ? storeyList[entry.storey]?.z ?? null : null;
       const above = active && level != null && z != null && z > level + 0.2;
       const same = active && only != null && entry.storey === only;
-      const floorUnderSheet = isPlan && s.ground && entry.style.kind === "floor";
-      entry.mesh.visible = !entry.style.hidden && !above && !floorUnderSheet;
+      const wash = isPlan && !!s.ground && entry.style.kind === "floor";  // a plan's room tints on the paper
+      entry.mesh.visible = !entry.style.hidden && !above;
       const material = entry.mesh.material as THREE.MeshStandardMaterial;
-      material.transparent = active || !!entry.style.glass;
-      material.opacity = !active ? (entry.style.glass ? 0.4 : 1) : same ? (entry.style.glass ? 0.25 : 0.78) : 0.07;
-      material.depthWrite = !active && !entry.style.glass;
+      // A plan is one storey: its walls stay solid, and the doors open out of them. In a building
+      // model the answer's storey stays readable and the rest steps back so the answer shows through.
+      const solid = !active || (isPlan && !entry.style.glass);
+      material.transparent = !solid || !!entry.style.glass;
+      material.opacity = solid ? (entry.style.glass ? 0.5 : 1) : same ? (entry.style.glass ? 0.25 : 0.78) : 0.07;
+      material.depthWrite = solid && !entry.style.glass;
+      if (wash) {  // paler while an answer is shown, so the answer's own colour leads
+        material.transparent = true;
+        material.opacity = active ? 0.32 : 0.6;
+        material.depthWrite = false;
+      }
       material.needsUpdate = true;
+      entry.mesh.castShadow = !wash && !entry.style.glass && (solid || same);
       if (entry.edges) {
-        entry.edges.visible = entry.mesh.visible;
-        (entry.edges.material as THREE.LineBasicMaterial).opacity = !active ? LOOK.edgeOpacity : same ? LOOK.edgeOpacity : LOOK.edgeOpacity * 0.28;
+        entry.edges.visible = entry.mesh.visible && !wash;
+        (entry.edges.material as THREE.LineBasicMaterial).opacity = solid || same ? lookNow.edgeOpacity : lookNow.edgeOpacity * 0.28;
       }
     }
 
@@ -489,7 +671,6 @@ export function Viewer3D({ meshUrl, groundUrl, imageUrl, highlights, visible, ho
       return;
     }
 
-    const lookNow = LOOK;
     const box = new THREE.Box3();
     const withLabels = highlights.length <= 160;
     for (const h of highlights) {
@@ -514,9 +695,16 @@ export function Viewer3D({ meshUrl, groundUrl, imageUrl, highlights, visible, ho
       });
       const mesh = new THREE.Mesh(geometry, material);
       mesh.renderOrder = 2;
+      mesh.castShadow = h.tone !== "area";
       const rest = centre.z + (isPlan && h.tone === "area" ? 0.035 : 0);  // a room plate sits just above the sheet
-      mesh.position.set(centre.x, centre.y, rest);
-      mesh.visible = false;
+      // A door hangs on its hinge, so that it can swing open when it is counted.
+      const isDoor = h.tone === "count" && /door/i.test(element.cls);
+      const hinge = isDoor ? hingeOf(positions) : { x: 0, y: 0 };  // relative to the centre (the geometry is centred)
+      const node = new THREE.Group();
+      node.position.set(centre.x + hinge.x, centre.y + hinge.y, rest);
+      mesh.position.set(-hinge.x, -hinge.y, 0);
+      node.add(mesh);
+      node.visible = false;
       const outline = new THREE.LineSegments(new THREE.EdgesGeometry(geometry, 28),
         new THREE.LineBasicMaterial({ color: h.tone === "area" ? lookNow.areaEdge : lookNow.countEdge, transparent: true }));
       outline.renderOrder = 3;
@@ -530,11 +718,12 @@ export function Viewer3D({ meshUrl, groundUrl, imageUrl, highlights, visible, ho
         label.position.set(0, 0, (extent.max.z - extent.min.z) / 2);
         mesh.add(label);
       }
-      s.lit.add(mesh);
+      s.lit.add(node);
       const world = new THREE.Box3(
         new THREE.Vector3(extent.min.x, extent.min.z, -extent.max.y),
         new THREE.Vector3(extent.max.x, extent.max.z, -extent.min.y));
-      s.items.set(h.n, { mesh, label, tone: h.tone, born: 0, storey: element.storey, rest, box: world });
+      const swing = isDoor ? (h.n % 2 ? 1 : -1) * 1.12 : 0;
+      s.items.set(h.n, { node, swing, mesh, label, tone: h.tone, born: 0, storey: element.storey, rest, box: world });
       const lift = element.storey != null ? s.offsets.get(element.storey)?.target ?? 0 : 0;
       box.union(world.clone().translate(new THREE.Vector3(0, lift, 0)));
     }
@@ -559,7 +748,7 @@ export function Viewer3D({ meshUrl, groundUrl, imageUrl, highlights, visible, ho
     if (!box.isEmpty()) {
       const whole = lifted.getSize(new THREE.Vector3()).length();
       const part = box.getSize(new THREE.Vector3()).length();
-      s.fly(part < whole * 0.55 ? box.expandByScalar(Math.max(2, part * 0.25)) : lifted);
+      s.fly(!bare && part < whole * 0.55 ? box.expandByScalar(Math.max(2, part * 0.25)) : lifted);
     }
     s.spin(true);  // a slow turn shows depth; any touch stops it
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -572,8 +761,8 @@ export function Viewer3D({ meshUrl, groundUrl, imageUrl, highlights, visible, ho
     const now = performance.now();
     for (const [n, item] of s.items) {
       const show = visible.has(n);
-      if (show && !item.mesh.visible) item.born = now;
-      item.mesh.visible = show;
+      if (show && !item.node.visible) { item.born = now; item.node.rotation.z = 0; }
+      item.node.visible = show;
       if (item.label) item.label.visible = show;
     }
     s.redraw();
@@ -582,7 +771,7 @@ export function Viewer3D({ meshUrl, groundUrl, imageUrl, highlights, visible, ho
   useEffect(() => {
     const s = stage.current;
     if (!s) return;
-    const lookNow = LOOK;
+    const lookNow = look;
     for (const [n, item] of s.items) {
       const material = item.mesh.material as THREE.MeshStandardMaterial;
       const off = excluded.has(n);
@@ -610,12 +799,12 @@ export function Viewer3D({ meshUrl, groundUrl, imageUrl, highlights, visible, ho
   }, [focus]);
 
   return (
-    <div className="viewer3d">
+    <div className={`viewer3d${theme === "night" ? " night" : ""}`}>
       <div ref={host} className="stage3d" />
-      {status === "loading" && <div className="viewer-wait">Building the model…</div>}
-      {status !== "loading" && status !== "ready" && <div className="viewer-wait">{status}</div>}
-      {status === "ready" && <div className="viewer-info">{info} · drag to orbit, scroll to zoom</div>}
-      {status === "ready" && storeys > 1 && (
+      {status === "loading" && !bare && <div className="viewer-wait">Building the model…</div>}
+      {status !== "loading" && status !== "ready" && !bare && <div className="viewer-wait">{status}</div>}
+      {status === "ready" && !bare && <div className="viewer-info">{info} · drag to orbit, scroll to zoom</div>}
+      {status === "ready" && !bare && storeys > 1 && (
         <div className="tools upper">
           <button className={exploded ? "on" : ""} onClick={() => setExploded(!(exploded ?? false))}>
             {exploded ? "Stack storeys" : "Lift storeys apart"}

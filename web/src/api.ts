@@ -279,3 +279,29 @@ export function euro(value: number): string {
   if (value < 0.01) return `€${value.toFixed(4)}`;
   return `€${value.toFixed(3)}`;
 }
+
+// What the drawing says aloud: the number with what it counted, then how far to trust it.
+const SPOKEN_THINGS: [RegExp, string, string][] = [
+  [/door|ovi|ovea|tür|porte|uks/i, "door", "doors"],
+  [/window|ikkuna|fenster|fenêtre|aken/i, "window", "windows"],
+  [/toilet|wc-istui|toilette/i, "toilet", "toilets"],
+  [/sink|basin|allas|altaa/i, "sink", "sinks and basins"],
+  [/bedroom|makuuhuone|schlafzimmer/i, "bedroom", "bedrooms"],
+  [/shower|bathtub|suihku|kylpyamme/i, "shower or bathtub", "showers and bathtubs"],
+  [/sauna/i, "sauna", "saunas"],
+  [/balcon|parveke/i, "balcony", "balconies"],
+  [/kitchen|keittiö|küche/i, "kitchen", "kitchens"],
+];
+
+export function spoken(result: AskResult): string {
+  if (result.answer === null) return `I can't answer that reliably. ${result.reason ?? ""}`.trim();
+  const trust = result.state === "verified" ? "Verified. You don't need to double-check me."
+    : "Check this one: my evidence is marked on the drawing.";
+  if (result.unit === "count" && typeof result.answer === "number") {
+    const thing = SPOKEN_THINGS.find(([test]) => test.test(result.question));
+    const what = thing ? ` ${result.answer === 1 ? thing[1] : thing[2]}` : "";
+    return `I count ${formatValue(result.answer, result.unit)}${what}. ${trust}`;
+  }
+  const unit = result.unit === "m2" ? " square metres" : result.unit === "m3" ? " cubic metres" : result.unit === "m" ? " metres" : "";
+  return `${formatValue(result.answer, result.unit)}${unit}. ${trust}`;
+}
