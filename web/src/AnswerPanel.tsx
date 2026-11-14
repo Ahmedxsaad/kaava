@@ -74,10 +74,13 @@ function why(result: AskResult): { title: string; text: React.ReactNode } {
       return { title: "Why it needs a look", text: `The printed labels and the vision model give the same count. ${notVerified(result)}` };
     }
     if (result.coinciding) {
-      const { extra, distinct } = result.coinciding;
+      const { extra, distinct, outlines, counted } = result.coinciding;
+      const what = /door/i.test(result.interpreted ?? result.question) ? "door" : /window/i.test(result.interpreted ?? result.question) ? "window" : "item";
       return {
         title: "Why it needs a look",
-        text: `The drawing's file holds ${extra} of these outlines twice, exactly on top of another (a door between two units is listed for each). The dataset counts outlines, so the answer is ${result.answer}. Counted once per place it is ${distinct}. Which one you need depends on what you are ordering, so it is not marked Verified.`,
+        text: counted === "distinct"
+          ? `The drawing's file holds ${outlines} ${what} outlines, and ${extra} of them lie exactly on top of another: a ${what} between two units is listed once for each. That makes ${distinct} ${what}s, and the answer counts each one once. The dataset's own answer counts outlines (${outlines}), so no measured error rate covers this count and it is not marked Verified.`
+          : `The drawing's file holds ${extra} of these outlines twice, exactly on top of another (a ${what} between two units is listed for each). This answer counts outlines, as the dataset does: ${outlines}. Counted once per place it is ${distinct}. Which one you need depends on what you are ordering, so it is not marked Verified.`,
       };
     }
     if (result.restated?.question) {
@@ -183,6 +186,8 @@ function Compare({ result }: { result: AskResult }) {
   const reference = result.reference;
   const unit = result.unit ?? reference?.unit ?? null;
   const mark = (status: string | undefined) => (status === "correct" ? "right" : status === "wrong" ? "wrong" : "");
+  // Each place counted once, where the dataset counts every outline: the two numbers answer different questions.
+  const twice = result.coinciding?.counted === "distinct" && reference?.answer === result.coinciding.outlines ? result.coinciding : null;
   return (
     <section className="block compare">
       <table>
@@ -192,7 +197,7 @@ function Compare({ result }: { result: AskResult }) {
         <tbody>
           <tr className="ours">
             <td>{result.engine}{result.replayed_from ? ", logged" : ""}</td>
-            <td className={mark(reference?.status)}>{result.answer === null ? "—" : formatValue(result.answer, unit)}</td>
+            <td className={twice ? "" : mark(reference?.status)}>{result.answer === null ? "—" : formatValue(result.answer, unit)}</td>
             <td>{euro(result.cost_eur)}</td>
             <td>{time(result.latency_ms)}</td>
           </tr>
@@ -208,7 +213,7 @@ function Compare({ result }: { result: AskResult }) {
             <tr className="reference">
               <td>Dataset's answer</td>
               <td>{formatValue(reference.answer as number, reference.unit)}</td>
-              <td colSpan={2}>{reference.status === "correct" ? "matches ours" : reference.status === "wrong" ? "differs from ours" : reference.status === "abstained" ? "we did not answer" : "not graded"}</td>
+              <td colSpan={2}>{twice ? `counts outlines: ${twice.extra} lie on another` : reference.status === "correct" ? "matches ours" : reference.status === "wrong" ? "differs from ours" : reference.status === "abstained" ? "we did not answer" : "not graded"}</td>
             </tr>
           )}
         </tbody>
@@ -375,9 +380,11 @@ export function AnswerPanel(props: Props) {
         )}
       </div>
       {result.explanation && <p className="explain">{result.explanation}</p>}
-      {result.coinciding && settled && (
+      {result.coinciding && settled && (result.coinciding.counted === "distinct" ? (
+        <p className="twice">The file holds <b>{result.coinciding.outlines}</b> outlines, {result.coinciding.extra} exactly on another. The dataset's answer counts outlines: {result.coinciding.outlines}.</p>
+      ) : (
         <p className="twice"><b>{result.coinciding.distinct}</b> distinct places: {result.coinciding.extra} outline{result.coinciding.extra === 1 ? " is" : "s are"} in the file twice.</p>
-      )}
+      ))}
       {adjusted !== null && (
         <p className="adjusted">
           Without the {excluded.size} item{excluded.size === 1 ? "" : "s"} you left out:{" "}

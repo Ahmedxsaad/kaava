@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, type AskResult, type DrawingDetail, type Evidence, formatValue, headlineRun, places, type Run, type Stats } from "./api";
 import { type Stop, TOUR } from "./tour";
-import { type Direction, type Highlight, Viewer3D } from "./Viewer3D";
+import { type Direction, type Highlight, tintOf, Viewer3D } from "./Viewer3D";
 
-// The landing page is one stage. It opens by itself: a real drawing stands up into a model and
-// answers a question, before anyone clicks. Scrolling then tells the story: the page's scroll
-// position directs the model. Every figure on screen is the engine's own answer to a real
-// question, asked when the page loads.
+// The landing page is one stage. It opens by itself: a real drawing answers one question after
+// another, each counted item marked on the sheet as it is counted, before anyone clicks. Scrolling
+// then tells the story: the sheet becomes a model and the page's scroll position directs it. Every
+// figure on screen is the engine's own answer to a real question, asked when the page loads.
 
 const STOP = TOUR[0];
 const DOORS = "How many doors (interior doors and entrance doors together) are drawn on this floor plan?";
@@ -31,7 +31,7 @@ const counted = (result: AskResult | null): Evidence[] =>
 const VERDICT = { verified: "Verified", check: "Check this", declined: "Can't answer" } as const;
 
 // The opening's own clock: how long a question takes to type, to be answered, and to stay.
-const TYPE_MS = 30, COUNT_MS = 2100, HOLD_MS = 3400, STAND_MS = 1700;
+const TYPE_MS = 30, COUNT_MS = 2100, HOLD_MS = 3400, WAIT_MS = 700;
 
 interface Props {
   stats: Stats | null;
@@ -50,9 +50,8 @@ export function Story({ stats, onOpen, onAsk, onBrowse, onBring, onTalk, canTalk
   const [doors, setDoors] = useState<AskResult | null>(null);
   const [area, setArea] = useState<AskResult | null>(null);
   const [windows, setWindows] = useState<AskResult | null>(null);
-  const [flat, setFlat] = useState<string | null>(null);  // which apartment the area question is about
+  const [measured, setMeasured] = useState<{ says: string; chip: string; name: string } | null>(null);  // what the area question is about
   const [scan, setScan] = useState<{ drawing: DrawingDetail; answer: AskResult } | null>(null);
-  const [built, setBuilt] = useState<number | null>(null);  // when the model came on stage
 
   // The drawing, and real questions put to the engine.
   useEffect(() => {
@@ -60,11 +59,21 @@ export function Story({ stats, onOpen, onAsk, onBrowse, onBring, onTalk, canTalk
     api.drawing(STOP.drawing).then((drawing) => {
       if (!alive) return;
       setDetail(drawing);
-      const sum = drawing.suggested.find((q) => q.unit === "m2" && /net floor area of apartment [A-Z] /.test(q.question));
-      if (sum) {
-        setFlat(/apartment ([A-Z]) /.exec(sum.question)?.[1] ?? null);
-        api.ask(STOP.drawing, sum.question, false).then((answer) => alive && setArea(answer)).catch(() => undefined);
-      }
+      // The area question: rooms measured and added up. An apartment's rooms, or the rooms of one name;
+      // the first of them whose sum is Verified, if any is.
+      const flat = /net floor area of apartment ([A-Z]) /, named = /total net area in m² of all rooms labelled '([^']+)'/;
+      const sums = drawing.suggested.filter((q) => q.unit === "m2" && (flat.test(q.question) || named.test(q.question))).slice(0, 6);
+      Promise.all(sums.map((q) => api.ask(STOP.drawing, q.question, false).catch(() => null))).then((answers) => {
+        const several = (a: AskResult | null) => a !== null && counted(a).length >= 3;
+        const chosen = answers.find((a) => several(a) && a?.state === "verified") ?? answers.find(several) ?? answers.find((a) => a !== null);
+        if (!alive || !chosen) return;
+        const asked = sums[answers.indexOf(chosen)].question;
+        const letter = flat.exec(asked)?.[1], label = named.exec(asked)?.[1];
+        setMeasured(letter
+          ? { says: `What is the net area of apartment ${letter}?`, chip: `Measure apartment ${letter}`, name: `Apartment ${letter} measures` }
+          : { says: `What is the total area of the ${label} rooms?`, chip: `Measure the ${label} rooms`, name: `The rooms labelled ${label} measure` });
+        setArea(chosen);
+      });
     }).catch(() => undefined);
     api.ask(STOP.drawing, DOORS, false).then((answer) => alive && setDoors(answer)).catch(() => undefined);
     api.ask(STOP.drawing, WINDOWS, false).then((answer) => alive && setWindows(answer)).catch(() => undefined);
@@ -100,34 +109,47 @@ export function Story({ stats, onOpen, onAsk, onBrowse, onBring, onTalk, canTalk
   const chapter = Math.max(0, AT.findIndex((start, i) => p >= start && p < AT[i + 1]));
   const opening = p < OPENING;
 
-  // ---- the opening plays by itself: the model stands up, then answers one question after another
+  // ---- the opening plays by itself: the drawing answers one question after another
   const doorItems = useMemo(() => counted(doors), [doors]);
   const roomItems = useMemo(() => counted(area), [area]);
   const windowItems = useMemo(() => counted(windows), [windows]);
   const scenes = useMemo(() => [
     { key: "windows", chip: "Count the windows", says: "How many windows are on this floor?", unit: "windows", result: windows, items: windowItems },
-    { key: "area", chip: `Measure apartment ${flat ?? ""}`.trim(), says: `What is the net area of apartment ${flat ?? "B"}?`, unit: "m²", result: area, items: roomItems },
-    { key: "doors", chip: "Count the doors", says: "How many doors are on this floor?", unit: "door outlines", result: doors, items: doorItems },
-  ].filter((scene) => scene.result), [doors, area, windows, doorItems, roomItems, windowItems, flat]);
+    { key: "area", chip: measured?.chip ?? "Measure the rooms", says: measured?.says ?? "What is the area of these rooms?", unit: "m²", result: area, items: roomItems },
+    { key: "doors", chip: "Count the doors", says: "How many doors are on this floor?", unit: "doors", result: doors, items: doorItems },
+  ].filter((scene) => scene.result), [doors, area, windows, doorItems, roomItems, windowItems, measured]);
   const [sceneAt, setSceneAt] = useState(0);  // which question the opening is on
   const [sceneBegan, setSceneBegan] = useState(0);  // and when it began
   const [now, setNow] = useState(0);
   const [draft, setDraft] = useState<string | null>(null);  // the visitor's own words, once they type
+  // The part of the sheet that is drawn on: its rooms, with room around them for walls, door swings and balconies.
+  const frame = useMemo((): [number, number, number, number] => {
+    const view = detail?.view;
+    if (!view) return [0, 0, 1, 1];
+    const points = (detail?.rooms ?? []).flatMap((room) => room.points);
+    if (points.length < 3) return [0, 0, view.width, view.height];
+    const xs = points.map((point) => point[0]), ys = points.map((point) => point[1]);
+    const pad = 0.085 * Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys));
+    const x0 = Math.max(0, Math.min(...xs) - pad), y0 = Math.max(0, Math.min(...ys) - pad);
+    return [x0, y0, Math.min(view.width, Math.max(...xs) + pad) - x0, Math.min(view.height, Math.max(...ys) + pad) - y0];
+  }, [detail]);
+  const ready = scenes.length > 0 && detail !== null;
+  const [readyAt, setReadyAt] = useState(0);  // when the drawing and its first answer arrived
   useEffect(() => {
-    if (!opening || built === null) return;
+    if (!opening || !ready) return;
+    setReadyAt((t) => t || performance.now());
     const timer = window.setInterval(() => setNow(performance.now()), 34);
     return () => window.clearInterval(timer);
-  }, [opening, built]);
+  }, [opening, ready]);
   const scene = scenes.length ? scenes[sceneAt % scenes.length] : null;
-  const standing = built === null ? 0 : (now - built) / STAND_MS;  // 0 to 1 while the walls rise, then on
-  useEffect(() => {  // the first question begins once the model stands; each next one after the last has been shown
-    if (!opening || built === null || !scene || draft !== null) return;
-    if (!sceneBegan) { if (standing >= 1) setSceneBegan(now); return; }
+  useEffect(() => {  // the first question begins a moment after the sheet is there; each next one after the last has been shown
+    if (!opening || !ready || !scene || draft !== null || !now) return;
+    if (!sceneBegan) { if (now - readyAt >= WAIT_MS) setSceneBegan(now); return; }
     if (now - sceneBegan > scene.says.length * TYPE_MS + 400 + COUNT_MS + HOLD_MS) {
       setSceneAt((n) => n + 1);
       setSceneBegan(now);
     }
-  }, [now, opening, built, scene, sceneBegan, standing, draft]);
+  }, [now, opening, ready, readyAt, scene, sceneBegan, draft]);
   const sceneClock = sceneBegan ? now - sceneBegan : 0;
   const typing = scene ? scene.says.length * TYPE_MS + 400 : 0;
   const typed = scene && sceneBegan ? scene.says.slice(0, Math.floor(sceneClock / TYPE_MS)) : "";
@@ -140,34 +162,22 @@ export function Story({ stats, onOpen, onAsk, onBrowse, onBring, onTalk, canTalk
     : sceneShown;
   const pick = (index: number) => { setDraft(null); setSceneAt(index); setSceneBegan(performance.now()); };
 
-  // ---- where the model stands and where the camera is
+  // ---- where the model stands and where the camera is. It comes on after the opening, lying flat
+  // as the sheet it was (a picture), stands up (geometry), then is walked around.
   const direction: Direction = useMemo(() => {
-    if (opening) {
-      const t = built === null ? 0 : (now - built) / 1000;
-      return {
-        rise: smooth(0.15, STAND_MS / 1000, t),
-        tilt: 1.5 - 0.88 * smooth(0, 1.9, t),
-        turn: Math.PI / 2 + 0.5 * smooth(0, 2.2, t) + 0.045 * Math.max(0, t - 2),
-        back: 1.86, shift: 0, drop: 0.285,
-      };
-    }
-    // Scrolling: it lies down flat (a picture), stands up again (geometry), then is walked around.
-    const down = smooth(0.045, 0.125, p), up = smooth(0.25, 0.35, p);
+    const up = smooth(0.25, 0.35, p);
     return {
-      rise: clamp(1 - down + up),
-      tilt: 0.62 + 0.88 * (down - up) + 0.14 * smooth(0.72, 0.92, p),
-      turn: Math.PI / 2 + 0.5 * (1 - down) + 0.5 * up + 0.72 * linear(0.36, 1, p),
-      back: 1.86 - 0.56 * smooth(OPENING, 0.1, p),
-      shift: 0.2 * smooth(OPENING, 0.1, p),
-      drop: 0.285 * (1 - smooth(OPENING, 0.1, p)),
+      rise: up,
+      tilt: 1.5 - 0.88 * up + 0.14 * smooth(0.72, 0.92, p),
+      turn: (Math.PI / 2 + 0.5) * up + 0.72 * linear(0.36, 1, p),  // upright as the sheet was, then turned as it stands
+      back: 1.3, shift: 0.2, drop: 0,
     };
-  }, [opening, p, now, built]);
+  }, [p]);
 
-  // ---- what is lit: the opening's own question, or the chapter the scroll is in
-  const act = opening ? scene?.key ?? "rest" : chapter === 2 ? "doors" : chapter === 3 ? "area" : "rest";
-  const items = opening ? (sceneAsked ? scene?.items ?? [] : []) : act === "doors" ? doorItems : act === "area" ? roomItems : [];
-  const shown = opening ? sceneShown
-    : act === "doors" ? Math.round(linear(AT[2] + 0.085, AT[3] - 0.03, p) * doorItems.length)
+  // ---- what is lit on the model: the chapter the scroll is in
+  const act = chapter === 2 ? "doors" : chapter === 3 ? "area" : "rest";
+  const items = act === "doors" ? doorItems : act === "area" ? roomItems : [];
+  const shown = act === "doors" ? Math.round(linear(AT[2] + 0.085, AT[3] - 0.03, p) * doorItems.length)
     : act === "area" ? Math.round(linear(AT[3] + 0.03, AT[4] - 0.035, p) * roomItems.length) : 0;
   const highlights: Highlight[] = useMemo(() => places(items).flatMap((e) => {  // one leaf per place
     const id = e.kind === "element" ? e.id : e.ref;
@@ -202,8 +212,8 @@ export function Story({ stats, onOpen, onAsk, onBrowse, onBring, onTalk, canTalk
   script.current = [
     "I am a floor plan. Ask me anything.",
     `To a vision model I am only pixels. It looks, and it guesses${alone?.accuracy != null ? `: right ${Math.round(100 * alone.accuracy)} percent of the time` : ""}.`,
-    doors ? `But I am made of geometry. Watch me stand up. My file holds ${doorItems.length} door outlines${twice ? `, in ${twice.distinct} places: ${twice.extra} are drawn twice, and I say so` : ", each one counted"}.` : "",
-    area && typeof area.answer === "number" ? `Apartment ${flat ?? ""} measures ${area.answer.toFixed(1)} square metres. Every room is measured, then added up.` : "",
+    doors ? `But I am made of geometry. Watch me stand up. I have ${doorItems.length} doors${twice ? `. My file holds ${twice.outlines} outlines for them, ${twice.extra} lying exactly on another, and I say so` : ", each one counted"}.` : "",
+    area && typeof area.answer === "number" ? `${measured?.name ?? "These rooms measure"} ${area.answer.toFixed(1)} square metres. Every room is measured, then added up.` : "",
     scan ? `This one is only a scan, with no geometry to read. So Gemini points, and the code counts: ${boxes.length} windows. Check that one.` : "",
     "And I tell you how far to trust me. Verified, check this, or no number at all.",
     ours?.accuracy != null ? `${(100 * ours.accuracy).toFixed(1)} percent of my answers are right${cheaper ? ", at less than half the cost of a vision model" : ""}. Now, ask me something.` : "",
@@ -278,7 +288,7 @@ export function Story({ stats, onOpen, onAsk, onBrowse, onBring, onTalk, canTalk
     <section className="story" ref={section} style={{ height: `${CHAPTERS * 105}vh` }}>
       <div className={`story-pin tone-${chapter}`}>
         <div className="aurora" aria-hidden><i /><i /><i /></div>
-        <div className={`story-stage${chapter === 4 ? " away" : ""}`}>
+        <div className={`story-stage${chapter === 4 ? " away" : ""}${p < 0.05 ? " wait" : ""}`}>
           {detail?.mesh && (
             <Viewer3D
               key={detail.mesh}
@@ -290,16 +300,15 @@ export function Story({ stats, onOpen, onAsk, onBrowse, onBring, onTalk, canTalk
               hover={null}
               focus={null}
               excluded={NONE}
-              focusKey={`${opening ? "o" : "s"}|${act}|${highlights.length}`}
+              focusKey={`s|${act}|${highlights.length}`}
               theme="night"
               bare
               direct={direction}
-              tags={!opening}
-              onReady={() => { const t = performance.now(); setBuilt(t); setNow(t); }}
+              tags
             />
           )}
         </div>
-        <div className={`story-shade${p < 0.06 ? " opening" : ""}`} />
+        <div className="story-shade" />
         {scan && (
           <div className={`story-scan${chapter === 4 ? " on" : ""}`}>
             <svg viewBox={`0 0 ${scan.drawing.view.width} ${scan.drawing.view.height}`} role="img" aria-label="A scanned plan with each window boxed">
@@ -319,43 +328,61 @@ export function Story({ stats, onOpen, onAsk, onBrowse, onBring, onTalk, canTalk
           </div>
         )}
 
-        {/* The opening: one line, an ask bar that works, and the model answering below it. */}
+        {/* The opening: the promise and an ask bar that works on the left; on the right the drawing
+            itself, each counted item marked on the sheet as it is counted, and the answer card. */}
         <div className={`hero${p < 0.045 ? " on" : ""}`}>
-          <p className="tag"><i />Junction 2026 · Stoa · Make Blueprints Talk</p>
-          <h1>Ask a drawing.<br /><em>Watch it answer.</em></h1>
-          <form className="ask" onSubmit={submit}>
-            <div className="bar">
-              {canTalk && (
-                <button type="button" className="mic" onClick={() => onTalk(STOP)} aria-label="Ask it aloud" title="Ask it aloud">
-                  <svg viewBox="0 0 24 24" aria-hidden><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" /></svg>
-                </button>
-              )}
-              <input
-                value={draft ?? typed}
-                onChange={(e) => setDraft(e.target.value)}
-                onFocus={() => setDraft((words) => words ?? "")}
-                onBlur={() => setDraft((words) => (words ? words : null))}
-                placeholder="Ask this floor plan anything"
-                spellCheck={false}
-                aria-label="Ask this floor plan a question"
-              />
-              <button type="submit" className="go">Ask</button>
-            </div>
-            <div className={`reply${sceneAsked && draft === null ? " on" : ""}${sceneDone ? " done" : ""}`} aria-live="polite">
-              <strong>{sceneFigure === null ? " " : formatValue(sceneFigure, scene?.key === "area" ? "m2" : "count")}</strong>
-              <span className="unit">{scene?.unit}</span>
-              <span className={`verdict ${scene?.result?.state ?? "check"}`}><i />{VERDICT[scene?.result?.state ?? "check"]}</span>
-              <em>{scene?.result?.coinciding
-                ? `${scene.result.coinciding.extra} are in the file twice: ${scene.result.coinciding.distinct} distinct doors`
-                : `${scene?.result?.engine ?? ""} · €0 · computed, not generated`}</em>
-            </div>
-            <div className="chips">
-              <span>Try</span>
+          <div className="hero-say">
+            <p className="tag">Junction 2026 · Stoa · Make Blueprints Talk</p>
+            <h1>Ask a drawing.<br /><em>Watch it answer.</em></h1>
+            <p className="lede">Every number is computed from the drawing's own geometry, marked on the sheet, and says how far to trust it.</p>
+            <form className="ask" onSubmit={submit}>
+              <div className="bar">
+                {canTalk && (
+                  <button type="button" className="mic" onClick={() => onTalk(STOP)} aria-label="Ask it aloud" title="Ask it aloud">
+                    <svg viewBox="0 0 24 24" aria-hidden><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" /></svg>
+                  </button>
+                )}
+                <input
+                  value={draft ?? typed}
+                  onChange={(e) => setDraft(e.target.value)}
+                  onFocus={() => setDraft((words) => words ?? "")}
+                  onBlur={() => setDraft((words) => (words ? words : null))}
+                  placeholder="Ask this floor plan anything"
+                  spellCheck={false}
+                  aria-label="Ask this floor plan a question"
+                />
+                <button type="submit" className="go">Ask</button>
+              </div>
+              <div className={`reply${sceneAsked && draft === null ? " on" : ""}${sceneDone ? " done" : ""}`} aria-live="polite">
+                <strong>{sceneFigure === null ? " " : formatValue(sceneFigure, scene?.key === "area" ? "m2" : "count")}</strong>
+                <span className="unit">{scene?.unit}</span>
+                <span className={`verdict ${scene?.result?.state ?? "check"}`}><i />{VERDICT[scene?.result?.state ?? "check"]}</span>
+              </div>
+            </form>
+            <div className="tries">
               {scenes.map((option, index) => (
                 <button type="button" key={option.key} className={draft === null && scene?.key === option.key ? "on" : ""} onClick={() => pick(index)}>{option.chip}</button>
               ))}
             </div>
-          </form>
+          </div>
+          {detail && detail.view.url && (
+            <div className="hero-show" style={{ aspectRatio: `${frame[2]} / ${frame[3]}` }}>
+              <div className="hero-sheet">
+                <Sheet detail={detail} frame={frame} items={sceneAsked ? scene?.items ?? [] : []} shown={sceneShown} state={scene?.result?.state ?? "check"} />
+              </div>
+              <div className={`hero-card ${scene?.result?.state ?? "check"}${sceneAsked ? " on" : ""}${sceneDone ? " done" : ""}`} aria-hidden>
+                <p className="verdict"><i />{VERDICT[scene?.result?.state ?? "check"]}</p>
+                <p className="figure">
+                  <strong>{sceneFigure === null ? " " : formatValue(sceneFigure, scene?.key === "area" ? "m2" : "count")}</strong>
+                  <span>{scene?.unit}</span>
+                </p>
+                <p className="how">{scene?.result?.coinciding
+                  ? `The file holds ${scene.result.coinciding.outlines} outlines, ${scene.result.coinciding.extra} on top of another. Each door is counted once.`
+                  : scene?.key === "area" ? `${scene.items.length} rooms measured and added up`
+                  : "Counted from the drawing's geometry"}</p>
+              </div>
+            </div>
+          )}
         </div>
         <div className={`hero-foot${p < 0.045 ? " on" : ""}`}>
           <button className="cue" onClick={() => go(1)}><i />Scroll to see how</button>
@@ -384,15 +411,16 @@ export function Story({ stats, onOpen, onAsk, onBrowse, onBring, onTalk, canTalk
               <p className="said"><span>How many doors are on this floor?</span></p>
               <div className="reply">
                 <strong>{doors ? (act === "doors" ? shown : doorItems.length) : " "}</strong>
-                <span className="unit">door outlines</span>
+                <span className="unit">doors</span>
                 <span className={`verdict ${doors?.state ?? "check"}`}><i />{VERDICT[doors?.state ?? "check"]}</span>
               </div>
               <p className="how">{doors?.engine ?? "Geometry"} · €0 · counted from the drawing, not generated</p>
             </div>
             {twice ? (
               <p className="sub small">
-                Every door is an outline in the drawing's file, and it opens as it is counted. This file holds <b>{twice.extra} doors twice</b>:
-                {" "}{twice.distinct} distinct doors. A guess would never notice. Here it is said, and the answer asks for a look.
+                Every door opens as it is counted. This drawing's file holds <b>{twice.outlines} door outlines</b>, {twice.extra} of them exactly
+                on top of another: a door between two flats is listed for each. A guess would never notice. We count <b>{twice.distinct} doors</b>,
+                say why, and ask for a look.
               </p>
             ) : (
               <p className="sub small">Every door is an outline in the drawing. Each one opens as it is counted, numbered where you can check it.</p>
@@ -403,7 +431,7 @@ export function Story({ stats, onOpen, onAsk, onBrowse, onBring, onTalk, canTalk
             <p className="step">03</p>
             <h2>Measure. Don't estimate.</h2>
             <div className={`live asked${areaDone && area ? " done" : ""}`}>
-              <p className="said"><span>What is the net area of apartment {flat ?? "B"}?</span></p>
+              <p className="said"><span>{measured?.says ?? "What is the area of these rooms?"}</span></p>
               <div className="reply">
                 <strong>{area ? formatValue(areaDone && typeof area.answer === "number" ? area.answer : sum, "m2") : " "}</strong>
                 <span className="unit">m²</span>
@@ -411,7 +439,7 @@ export function Story({ stats, onOpen, onAsk, onBrowse, onBring, onTalk, canTalk
               </div>
               <p className="how sum">{terms.length ? terms.join(" + ") : " "}</p>
             </div>
-            <p className="sub small">Every room is a polygon. Its area is computed and added up, balconies left out as the question asks.</p>
+            <p className="sub small">Every room is a polygon. Its area is computed from its outline, and the rooms the question names are added up.</p>
           </article>
 
           <article className={chapter === 4 ? "on" : ""}>
@@ -464,8 +492,41 @@ export function Story({ stats, onOpen, onAsk, onBrowse, onBring, onTalk, canTalk
             <button key={i} className={i === chapter ? "on" : ""} onClick={() => go(i)} aria-label={`Chapter ${i + 1}`} />
           ))}
         </nav>
-        <p className="story-credit">{(chapter === 4 ? scan?.drawing.title : detail?.title) ?? ""} · a real drawing from the dataset, {chapter === 4 ? "its logged answer shown" : "answered live"}</p>
+        <p className="story-credit">{(chapter === 4 ? scan?.drawing.title : detail?.title) ?? ""} · {(chapter === 4 ? scan?.drawing.credit : detail?.credit) || "a real drawing from the dataset"} · {chapter === 4 ? "its logged answer shown" : "answered live"}</p>
       </div>
     </section>
+  );
+}
+
+// The drawing itself, answering: each counted item is marked on the sheet as it is counted.
+// A counted item is a numbered box; a measured room is filled in the colour of its use, with its area.
+function Sheet({ detail, frame, items, shown, state }: { detail: DrawingDetail; frame: [number, number, number, number]; items: Evidence[]; shown: number; state: string }) {
+  const { width, height, url } = detail.view;
+  const u = frame[2] / 430;  // one screen pixel of the sheet, roughly, in the drawing's pixels
+  return (
+    <svg viewBox={frame.join(" ")} role="img" aria-label="The floor plan, each counted item marked on it">
+      <image href={url ?? undefined} width={width} height={height} />
+      {items.slice(0, shown).map((e) => {
+        if (e.kind === "polygon" && e.points?.length) {
+          const cx = e.points.reduce((sum, point) => sum + point[0], 0) / e.points.length;
+          const cy = e.points.reduce((sum, point) => sum + point[1], 0) / e.points.length;
+          return (
+            <g key={`room-${e.n}`} className="room">
+              <polygon points={e.points.map(([x, y]) => `${x},${y}`).join(" ")} fill={`#${tintOf(e.label ?? "").toString(16).padStart(6, "0")}`} strokeWidth={1.4 * u} />
+              {e.area_m2 != null && <text x={cx} y={cy + 4 * u} textAnchor="middle" fontSize={11.5 * u}>{e.area_m2.toFixed(2)}</text>}
+            </g>
+          );
+        }
+        if (!e.bbox) return null;
+        const [x0, y0, x1, y1] = e.bbox;
+        return (
+          <g key={`item-${e.n}`} className={`pin ${state}`}>
+            <rect x={x0 - 3 * u} y={y0 - 3 * u} width={x1 - x0 + 6 * u} height={y1 - y0 + 6 * u} rx={3.5 * u} strokeWidth={2.2 * u} />
+            <circle cx={x0 - 3 * u} cy={y0 - 3 * u} r={7.6 * u} strokeWidth={1.4 * u} />
+            <text x={x0 - 3 * u} y={y0 - 3 * u + 3 * u} textAnchor="middle" fontSize={8.6 * u}>{e.n}</text>
+          </g>
+        );
+      })}
+    </svg>
   );
 }

@@ -135,7 +135,8 @@ const ROOM_TINTS: [RegExp, number][] = [
 ];
 const ROOM_PLAIN = 0xf3ede2;
 
-function tintOf(name: string): number {
+// The colour of a room by its use: the same on the model and on the sheet.
+export function tintOf(name: string): number {
   for (const [test, colour] of ROOM_TINTS) if (test.test(name)) return colour;
   return ROOM_PLAIN;
 }

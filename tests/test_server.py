@@ -104,22 +104,24 @@ def test_plan_view_and_evidence_share_one_pixel_space(client):
     assert view["kind"] == "plan" and view["aligned"] and detail["rooms"]
     assert client.get(view["url"]).headers["content-type"] == "image/png"
     answer = ask(client, SWISS, DOORS)
-    # Seven of this floor's 36 door outlines lie exactly on another: counted as the dataset counts,
-    # said out loud, and for that reason an answer to look at, not a Verified one.
+    # Seven of this floor's 36 door outlines lie exactly on another. Each door is counted once: 29.
+    # The dataset's answer counts outlines (36), so the answer is one to look at, not a Verified one.
     assert answer["state"] == "check" and answer["cost_eur"] == 0
-    assert answer["coinciding"] == {"extra": 7, "distinct": 29}
-    assert sum(1 for e in answer["evidence"] if e.get("same_as") is not None) == 7
-    windows = ask(client, SWISS, "How many bathtubs are drawn on this floor plan?")
-    assert windows["state"] == "verified" and windows["coinciding"] is None  # nothing coincides: Verified as before
+    assert answer["coinciding"] == {"outlines": 36, "distinct": 29, "extra": 7, "counted": "distinct"}
+    assert answer["reference"]["answer"] == 36 and answer["reference"]["status"] == "wrong"
+    tubs = ask(client, SWISS, "How many bathtubs are drawn on this floor plan?")
+    assert tubs["state"] == "verified" and tubs["coinciding"] is None  # nothing coincides: Verified as before
+    assert tubs["answer"] == tubs["reference"]["answer"]
     boxes = [e for e in answer["evidence"] if e["kind"] == "box"]
-    assert len(boxes) == answer["answer"] == answer["reference"]["answer"]
+    assert len(boxes) == answer["answer"] == 29 and sum(e.get("times", 1) for e in boxes) == 36
+    assert not any("same_as" in e for e in boxes)  # one mark per door
     assert [e["n"] for e in boxes] == list(range(1, len(boxes) + 1))
     for e in boxes:
         x0, y0, x1, y1 = e["bbox"]
         assert 0 <= x0 < x1 <= view["width"] and 0 <= y0 < y1 <= view["height"]
         assert e["ref"].startswith("door-")
     assert answer["verified_because"] is None
-    why = windows["verified_because"]  # the proof behind an answer that is Verified
+    why = tubs["verified_because"]  # the proof behind an answer that is Verified
     assert why["error_upper_bound"] < 0.01 and why["calibration_answers"] > 1000
 
 

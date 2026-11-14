@@ -800,10 +800,10 @@ class Service:
             "checks": _checks(ans),
             "verified_because": ans.meta.get("verified_because"),
             "family": self._family_stats(ans),
-            "evidence": (evidence := self._evidence(ans, view, drawing)),
-            # Outlines that lie exactly on another: how many, and how many distinct places are left.
-            "coinciding": ({"extra": extra, "distinct": sum(1 for e in evidence if e.get("n") is not None) - extra}
-                           if (extra := sum(1 for e in evidence if e.get("same_as") is not None)) else None),
+            "evidence": self._evidence(ans, view, drawing),
+            # Outlines that lie exactly on another: how many the file holds, how many distinct places
+            # that is, and which of the two the answer counts.
+            "coinciding": _coinciding(ans),
             "can_use_model": can_confirm or (not exact and not ans.method.startswith("vlm")
                                              and (ans.answer is None or router.is_weak(ans))),
             "can_confirm": can_confirm,
@@ -889,6 +889,8 @@ class Service:
             elif space == "dxf_m" and kind == "box":
                 n += 1
                 entry = {"kind": "box", "n": n, "ref": _box_ref(index, item["bbox"]), "label": item.get("label", "")}
+                if item.get("times"):
+                    entry["times"] = item["times"]  # this many outlines lie here; the place is counted once
                 if entry["ref"]:
                     if entry["ref"] in first_at:
                         entry["same_as"] = first_at[entry["ref"]]  # lies exactly on that earlier item
@@ -1058,6 +1060,15 @@ def _quote(text: str) -> str:
     from urllib.parse import quote
 
     return quote(text, safe="")
+
+
+def _coinciding(ans: Answer) -> dict | None:
+    """The file holds some counted outlines more than once: both counts, and which one is the answer."""
+    twice = ans.meta.get("coinciding")
+    if not twice:
+        return None
+    return {"outlines": twice["outlines"], "distinct": twice["distinct"],
+            "extra": twice["outlines"] - twice["distinct"], "counted": twice["counted"]}
 
 
 def _engine_label(method: str) -> str:

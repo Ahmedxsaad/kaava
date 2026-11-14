@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, headlineRun, type Run, SOURCE_NAMES, type StatRow, type Stats } from "./api";
+import { api, countsAsDataset, headlineRun, type Run, SOURCE_NAMES, type StatRow, type Stats } from "./api";
 
 // Every figure on this page is read from results/leaderboard.csv through /api/stats.
 
@@ -191,9 +191,15 @@ export function Numbers() {
   const enginesDev = [...runs].reverse().find((r) => r.method === "router:v1" && r.split === "dev" && r.dataset === "junction-dataset")
     ?? [...runs].reverse().find((r) => r.method === "router:v1" && r.split === "dev");
   const b = overall(baseline), o = overall(ours), e = overall(enginesDev);
+  // The same system counting each door once (what the app answers), scored against the dataset's answers.
+  const once = ours && countsAsDataset(ours) ? overall(headlineRun(runs, "app")) : undefined;
   // Scans measured again on fresh development drawings (the prompt for scans was tuned on the 200's scans).
-  const fresh = (prefix: string) => overall([...runs].reverse().find((r) => r.method.startsWith(prefix) && r.sample === "dev_scans_fresh_100"));
-  const freshScans = fresh("router:v1+fallback"), freshAlone = fresh("vlm-pointing");
+  const freshRun = [...runs].reverse().find((r) => r.method.startsWith("router:v1+fallback") && r.sample === "dev_scans_fresh_100");
+  const freshScans = overall(freshRun);
+  // The model marking items on its own, in the same setting the system used (other settings were also measured).
+  const setting = /\[([^\]]+?)(?: then [^\]]*)?\]/.exec(freshRun?.method ?? "")?.[1];
+  const freshAlone = overall([...runs].reverse().find((r) => r.sample === "dev_scans_fresh_100"
+    && (setting ? r.method === setting : r.method.startsWith("vlm-pointing"))));
   const scanShare = (() => {
     const all = stats.full_set_mix.reduce((sum, m) => sum + m.questions, 0) || 1;
     return stats.full_set_mix.filter((m) => m.source === "cubicasa5k").reduce((sum, m) => sum + m.questions, 0) / all;
@@ -216,7 +222,7 @@ export function Numbers() {
         </header>
 
         <section className="n-tiles">
-          <div className="n-tile hero">
+          <div className="n-tile">
             <span>Correct answers, same {int(o?.n)} questions</span>
             <strong>{pct(o?.accuracy)}</strong>
             <em>Vision model alone ({model}): <b>{pct(b?.accuracy)}</b></em>
@@ -246,6 +252,14 @@ export function Numbers() {
             <b>{pct(weighted(baseline)?.accuracy)}</b> for the vision model alone.
           </p>
           <Dumbbell before={families(baseline)} after={families(ours)} mix={stats.full_set_mix} onTip={setTip} />
+          {once?.accuracy != null && o?.accuracy != null && (
+            <p className="n-aside">
+              A door between two flats is in a drawing's file once for each flat, and the dataset's answers count it
+              twice. The figures here count as the dataset does. The app counts each door once and says so: scored
+              against the dataset's answers that is <b>{pct(once.accuracy)}</b> on the same questions
+              ({int(once.correct)} of {int(once.n)} instead of {int(o.correct)}). Those answers are never marked Verified.
+            </p>
+          )}
           {freshScans && (
             <p className="n-aside">
               The scan prompt was tuned on this sample's scans, so they were measured again on {int(freshScans.n)} scan

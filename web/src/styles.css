@@ -75,10 +75,7 @@ h1, h2 { font-family: var(--serif); font-weight: 650; letter-spacing: -0.028em; 
 /* ---------------------------------------------------------------- home */
 .home { width: 100%; padding: 0 0 96px; }
 .home-rest { max-width: 1280px; margin: 0 auto; padding: 84px 48px 0; }
-.hero { padding: 104px 0 72px; max-width: 880px; }
 .eyebrow { font-size: 13px; font-weight: 500; color: var(--ink-3); letter-spacing: 0.01em; margin-bottom: 22px; }
-.hero h1 { font-size: clamp(44px, 5.4vw, 76px); line-height: 1.02; }
-.hero .sub { font-size: 20px; line-height: 1.5; color: var(--ink-2); max-width: 660px; margin-top: 26px; }
 .actions { display: flex; align-items: center; gap: 22px; margin-top: 34px; }
 .actions .primary { padding: 12px 22px; font-size: 16px; }
 .actions .quiet { font-weight: 500; color: var(--ink-2); }
@@ -542,7 +539,7 @@ h1, h2 { font-family: var(--serif); font-weight: 650; letter-spacing: -0.028em; 
 .story-scan svg { width: 100%; height: 100%; background: #fff; border-radius: 6px; box-shadow: 0 40px 80px -30px rgb(0 0 0 / 0.6), 0 2px 0 rgb(255 255 255 / 0.5) inset; padding: 2.5%; }
 .story-scan .box rect { fill: rgb(240 122 20 / 0.14); stroke: #e8690a; animation: boxin 0.35s cubic-bezier(0.2, 0.9, 0.2, 1.3) both; transform-box: fill-box; transform-origin: center; }
 .story-scan .box circle { fill: #011e01; stroke: #fff; stroke-width: 1.5; }
-.story-scan .box text { fill: #fff; font: 600 10px var(--sans); }
+.story-scan .box text { fill: #fff; font-family: var(--sans); font-weight: 600; }
 @keyframes boxin { from { transform: scale(1.6); opacity: 0; } to { transform: none; opacity: 1; } }
 .story-stage .viewer3d { position: absolute; inset: 0; }
 .story-shade { position: absolute; inset: 0; pointer-events: none;
@@ -694,37 +691,73 @@ html[data-on-stage] .app.page-home .top .ghost { color: rgb(255 255 255 / 0.8); 
 .numbers { overflow-x: clip; }
 
 /* ---------------------------------------------------------------- the opening screen
-   One line, an ask bar that works, and the model answering under it, on slow drifting colour. */
-.aurora { position: absolute; inset: -12%; pointer-events: none; filter: blur(80px); opacity: 0.95; transition: opacity 1s ease; }
+   The promise and an ask bar that works on the left. On the right the drawing itself: each counted
+   item is marked on the sheet as it is counted, and the answer stands on the colour of its state. */
+.aurora { position: absolute; inset: -12%; pointer-events: none; filter: blur(90px); opacity: 0.7; transition: opacity 1s ease; }
 .aurora i { position: absolute; border-radius: 50%; mix-blend-mode: screen; animation: drift 24s ease-in-out infinite alternate; }
 .aurora i:nth-child(1) { width: 48vw; height: 48vw; left: 2%; top: -14%; background: radial-gradient(circle, #19c26b 0%, rgb(25 194 107 / 0) 62%); opacity: 0.5; }
 .aurora i:nth-child(2) { width: 54vw; height: 54vw; right: -8%; top: 6%; background: radial-gradient(circle, #2f6bff 0%, rgb(47 107 255 / 0) 62%); opacity: 0.5; animation-delay: -8s; }
-.aurora i:nth-child(3) { width: 44vw; height: 44vw; left: 28%; bottom: -26%; background: radial-gradient(circle, #ff7a1a 0%, rgb(255 122 26 / 0) 60%); opacity: 0.42; animation-delay: -15s; }
+.aurora i:nth-child(3) { display: none; }
 @keyframes drift { from { transform: translate(0, 0) scale(1); } to { transform: translate(5%, 7%) scale(1.16); } }
 .story-pin:not(.tone-0) .aurora { opacity: 0.28; }
-.story-shade.opening { background: linear-gradient(180deg, rgb(2 12 7 / 0.55) 0%, rgb(2 12 7 / 0.2) 44%, rgb(2 12 7 / 0) 66%); }
+.story-stage.wait { opacity: 0; pointer-events: none; }
 
-.hero { position: absolute; left: 50%; top: clamp(74px, 9.5vh, 116px); width: min(960px, 92vw); text-align: center; pointer-events: none;
-  opacity: 0; visibility: hidden; transform: translate(-50%, -22px);
+.hero { position: absolute; inset: 0; display: grid; grid-template-columns: minmax(0, 1.04fr) minmax(0, 0.96fr); align-items: center; column-gap: 28px;
+  padding: 84px max(48px, calc((100vw - 1400px) / 2 + 48px)) 78px; pointer-events: none;
+  opacity: 0; visibility: hidden; transform: translateY(-22px);
   transition: opacity 0.4s ease, transform 0.6s cubic-bezier(0.2, 0.8, 0.2, 1), visibility 0s 0.4s; }
-.hero.on { opacity: 1; visibility: visible; transform: translate(-50%, 0); transition-delay: 0s; pointer-events: auto; }
-.hero .tag { display: inline-flex; align-items: center; gap: 9px; padding: 7px 15px; border-radius: 99px; font-size: 13.5px; font-weight: 500; color: rgb(255 255 255 / 0.84);
-  background: rgb(255 255 255 / 0.08); border: 1px solid rgb(255 255 255 / 0.16); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
-.hero .tag i { width: 7px; height: 7px; border-radius: 50%; background: #57d36a; box-shadow: 0 0 0 4px rgb(87 211 106 / 0.2); }
-.hero h1 { margin-top: 20px; font-size: clamp(50px, 6.3vw, 104px); line-height: 0.98; letter-spacing: -0.03em; font-weight: 700; color: #fff; }
+.hero.on { opacity: 1; visibility: visible; transform: none; transition-delay: 0s; pointer-events: auto; }
+.hero-say { min-width: 0; }
+.hero .lede { margin-top: 24px; max-width: 520px; font-size: 19px; line-height: 1.5; color: rgb(255 255 255 / 0.72); text-wrap: balance; }
+/* The sheet: the real drawing on paper */
+.hero-show { position: relative; justify-self: end; margin-right: 26px; height: min(77vh, 800px); max-width: 100%; }
+.hero-sheet { position: absolute; inset: 0; padding: 2.6%; border-radius: 12px; background: #fff;
+  box-shadow: 0 50px 100px -50px rgb(0 0 0 / 0.8); animation: sheetin 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+@keyframes sheetin { from { opacity: 0; transform: translateY(28px); } to { opacity: 1; transform: none; } }
+.hero-sheet svg { display: block; width: 100%; height: 100%; }
+.hero-sheet .pin rect, .hero-sheet .pin circle, .hero-sheet .room polygon { animation: boxin 0.35s cubic-bezier(0.2, 0.9, 0.2, 1.3) both; transform-box: fill-box; transform-origin: center; }
+.hero-sheet .pin rect { fill: rgb(240 122 20 / 0.16); stroke: #e8690a; }
+.hero-sheet .pin circle { fill: #1c1206; stroke: #fff; }
+.hero-sheet .pin.verified rect { fill: rgb(22 163 74 / 0.18); stroke: #12903d; }
+.hero-sheet .pin.verified circle { fill: #06310f; }
+.hero-sheet .pin text { fill: #fff; font-family: var(--sans); font-weight: 600; animation: fadein 0.3s 0.1s both; }
+.hero-sheet .room polygon { stroke: rgb(20 30 22 / 0.55); mix-blend-mode: multiply; }
+.hero-sheet .room text { fill: #14201a; font-family: var(--sans); font-weight: 700; font-variant-numeric: tabular-nums; paint-order: stroke; stroke: rgb(255 255 255 / 0.85); stroke-width: 0.28em; stroke-linejoin: round; animation: fadein 0.3s 0.1s both; }
+@keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
+
+/* The answer, standing on the colour of its state, laid over the sheet's corner */
+.hero-card { position: absolute; left: -55%; bottom: 6%; width: clamp(232px, 60%, 280px); padding: 18px 22px 20px; border-radius: 20px; color: var(--card-ink); background: var(--card-bg);
+  box-shadow: 0 30px 60px -28px rgb(0 0 0 / 0.75);
+  opacity: 0; transform: translateY(14px); transition: opacity 0.3s ease, transform 0.5s cubic-bezier(0.2, 0.8, 0.2, 1), background 0.3s; }
+.hero-card.on { opacity: 1; transform: none; }
+.hero-card.verified { --card-bg: linear-gradient(150deg, #17802f 0%, #0b4a1a 72%); --card-ink: #fff; --card-soft: rgb(255 255 255 / 0.8); --pill-bg: #fff; --pill-ink: #0f5a20; }
+.hero-card.check { --card-bg: linear-gradient(150deg, #ffd35c 0%, #f6b62e 75%); --card-ink: #2b1d00; --card-soft: rgb(43 29 0 / 0.74); --pill-bg: #2b1d00; --pill-ink: #ffd35c; }
+.hero-card.declined { --card-bg: linear-gradient(150deg, #d5524f 0%, #a93535 75%); --card-ink: #fff; --card-soft: rgb(255 255 255 / 0.8); --pill-bg: #fff; --pill-ink: #a93535; }
+.hero-card .verdict { display: inline-flex; align-items: center; gap: 8px; padding: 6px 13px; border-radius: 99px; font-size: 13.5px; font-weight: 600; background: var(--pill-bg); color: var(--pill-ink);
+  opacity: 0; transform: scale(0.86); transition: opacity 0.25s, transform 0.45s cubic-bezier(0.2, 0.9, 0.2, 1.4); }
+.hero-card .verdict i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.hero-card.done .verdict { opacity: 1; transform: none; }
+.hero-card .figure { display: flex; align-items: baseline; gap: 10px; margin-top: 12px; }
+.hero-card .figure strong { font: 700 68px/0.95 var(--serif); letter-spacing: -0.045em; font-variant-numeric: lining-nums tabular-nums; }
+.hero-card .figure span { font-size: 19px; font-weight: 500; color: var(--card-soft); }
+.hero-card .how { margin-top: 10px; font-size: 13.5px; line-height: 1.45; color: var(--card-soft); }
+
+.hero .tag { font-size: 14px; font-weight: 500; letter-spacing: 0.01em; color: rgb(255 255 255 / 0.56); }
+.hero h1 { margin-top: 22px; font-size: clamp(44px, 5.5vw, 92px); line-height: 0.98; letter-spacing: -0.035em; font-weight: 700; color: #fff; white-space: nowrap; }
 .hero h1 em { font-style: normal; background: linear-gradient(92deg, #ffc35a 0%, #ff7a1a 48%, #ff5d8f 100%); -webkit-background-clip: text; background-clip: text; color: transparent;
   padding-right: 0.06em; }
 
-.ask { margin: 26px auto 0; width: min(660px, 100%); border-radius: 22px; overflow: hidden; text-align: left; background: rgb(255 255 255 / 0.1);
-  border: 1px solid rgb(255 255 255 / 0.22); -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px); box-shadow: 0 30px 80px -30px rgb(0 0 0 / 0.65); }
-.ask .bar { display: flex; align-items: center; gap: 8px; padding: 9px 9px 9px 14px; }
+.ask { margin: 32px 0 0; width: min(560px, 100%); border-radius: 18px; overflow: hidden; text-align: left; background: rgb(255 255 255 / 0.08);
+  border: 1px solid rgb(255 255 255 / 0.2); -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px); transition: border-color 0.2s, background 0.2s; }
+.ask:focus-within { border-color: rgb(255 255 255 / 0.5); background: rgb(255 255 255 / 0.11); }
+.ask .bar { display: flex; align-items: center; gap: 8px; padding: 8px 8px 8px 12px; }
 .ask .mic { width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center; color: rgb(255 255 255 / 0.8); flex: none; transition: background 0.2s, color 0.2s; }
 .ask .mic:hover { background: rgb(255 255 255 / 0.12); color: #fff; }
 .ask .mic svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .ask input { flex: 1; min-width: 0; background: none; border: 0; outline: 0; color: #fff; font: 500 18px/1.3 var(--sans); padding: 8px 4px; }
 .ask input::placeholder { color: rgb(255 255 255 / 0.5); }
 .ask .go { flex: none; padding: 11px 24px; border-radius: 14px; background: #fff; color: var(--ink); font-weight: 600; font-size: 15.5px; transition: transform 0.15s, background 0.2s; }
-.ask .go:hover { background: #ffe9d3; transform: translateY(-1px); }
+.ask .go:hover { background: #e9efe8; }
 .ask .reply { display: flex; align-items: center; gap: 12px; padding: 0 20px; max-height: 0; opacity: 0; border-top: 1px solid transparent;
   transition: max-height 0.4s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.2s, padding 0.4s cubic-bezier(0.2, 0.8, 0.2, 1), border-color 0.3s; }
 .ask .reply.on { max-height: 96px; opacity: 1; padding: 10px 20px 14px; border-top-color: rgb(255 255 255 / 0.14); }
@@ -739,12 +772,11 @@ html[data-on-stage] .app.page-home .top .ghost { color: rgb(255 255 255 / 0.8); 
 .ask .reply.done .verdict { opacity: 1; transform: none; }
 .ask .reply em { margin-left: auto; font-style: normal; font-size: 13px; color: rgb(255 255 255 / 0.58); text-align: right; }
 
-.chips { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 14px 12px; border-top: 1px solid rgb(255 255 255 / 0.12); }
-.chips span { font-size: 13px; color: rgb(255 255 255 / 0.5); margin-right: 4px; padding-left: 6px; }
-.chips button { padding: 6px 14px; border-radius: 99px; font-size: 13.5px; font-weight: 500; color: rgb(255 255 255 / 0.82); background: rgb(255 255 255 / 0.06);
+.tries { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.tries button { padding: 8px 16px; border-radius: 99px; font-size: 14px; line-height: 1.2; font-weight: 500; color: rgb(255 255 255 / 0.74);
   border: 1px solid rgb(255 255 255 / 0.2); transition: background 0.2s, color 0.2s, border-color 0.2s; }
-.chips button:hover { background: rgb(255 255 255 / 0.14); color: #fff; }
-.chips button.on { background: #fff; color: var(--ink); border-color: #fff; }
+.tries button:hover { color: #fff; border-color: rgb(255 255 255 / 0.5); }
+.tries button.on { background: #fff; color: var(--ink); border-color: #fff; }
 
 .hero-foot { position: absolute; left: 36px; bottom: 22px; display: flex; align-items: center; gap: 26px; opacity: 0; pointer-events: none; transition: opacity 0.4s; white-space: nowrap; }
 .hero-foot.on { opacity: 1; pointer-events: auto; }
@@ -776,3 +808,16 @@ html[data-on-stage] .app.page-home .top .ghost { color: rgb(255 255 255 / 0.8); 
 .result-card .twice { margin-top: 10px; padding: 9px 13px; border-radius: 10px; font-size: 14px; line-height: 1.45; color: var(--card-soft);
   background: color-mix(in srgb, var(--card-ink) 12%, transparent); }
 .result-card .twice b { color: var(--card-ink); font-weight: 700; font-size: 1.12em; }
+
+
+/* The opening on a narrow screen: the words and the ask bar; its answer inside the bar's card */
+.hero .ask .reply { display: none; }
+@media (max-width: 1040px) {
+  .hero { grid-template-columns: minmax(0, 1fr); padding: 84px 24px 84px; text-align: left; }
+  .hero-show { display: none; }
+  .hero .ask .reply { display: flex; }
+  .hero h1 { white-space: normal; font-size: clamp(40px, 10.5vw, 76px); }
+}
+@media (max-height: 700px) {
+  .hero .lede { display: none; }
+}

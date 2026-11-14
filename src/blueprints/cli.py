@@ -362,6 +362,11 @@ def cmd_run(args: argparse.Namespace) -> int:
                                 confirm=replayed if args.confirm_labels else None)
     elif args.confirm_labels:
         raise SystemExit("--confirm-labels needs --fallback-run: the model's answers are replayed from a logged run")
+    # An outline the file holds twice is counted once by default. Counted as the dataset counts
+    # (BLUEPRINTS_COUNT=outlines), the run is logged under its own name, so the log keeps both.
+    counts = config.count_mode()
+    if counts != "distinct" and args.engine in ("router", "dxf"):
+        method += f"+count={counts}"
     if args.sample:
         sample, questions = load_sample(Path(args.sample), ds)
         sample_name, split_name = sample["name"], sample["split"]
@@ -398,7 +403,8 @@ def cmd_run(args: argparse.Namespace) -> int:
     summary = finalize_run(
         run_id=run_id, run_dir=run_dir, method=method, result=result, dataset=ds,
         split_name=split_name, sample_name=sample_name, weights=weights,
-        run_config={"engine": args.engine, "mix": mix_note, "fallback_runs": args.fallback_run or []}, notes=args.notes,
+        run_config={"engine": args.engine, "mix": mix_note, "fallback_runs": args.fallback_run or [],
+                    "count": counts}, notes=args.notes,
         log=result["complete"] and not offline,
     )
     print()

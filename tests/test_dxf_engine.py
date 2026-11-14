@@ -36,10 +36,11 @@ def _ask(ds, questions, text, path=PLAN):
     return dxf.answer(replace(q, question=text), ds)
 
 
-def test_dev_floor_plans(dev_swiss):
-    """Every count is right; every wrong area is one the engine itself scored as uncertain."""
+def test_dev_floor_plans(dev_swiss, monkeypatch):
+    """Counted as the dataset counts, every count is right; every wrong area is one the engine scored as uncertain."""
     from blueprints.engines import dxf
 
+    monkeypatch.setenv("BLUEPRINTS_COUNT", "outlines")
     ds, questions = dev_swiss
     assert len(questions) > 1000
     wrong_counts, confident_wrong, right = [], [], 0
@@ -56,10 +57,32 @@ def test_dev_floor_plans(dev_swiss):
     assert right / len(questions) >= 0.995
 
 
+def test_a_count_differs_from_the_dataset_only_where_the_file_holds_an_outline_twice(dev_swiss, monkeypatch):
+    """By default each place is counted once. Where that differs from the dataset, the reason is on the answer:
+    the dataset's number is the number of outlines in the file, and the answer is never Verified."""
+    from blueprints import verify
+    from blueprints.engines import dxf
+
+    monkeypatch.delenv("BLUEPRINTS_COUNT", raising=False)
+    ds, questions = dev_swiss
+    differs = 0
+    for q in (q for q in questions if q.type == "count"):
+        ans = dxf.answer(q, ds)
+        if score_answer(ans.answer, q.answer, q.type, gold_unit=q.unit, pred_unit=ans.unit).status == "correct":
+            continue
+        differs += 1
+        twice = ans.meta["coinciding"]
+        assert twice["counted"] == "distinct" and twice["outlines"] == q.answer and ans.answer == twice["distinct"] < q.answer
+        assert len(ans.evidence) == ans.answer and sum(e.get("times", 1) for e in ans.evidence) == q.answer
+        assert ans.meta["not_verifiable"]
+        assert verify.apply(ans, {"dxf-engine:v1/count": {"threshold": 0.5}}).state == CHECK
+    assert differs  # the development plans do hold such doors
+
+
 def test_counts_carry_one_box_per_counted_item(dev_swiss):
     ds, questions = dev_swiss
-    for text, n in [("How many doors (interior doors and entrance doors together) are drawn on this floor plan?", 36),
-                    ("How many windows are drawn on this floor plan?", 28),
+    for text, n in [("How many doors (interior doors and entrance doors together) are drawn on this floor plan?", 29),
+                    ("How many windows are drawn on this floor plan?", 26),  # two of the 28 outlines lie on another
                     ("How many bathtubs are drawn on this floor plan?", 4)]:
         ans = _ask(ds, questions, text)
         assert ans.answer == n == len(ans.evidence)
@@ -67,20 +90,36 @@ def test_counts_carry_one_box_per_counted_item(dev_swiss):
         assert ans.cost_usd == 0.0 and ans.state == CHECK
 
 
-def test_outlines_lying_on_one_another_are_counted_as_the_dataset_counts_and_marked_never_verified(dev_swiss):
+DOORS = "How many doors (interior doors and entrance doors together) are drawn on this floor plan?"
+
+
+def test_a_door_the_file_holds_twice_is_counted_once_and_never_verified(dev_swiss, monkeypatch):
     """The file can hold the same door twice (a door between two units, listed for each).
 
-    The answer is the number of outlines, which is what the dataset counts. The engine says how many
-    distinct places that is, and marks the answer as one that is never Verified.
+    The answer is the number of doors that stand on the drawing: each place once. The engine says how
+    many outlines the file holds, and marks the answer as one that is never Verified.
     """
+    monkeypatch.delenv("BLUEPRINTS_COUNT", raising=False)
     ds, questions = dev_swiss
-    doors = _ask(ds, questions, "How many doors (interior doors and entrance doors together) are drawn on this floor plan?")
-    places = len({tuple(e["bbox"]) for e in doors.evidence})
-    assert doors.answer == 36 and places == 29  # seven outlines lie exactly on another
-    assert "29 distinct places" in doors.explanation and "29 distinct places" in doors.meta["not_verifiable"]
+    doors = _ask(ds, questions, DOORS)
+    assert doors.answer == 29 == len(doors.evidence) == len({tuple(e["bbox"]) for e in doors.evidence})
+    assert sorted(e.get("times", 1) for e in doors.evidence)[-7:] == [2] * 7  # seven doors are in the file twice
+    assert doors.meta["coinciding"] == {"outlines": 36, "distinct": 29, "counted": "distinct"}
+    assert "36 outlines" in doors.explanation and "29 distinct places" in doors.meta["not_verifiable"]
     assert doors.meta["checks"]["distinct door places (outlines lying exactly on another counted once)"] == 29
     tubs = _ask(ds, questions, "How many bathtubs are drawn on this floor plan?")
-    assert len({tuple(e["bbox"]) for e in tubs.evidence}) == tubs.answer and "not_verifiable" not in tubs.meta
+    assert len({tuple(e["bbox"]) for e in tubs.evidence}) == tubs.answer
+    assert "not_verifiable" not in tubs.meta and "coinciding" not in tubs.meta
+
+
+def test_outlines_can_be_counted_as_the_dataset_counts_them(dev_swiss, monkeypatch):
+    """BLUEPRINTS_COUNT=outlines: every outline in the file, as the dataset's answers count. Still never Verified."""
+    monkeypatch.setenv("BLUEPRINTS_COUNT", "outlines")
+    ds, questions = dev_swiss
+    doors = _ask(ds, questions, DOORS)
+    assert doors.answer == 36 == len(doors.evidence) and len({tuple(e["bbox"]) for e in doors.evidence}) == 29
+    assert doors.meta["coinciding"] == {"outlines": 36, "distinct": 29, "counted": "outlines"}
+    assert "29 distinct places" in doors.explanation and "29 distinct places" in doors.meta["not_verifiable"]
 
 
 def test_room_area_agrees_with_the_area_printed_in_the_room(dev_swiss):

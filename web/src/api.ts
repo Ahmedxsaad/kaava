@@ -76,7 +76,7 @@ export interface Evidence {
   length_m?: number;
   score?: number | null;
   same_as?: number;  // lies exactly on that earlier item: the same outline is in the file more than once
-  times?: number;  // how many outlines lie here (set by the app on the first of them)
+  times?: number;  // how many outlines lie here: the place is one mark
 }
 
 // One mark per place: an item that lies exactly on an earlier one is folded into it.
@@ -128,7 +128,9 @@ export interface AskResult {
   evidence: Evidence[];
   can_use_model: boolean;
   can_confirm: boolean;  // a strong label reading that a vision model could count as well
-  coinciding: { extra: number; distinct: number } | null;  // outlines lying exactly on another, and the distinct places left
+  // The file holds some counted outlines more than once: how many outlines, how many distinct places,
+  // how many lie on another, and which of the two counts the answer is.
+  coinciding: { outlines: number; distinct: number; extra: number; counted: "distinct" | "outlines" } | null;
   readings: { labels: number | null; model: number | null } | null;  // two readings of one scan
   reference: { answer: number | string; unit: string | null; type: string; status: string } | null;
   baseline: {
@@ -254,10 +256,20 @@ export const api = {
   },
 };
 
-/** The newest logged run of a kind on the fixed 200-question development sample. */
-export function headlineRun(runs: Run[], kind: "alone" | "system"): Run | undefined {
-  const prefix = kind === "alone" ? "vlm-image-only" : "router:v1+fallback";
-  return [...runs].reverse().find((r) => r.method.startsWith(prefix) && r.sample === "dev_baseline_200");
+/** A run that counted a repeated outline as the dataset's answers do (BLUEPRINTS_COUNT=outlines). */
+export const countsAsDataset = (run: Run): boolean => run.method.includes("+count=outlines");
+
+/**
+ * The newest logged run of a kind on the fixed 200-question development sample.
+ * "alone": the vision model answering from the picture. "system": engines first, scored against the
+ * dataset with a repeated outline counted as the dataset counts it. "app": the same system counting
+ * each place once, which is what the app answers.
+ */
+export function headlineRun(runs: Run[], kind: "alone" | "system" | "app"): Run | undefined {
+  const newest = [...runs].reverse();
+  if (kind === "alone") return newest.find((r) => r.method.startsWith("vlm-image-only") && r.sample === "dev_baseline_200");
+  const mine = newest.filter((r) => r.method.startsWith("router:v1+fallback") && r.sample === "dev_baseline_200");
+  return kind === "app" ? mine.find((r) => !countsAsDataset(r)) : mine.find(countsAsDataset) ?? mine[0];
 }
 
 export const SOURCE_NAMES: Record<string, string> = {

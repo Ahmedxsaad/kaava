@@ -25,7 +25,7 @@ export const TOUR: Stop[] = [
   {
     label: "Doors, and a door drawn twice",
     card: true,
-    note: "32 outlines in the file, 23 distinct doors: it says so, and asks for a look",
+    note: "23 doors. The file holds 32 outlines, 9 exactly on another: it says so, and asks for a look",
     state: "check",
     drawing: "data/swiss_dwellings/site2150_bldg3001_floor13690",
     question: "How many doors (interior doors and entrance doors together) are drawn on this floor plan?",

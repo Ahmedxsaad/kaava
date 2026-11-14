@@ -58,6 +58,17 @@ FULL_SET_MIX: dict[tuple[str, str], int] = {
 }
 
 
+def count_mode() -> str:
+    """How outlines that lie exactly on one another are counted.
+
+    "distinct" (the default): each place once, which is what stands on the drawing.
+    "outlines": every outline in the file, which is how the dataset's own answers count
+    (a door between two units is listed once for each unit). Set with BLUEPRINTS_COUNT.
+    """
+    mode = os.environ.get("BLUEPRINTS_COUNT", "distinct").strip().lower()
+    return mode if mode in ("distinct", "outlines") else "distinct"
+
+
 def usd_to_eur(usd: float | None) -> float | None:
     return None if usd is None else usd / USD_PER_EUR
 
