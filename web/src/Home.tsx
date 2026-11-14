@@ -31,7 +31,7 @@ export function Home({ onOpen, onBrowse, onNumbers, onBring, onTalk, canTalk }: 
     <main className="home">
       <Story stats={stats} onOpen={onOpen} onBrowse={onBrowse} onBring={onBring} onTalk={onTalk} canTalk={canTalk} />
       <div className="home-rest">
-      <header className="more">
+      <header className="try-head">
         <h2>Try it on real drawings</h2>
         <button onClick={onNumbers}>All the numbers →</button>
       </header>

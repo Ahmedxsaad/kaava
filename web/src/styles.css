@@ -528,9 +528,21 @@ h1, h2 { font-family: var(--serif); font-weight: 400; letter-spacing: -0.015em; 
 .story-pin.tone-1 { --tone: #0e3a2f; }
 .story-pin.tone-2 { --tone: #17306e; }
 .story-pin.tone-3 { --tone: #0d5257; }
-.story-pin.tone-4 { --tone: #43245c; }
-.story-pin.tone-5 { --tone: #0a2c10; }
-.story-stage { position: absolute; inset: 0; }
+.story-pin.tone-4 { --tone: #6e2c17; }
+.story-pin.tone-5 { --tone: #43245c; }
+.story-pin.tone-6 { --tone: #0a2c10; }
+.story-stage { position: absolute; inset: 0; transition: opacity 0.6s ease, transform 0.8s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.story-stage.away { opacity: 0; transform: scale(0.94) translateX(4%); pointer-events: none; }
+/* The scan: a sheet of paper that slides in where the model stood */
+.story-scan { position: absolute; right: max(64px, calc((100vw - 1280px) / 2 + 20px)); top: 50%; height: min(78%, 720px); aspect-ratio: 0.8;
+  transform: translateY(-46%) rotate(3deg) scale(0.92); opacity: 0; pointer-events: none;
+  transition: opacity 0.6s ease, transform 0.9s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.story-scan.on { opacity: 1; transform: translateY(-50%) rotate(-2deg); }
+.story-scan svg { width: 100%; height: 100%; background: #fff; border-radius: 6px; box-shadow: 0 40px 80px -30px rgb(0 0 0 / 0.6), 0 2px 0 rgb(255 255 255 / 0.5) inset; padding: 2.5%; }
+.story-scan .box rect { fill: rgb(240 122 20 / 0.14); stroke: #e8690a; animation: boxin 0.35s cubic-bezier(0.2, 0.9, 0.2, 1.3) both; transform-box: fill-box; transform-origin: center; }
+.story-scan .box circle { fill: #011e01; stroke: #fff; stroke-width: 1.5; }
+.story-scan .box text { fill: #fff; font: 600 10px var(--sans); }
+@keyframes boxin { from { transform: scale(1.6); opacity: 0; } to { transform: none; opacity: 1; } }
 .story-stage .viewer3d { position: absolute; inset: 0; }
 .story-shade { position: absolute; inset: 0; pointer-events: none;
   background: radial-gradient(90% 80% at 72% 46%, rgb(255 255 255 / 0.13) 0%, rgb(255 255 255 / 0) 62%),
@@ -560,7 +572,14 @@ h1, h2 { font-family: var(--serif); font-weight: 400; letter-spacing: -0.015em; 
   border: 1px solid rgb(255 255 255 / 0.36); transition: background 0.2s, border-color 0.2s; }
 .story .talk:hover { background: rgb(255 255 255 / 0.1); border-color: rgb(255 255 255 / 0.62); }
 .story .talk svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
-.story .cue { display: inline-flex; align-items: center; gap: 12px; margin-top: 44px; font-size: 14.5px; color: rgb(255 255 255 / 0.72); }
+.story .cues { display: flex; align-items: center; gap: 26px; margin-top: 44px; }
+.story .cue { display: inline-flex; align-items: center; gap: 12px; font-size: 14.5px; color: rgb(255 255 255 / 0.72); }
+.story .play { display: inline-flex; align-items: center; gap: 8px; font-size: 14.5px; font-weight: 500; color: rgb(255 255 255 / 0.86); padding: 7px 14px 7px 10px;
+  border-radius: 99px; border: 1px solid rgb(255 255 255 / 0.28); transition: background 0.2s, border-color 0.2s; }
+.story .play:hover { background: rgb(255 255 255 / 0.1); border-color: rgb(255 255 255 / 0.6); color: #fff; }
+.story .play svg { width: 16px; height: 16px; fill: currentColor; }
+.story-stop { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); font-size: 13px; color: rgb(255 255 255 / 0.7); padding: 6px 14px;
+  border-radius: 99px; background: rgb(0 0 0 / 0.28); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
 .story .cue i { width: 1.5px; height: 30px; background: linear-gradient(#fff, rgb(255 255 255 / 0)); animation: cue 1.7s ease-in-out infinite; transform-origin: top; }
 @keyframes cue { 0% { transform: scaleY(0); } 55% { transform: scaleY(1); opacity: 1; } 100% { transform: scaleY(1); opacity: 0; } }
 
@@ -586,9 +605,9 @@ h1, h2 { font-family: var(--serif); font-weight: 400; letter-spacing: -0.015em; 
 .story-rail button.on { background: #fff; transform: scale(1.5); }
 .story-credit { position: absolute; right: 28px; bottom: 16px; font-size: 12.5px; color: rgb(255 255 255 / 0.5); pointer-events: none; }
 
-.more { display: flex; align-items: baseline; justify-content: space-between; gap: 24px; margin-bottom: 30px; }
-.more h2 { font-size: 40px; }
-.more button { font-weight: 500; color: var(--ink-2); }
+.try-head { display: flex; align-items: baseline; justify-content: space-between; gap: 24px; margin-bottom: 30px; }
+.try-head h2 { font-size: 40px; }
+.try-head button { font-weight: 500; color: var(--ink-2); }
 
 @media (max-width: 900px) {
   .story-copy { width: calc(100vw - 48px); left: 24px; }
@@ -626,3 +645,28 @@ h1, h2 { font-family: var(--serif); font-weight: 400; letter-spacing: -0.015em; 
 
 /* The model's stage: a soft sky, and the model on a round table. */
 .viewer3d:not(.night) { background: radial-gradient(120% 95% at 50% 12%, #ffffff 0%, #eef4f7 52%, #dde8ee 100%); }
+
+/* Presenting the examples: a caption where the drawing's name usually stands */
+.caption { display: flex; align-items: center; gap: 14px; min-width: 0; animation: rise 0.35s ease-out both; }
+.caption > button { width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--line-2); color: var(--ink-2); font-size: 15px; line-height: 1; flex: none; transition: background 0.2s, border-color 0.2s; }
+.caption > button:hover { background: var(--surface); border-color: var(--ink-4); color: var(--ink); }
+.caption i { font: 400 26px/1 var(--serif); font-style: normal; letter-spacing: -0.01em; color: var(--ink); flex: none; font-variant-numeric: lining-nums tabular-nums; padding-left: 12px; border-left: 3px solid var(--ok); }
+.caption.check i { border-left-color: #f1b434; }
+.caption.declined i { border-left-color: var(--stop); }
+.caption i small { font: 500 12.5px var(--sans); color: var(--ink-4); }
+.caption div { display: grid; min-width: 0; }
+.caption strong { font-weight: 600; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.caption span { font-size: 13px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* The examples on the landing page: each on its own colour */
+.example .thumb { border: 0; border-radius: 20px; height: 250px; background: var(--wash, #eef0f1); }
+.example:nth-child(6n + 1) { --wash: #e7e2fb; }
+.example:nth-child(6n + 2) { --wash: #ffe6d6; }
+.example:nth-child(6n + 3) { --wash: #d9f0f6; }
+.example:nth-child(6n + 4) { --wash: #fdf0c8; }
+.example:nth-child(6n + 5) { --wash: #dff3df; }
+.example:nth-child(6n + 6) { --wash: #f9dfe6; }
+.example .thumb img { max-width: 70%; max-height: 66%; box-sizing: content-box; border-radius: 6px; background: #fff; padding: 10px; mix-blend-mode: normal; box-shadow: 0 14px 30px -12px rgb(1 30 1 / 0.28); transform: rotate(-2deg); }
+.example:nth-child(even) .thumb img { transform: rotate(1.6deg); }
+.example:hover .thumb { box-shadow: none; }
+.example:hover .thumb img { transform: rotate(0deg) scale(1.05); }

@@ -11,6 +11,7 @@ export interface Direction {
   turn: number;  // where the camera stands around the model, radians
   tilt: number;  // how high it stands: about 1.5 looks straight down, 0.6 is a three-quarter view
   back: number;  // its distance, as a multiple of the distance that just fits the model
+  sway?: number;  // while waiting: the walls breathe and the view drifts by about this much, on their own
 }
 
 export interface Highlight {
@@ -265,9 +266,15 @@ export function Viewer3D({ meshUrl, groundUrl, imageUrl, highlights, visible, ho
       const want = directed.current;
       if (want && s) {  // the page directs: follow it softly
         let moved = false;
+        const sway = want.sway ?? 0;
+        const aim = sway > 0.001
+          ? { ...want, rise: want.rise + sway * (0.55 + 0.45 * Math.sin(now / 1100)), turn: want.turn + sway * 0.9 * Math.sin(now / 2300),
+              tilt: want.tilt - sway * 1.6 * (0.5 + 0.5 * Math.sin(now / 1900)) }
+          : want;
+        if (sway > 0.001) moved = true;  // alive while it waits
         for (const key of ["rise", "turn", "tilt", "back"] as const) {
-          const gap = want[key] - now3[key];
-          if (Math.abs(gap) > 0.0004) { now3[key] += gap * 0.13; moved = true; } else now3[key] = want[key];
+          const gap = aim[key] - now3[key];
+          if (Math.abs(gap) > 0.0004) { now3[key] += gap * 0.13; moved = true; } else now3[key] = aim[key];
         }
         if (moved || dirty) {
           s.root.scale.z = Math.max(0.001, now3.rise);
@@ -413,6 +420,16 @@ export function Viewer3D({ meshUrl, groundUrl, imageUrl, highlights, visible, ho
           transparent: !!group.style.glass, opacity: group.style.glass ? 0.5 : 1, depthWrite: !group.style.glass,
           polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1,
         });
+        if (group.style.kind === "wall") {
+          // Where a wall is cut, it is inked, as on a drawing: faces that look straight up turn dark.
+          // Flat on the sheet the walls read as a plan's solid walls; standing, as a model cut open.
+          material.onBeforeCompile = (shader) => {
+            shader.fragmentShader = shader.fragmentShader.replace("#include <color_fragment>", `#include <color_fragment>
+              vec3 cutNormal = normalize(cross(dFdx(vViewPosition), dFdy(vViewPosition)));
+              float cutUp = abs((vec4(cutNormal, 0.0) * viewMatrix).y);
+              diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.085, 0.12, 0.1), smoothstep(0.93, 0.97, cutUp) * 0.94);`);
+          };
+        }
         const mesh = new THREE.Mesh(geometry, material);
         mesh.visible = !group.style.hidden;
         mesh.castShadow = !group.style.glass;

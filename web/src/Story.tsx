@@ -8,10 +8,13 @@ import { type Direction, type Highlight, Viewer3D } from "./Viewer3D";
 // model. Every figure on screen is the engine's own answer to a real question, asked on load.
 
 const STOP = TOUR[0];
+// A scan, for the chapter where there is no geometry to read: the first example answered by a vision model.
+const SCAN = TOUR.find((stop) => stop.drawing.includes("cubicasa") && /window/i.test(stop.question)) ?? TOUR[7];
 const NONE = new Set<number>();
-const CHAPTERS = 6;
-// Where each chapter begins, as a share of the whole scroll.
-const AT = [0, 0.1, 0.3, 0.52, 0.7, 0.85, 1.0001];
+const CHAPTERS = 7;
+// Where each chapter begins, as a share of the whole scroll:
+// opening, it stands up, doors, areas, a scan, how far to trust it, results.
+const AT = [0, 0.09, 0.26, 0.45, 0.6, 0.74, 0.87, 1.0001];
 
 const clamp = (x: number) => Math.min(1, Math.max(0, x));
 const smooth = (from: number, to: number, x: number) => { const t = clamp((x - from) / (to - from)); return t * t * (3 - 2 * t); };
@@ -38,6 +41,7 @@ export function Story({ stats, onOpen, onBrowse, onBring, onTalk, canTalk }: Pro
   const [doors, setDoors] = useState<AskResult | null>(null);
   const [area, setArea] = useState<AskResult | null>(null);
   const [flat, setFlat] = useState<string | null>(null);  // which apartment the area question is about
+  const [scan, setScan] = useState<{ drawing: DrawingDetail; answer: AskResult } | null>(null);
 
   // The drawing, and two real questions put to the engine.
   useEffect(() => {
@@ -52,6 +56,8 @@ export function Story({ stats, onOpen, onBrowse, onBring, onTalk, canTalk }: Pro
       }
     }).catch(() => undefined);
     api.ask(STOP.drawing, STOP.question, false).then((answer) => alive && setDoors(answer)).catch(() => undefined);
+    Promise.all([api.drawing(SCAN.drawing), api.ask(SCAN.drawing, SCAN.question, false)])
+      .then(([drawing, answer]) => alive && setScan({ drawing, answer })).catch(() => undefined);
     return () => { alive = false; };
   }, []);
 
@@ -75,19 +81,53 @@ export function Story({ stats, onOpen, onBrowse, onBring, onTalk, canTalk }: Pro
 
   const chapter = Math.max(0, AT.findIndex((start, i) => p >= start && p < AT[i + 1]));
   const direction: Direction = useMemo(() => ({
-    rise: smooth(0.07, 0.27, p),
-    tilt: 1.5 - 0.88 * smooth(0.05, 0.3, p),
-    turn: Math.PI / 2 + 0.55 * smooth(0.08, 0.34, p) + 1.25 * linear(0.3, 1, p),
-    back: 1.2 - 0.06 * smooth(0.1, 0.3, p) + 0.1 * smooth(0.72, 1, p),
+    rise: smooth(0.06, 0.23, p),
+    tilt: 1.5 - 0.88 * smooth(0.04, 0.26, p),
+    turn: Math.PI / 2 + 0.55 * smooth(0.07, 0.29, p) + 1.3 * linear(0.26, 1, p),
+    back: 1.2 - 0.06 * smooth(0.09, 0.26, p) + 0.1 * smooth(0.76, 1, p),
+    sway: 0.1 * (1 - smooth(0.01, 0.07, p)),  // before any scroll the walls breathe: it is a model, not a picture
   }), [p]);
+
+  // Playing: the page scrolls itself through the story at a steady pace (for showing it, or filming it).
+  const [playing, setPlaying] = useState(false);
+  useEffect(() => {
+    if (!playing) return;
+    const el = section.current;
+    if (!el) return;
+    const span = el.getBoundingClientRect().height - window.innerHeight;
+    const from = window.scrollY, to = el.offsetTop + span - 64;
+    const duration = Math.max(4000, 42000 * ((to - from) / span));
+    const began = performance.now();
+    let frame = 0;
+    const step = () => {
+      const t = (performance.now() - began) / duration;
+      window.scrollTo(0, from + (to - from) * Math.min(1, t));
+      if (t >= 1) return setPlaying(false);
+      frame = requestAnimationFrame(step);
+    };
+    frame = requestAnimationFrame(step);
+    const stop = () => setPlaying(false);
+    window.addEventListener("wheel", stop, { passive: true });
+    window.addEventListener("touchstart", stop, { passive: true });
+    window.addEventListener("keydown", stop);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("wheel", stop);
+      window.removeEventListener("touchstart", stop);
+      window.removeEventListener("keydown", stop);
+    };
+  }, [playing]);
 
   // Doors open one by one through the third chapter; the apartment's rooms light up through the fourth.
   const doorItems = useMemo(() => counted(doors), [doors]);
   const roomItems = useMemo(() => counted(area), [area]);
   const act = p < AT[3] ? "doors" : p < AT[4] ? "area" : "rest";
   const items = act === "doors" ? doorItems : act === "area" ? roomItems : [];
-  const shown = act === "doors" ? Math.round(linear(0.335, 0.47, p) * doorItems.length)
-    : act === "area" ? Math.round(linear(0.55, 0.655, p) * roomItems.length) : 0;
+  const shown = act === "doors" ? Math.round(linear(0.29, 0.41, p) * doorItems.length)
+    : act === "area" ? Math.round(linear(0.48, 0.565, p) * roomItems.length) : 0;
+  // On the scan, the model's boxes are drawn one by one.
+  const boxes = useMemo(() => (scan ? scan.answer.evidence.filter((e) => e.kind === "box" && e.bbox && e.n != null) : []), [scan]);
+  const boxed = Math.round(linear(0.63, 0.705, p) * boxes.length);
   const highlights: Highlight[] = useMemo(() => items.flatMap((e) => {
     const id = e.kind === "element" ? e.id : e.ref;
     return id ? [{ id, n: e.n!, tone: e.kind === "polygon" ? "area" as const : "count" as const }] : [];
@@ -116,7 +156,7 @@ export function Story({ stats, onOpen, onBrowse, onBring, onTalk, canTalk }: Pro
   return (
     <section className="story" ref={section} style={{ height: `${CHAPTERS * 105}vh` }}>
       <div className={`story-pin tone-${chapter}`}>
-        <div className="story-stage">
+        <div className={`story-stage${chapter === 4 ? " away" : ""}`}>
           {detail?.mesh && (
             <Viewer3D
               key={detail.mesh}
@@ -137,6 +177,24 @@ export function Story({ stats, onOpen, onBrowse, onBring, onTalk, canTalk }: Pro
           )}
         </div>
         <div className="story-shade" />
+        {scan && (
+          <div className={`story-scan${chapter === 4 ? " on" : ""}`}>
+            <svg viewBox={`0 0 ${scan.drawing.view.width} ${scan.drawing.view.height}`} role="img" aria-label="A scanned plan with each window boxed">
+              <image href={scan.drawing.view.url ?? undefined} width={scan.drawing.view.width} height={scan.drawing.view.height} />
+              {boxes.slice(0, boxed).map((e) => {
+                const [x0, y0, x1, y1] = e.bbox!;
+                const u = scan.drawing.view.width / 430;
+                return (
+                  <g key={e.n} className="box">
+                    <rect x={x0 - 2 * u} y={y0 - 2 * u} width={x1 - x0 + 4 * u} height={y1 - y0 + 4 * u} rx={3 * u} strokeWidth={2.2 * u} />
+                    <circle cx={x0 - 2 * u} cy={y0 - 2 * u} r={7.5 * u} />
+                    <text x={x0 - 2 * u} y={y0 - 2 * u + 2.9 * u} textAnchor="middle" fontSize={8.4 * u}>{e.n}</text>
+                  </g>
+                );
+              })}
+            </svg>
+          </div>
+        )}
 
         <div className="story-copy">
           <article className={chapter === 0 ? "on" : ""}>
@@ -152,7 +210,12 @@ export function Story({ stats, onOpen, onBrowse, onBring, onTalk, canTalk }: Pro
                 </button>
               )}
             </div>
-            <button className="cue" onClick={() => go(1)}><i />Scroll: watch this floor plan answer</button>
+            <div className="cues">
+              <button className="cue" onClick={() => go(1)}><i />Scroll: watch this floor plan answer</button>
+              <button className="play" onClick={() => setPlaying(true)}>
+                <svg viewBox="0 0 24 24" aria-hidden><path d="M8 5.5v13l10.5-6.500z" /></svg>Play the story
+              </button>
+            </div>
           </article>
 
           <article className={chapter === 1 ? "on" : ""}>
@@ -196,6 +259,21 @@ export function Story({ stats, onOpen, onBrowse, onBring, onTalk, canTalk }: Pro
 
           <article className={chapter === 4 ? "on" : ""}>
             <p className="step">04</p>
+            <h2>On a scan, the model points. The code counts.</h2>
+            <div className={`live asked${boxed >= boxes.length && boxes.length ? " done" : ""}`}>
+              <p className="said"><span>How many windows are on this plan?</span></p>
+              <div className="reply">
+                <strong>{scan ? boxed : "\u00a0"}</strong>
+                <span className="unit">windows</span>
+                <span className={`verdict ${scan?.answer.state ?? "check"}`}><i />{scan?.answer.state === "verified" ? "Verified" : "Check this"}</span>
+              </div>
+              <p className="how">Gemini boxes each one · the code counts the boxes · about €0.007</p>
+            </div>
+            <p className="sub small">A scan has no geometry to read. Even then the number is not generated: it is the count of boxes you can see, and it is never marked Verified.</p>
+          </article>
+
+          <article className={chapter === 5 ? "on" : ""}>
+            <p className="step">05</p>
             <h2>It says how far to trust it.</h2>
             <ul className="states">
               <li className="verified"><b><i />Verified</b><span>No need to double-check. {proof ? <>On drawings held back for testing, answers like this were wrong <em>{proof.calibration_errors} times in {proof.calibration_answers.toLocaleString("en")}</em>.</> : "Measured on drawings held back for testing."}</span></li>
@@ -204,8 +282,8 @@ export function Story({ stats, onOpen, onBrowse, onBring, onTalk, canTalk }: Pro
             </ul>
           </article>
 
-          <article className={chapter === 5 ? "on" : ""}>
-            <p className="step">05</p>
+          <article className={chapter === 6 ? "on" : ""}>
+            <p className="step">06</p>
             <h2>Measured, not claimed.</h2>
             <div className="scores">
               <div><strong>{pct(ours?.accuracy)}</strong><span>correct on {ours?.n ?? 200} questions. A vision model alone: <b>{pct(alone?.accuracy)}</b></span></div>
@@ -223,12 +301,13 @@ export function Story({ stats, onOpen, onBrowse, onBring, onTalk, canTalk }: Pro
           </article>
         </div>
 
+        {playing && <button className="story-stop" onClick={() => setPlaying(false)}>Playing · press any key to stop</button>}
         <nav className="story-rail" aria-label="Chapters">
           {Array.from({ length: CHAPTERS }, (_, i) => (
             <button key={i} className={i === chapter ? "on" : ""} onClick={() => go(i)} aria-label={`Chapter ${i + 1}`} />
           ))}
         </nav>
-        <p className="story-credit">{detail?.title ?? ""} · a real drawing from the dataset, answered live</p>
+        <p className="story-credit">{(chapter === 4 ? scan?.drawing.title : detail?.title) ?? ""} · a real drawing from the dataset, {chapter === 4 ? "its logged answer shown" : "answered live"}</p>
       </div>
     </section>
   );

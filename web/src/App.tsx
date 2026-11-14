@@ -509,16 +509,29 @@ export function App() {
 
           <section className="board">
             <header>
-              <div className="what">
-                {detail && (
-                  <>
-                    <strong>{detail.title}</strong>
-                    <span>
-                      {SOURCE_NAMES[detail.source] ?? detail.source} · {detail.formats.join(", ").toUpperCase()}{detail.paper_scale ? ` · 1:${detail.paper_scale}` : ""}
-                    </span>
-                  </>
-                )}
-              </div>
+              {at >= 0 ? (
+                // Presenting the examples: what this one shows, and where we are among them.
+                <div className={`caption ${TOUR[at].state}`} key={at}>
+                  <button type="button" onClick={() => void openStop(TOUR[(at - 1 + TOUR.length) % TOUR.length])} aria-label="Previous example">←</button>
+                  <i>{String(at + 1).padStart(2, "0")}<small> / {TOUR.length}</small></i>
+                  <div>
+                    <strong>{TOUR[at].label}</strong>
+                    <span>{TOUR[at].note}</span>
+                  </div>
+                  <button type="button" onClick={() => void openStop(TOUR[(at + 1) % TOUR.length])} aria-label="Next example">→</button>
+                </div>
+              ) : (
+                <div className="what">
+                  {detail && (
+                    <>
+                      <strong>{detail.title}</strong>
+                      <span>
+                        {SOURCE_NAMES[detail.source] ?? detail.source} · {detail.formats.join(", ").toUpperCase()}{detail.paper_scale ? ` · 1:${detail.paper_scale}` : ""}
+                      </span>
+                    </>
+                  )}
+                </div>
+              )}
               {has2d && has3d && (
                 <div className="segmented" role="tablist">
                   {(["plan", "both", "3d"] as Mode[]).map((m) => (
