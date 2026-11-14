@@ -594,3 +594,35 @@ h1, h2 { font-family: var(--serif); font-weight: 400; letter-spacing: -0.015em; 
   .story-copy { width: calc(100vw - 48px); left: 24px; }
   .scores { grid-template-columns: 1fr; }
 }
+
+/* ---------------------------------------------------------------- the answer card
+   The answer stands on the colour of its state: green to go, amber to look, red for no number. */
+.result-card { margin-top: 22px; padding: 20px 22px 22px; border-radius: 20px; color: var(--card-ink); background: var(--card-bg);
+  box-shadow: 0 1px 0 rgb(255 255 255 / 0.16) inset, 0 18px 40px -18px var(--card-glow); animation: rise 0.4s 0.05s ease-out both; position: relative; }
+.result-card.verified { --card-bg: linear-gradient(150deg, #14702a 0%, #0b4a1a 70%); --card-ink: #fff; --card-soft: rgb(255 255 255 / 0.78); --card-glow: rgb(11 74 26 / 0.55); --pill-bg: #fff; --pill-ink: #0f5a20; }
+.result-card.check { --card-bg: linear-gradient(150deg, #ffd35c 0%, #f6b62e 75%); --card-ink: #2b1d00; --card-soft: rgb(43 29 0 / 0.72); --card-glow: rgb(214 148 16 / 0.5); --pill-bg: #2b1d00; --pill-ink: #ffd35c; }
+.result-card.declined { --card-bg: linear-gradient(150deg, #d5524f 0%, #a93535 75%); --card-ink: #fff; --card-soft: rgb(255 255 255 / 0.8); --card-glow: rgb(169 53 53 / 0.5); --pill-bg: #fff; --pill-ink: #a93535; }
+.result-card .verdict { margin-top: 0; animation: none; }
+.result-card .pill { background: var(--pill-bg); color: var(--pill-ink); position: relative; font-size: 14px; padding: 6px 14px 6px 12px; }
+.result-card .verdict .line { color: var(--card-soft); }
+.result-card .verdict .share { color: var(--card-ink); border-color: color-mix(in srgb, var(--card-ink) 34%, transparent); }
+.result-card .verdict .share:hover:not(:disabled) { color: var(--card-ink); border-color: var(--card-ink); background: color-mix(in srgb, var(--card-ink) 10%, transparent); }
+.result-card .figure { margin-top: 16px; }
+.result-card .figure span { font-size: 104px; color: var(--card-ink); }
+.result-card .figure em { color: var(--card-soft); }
+.result-card .figure .none { font-size: 44px; color: var(--card-ink); }
+.result-card .explain { color: var(--card-soft); margin-top: 10px; }
+.result-card .adjusted { color: var(--card-soft); border-color: color-mix(in srgb, var(--card-ink) 40%, transparent); }
+.result-card .adjusted b { color: var(--card-ink); }
+
+.burst { position: absolute; left: 14px; top: 50%; width: 0; height: 0; pointer-events: none; }
+.burst b { position: absolute; width: 7px; height: 7px; border-radius: 2px; background: var(--c); opacity: 0;
+  animation: burst 0.9s cubic-bezier(0.15, 0.7, 0.25, 1) both; }
+@keyframes burst {
+  0% { transform: rotate(var(--a)) translateX(0) scale(0.4); opacity: 1; }
+  70% { opacity: 1; }
+  100% { transform: rotate(var(--a)) translateX(var(--d)) scale(1) rotate(160deg); opacity: 0; }
+}
+
+/* The model's stage: a soft sky, and the model on a round table. */
+.viewer3d:not(.night) { background: radial-gradient(120% 95% at 50% 12%, #ffffff 0%, #eef4f7 52%, #dde8ee 100%); }

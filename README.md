@@ -49,19 +49,22 @@ The vision model in these runs is Gemini 4 Carbon at low thinking. Alone, it see
 
 ## The app
 
-![Thirty-two doors marked on the plan and in the 3D model raised from it, Verified](docs/screenshots/doors-verified.png)
+![The landing page: a real plan stands up as you scroll, and its doors open as they are counted](docs/screenshots/story-doors.png)
 
-Quiet and light, in the spirit of Stoa's own site. The answer reads like a short document on the left; the drawing it came from is on the right.
+The landing page is a story told by scrolling. A real drawing from the dataset lies flat, stands up into a painted model, opens its doors as they are counted and adds up an apartment's rooms, on a background that changes colour with each chapter. Every figure in it is the engine's answer to a real question, asked when the page loads.
 
-- **The answer column:** the question, the state, the figure, why it can be trusted or needs a look, this system beside a vision model alone (answer, cost, time), how it was worked out step by step, and every counted item cut out of the drawing.
+![Thirty-two doors marked on the plan and in the model raised from it, Verified](docs/screenshots/doors-verified.png)
+
+- **The answer card:** the number stands on the colour of its state: green for Verified, amber for Check this, red for Can't answer reliably. Under it: why it can be trusted or needs a look, this system beside a vision model alone (answer, cost, time), how it was worked out step by step, and every counted item cut out of the drawing.
 - **On the sheet:** a fine ring and a numbered dot on each counted item, a tint and an area plate on each measured room. They appear as a reading line crosses the sheet, and the figure climbs with them. Click any mark to leave it out; the answer follows.
-- **In 3D:** a white model with the plan as its floor. A Swiss plan is raised from its DXF; an IFC model is cut open at the storey; an answer spread over several storeys lifts them apart and tallies each one.
+- **In 3D:** a painted model in sunlight, standing on the plan as its floor. Rooms are tinted by their use, read from the names printed in them; glass, doors and fixtures have their own colours. A counted door swings open. An IFC model is cut open at the storey; an answer spread over several storeys lifts them apart and tallies each one.
+- **By voice:** ask aloud, and the drawing answers aloud in the first person ("I count thirty-two doors. Verified.").
 - **Checking tools:** inspect the items one by one, measure on the sheet where its scale is known, enlarge the drawing under a loupe, and see a small scan sharper with **Enhance**.
 - **Bring your own drawing:** an image or a PDF opens like any other and is read as it came. **Share** makes one image of an answer with its evidence marked.
 
 | | |
 | --- | --- |
-| ![The home page](docs/screenshots/home.png) | ![An apartment's rooms tinted with their areas](docs/screenshots/apartment-paper.png) |
+| ![The landing page's first screen](docs/screenshots/home.png) | ![An apartment's rooms tinted with their areas](docs/screenshots/apartment-paper.png) |
 | ![A storey of an IFC model cut open with its doors marked](docs/screenshots/ifc-storey.png) | ![An IFC model with its storeys lifted apart and a door tally beside each](docs/screenshots/ifc-storeys-apart.png) |
 
 The left and right arrow keys step through ten prepared examples; "Play examples" runs them on their own.

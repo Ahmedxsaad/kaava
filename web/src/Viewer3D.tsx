@@ -86,7 +86,8 @@ function styleOf(cls: string): Style {
   if (cls.startsWith("IfcWall") || cls === "wall") return { kind: "wall", paper: 0xf3f0e8 };
   if (cls === "IfcCurtainWall" || cls === "IfcPlate" || cls === "IfcWindow" || cls === "window") return { kind: "glass", paper: 0x9cc3ee, glass: true };
   if (cls === "IfcDoor" || cls === "door") return { kind: "door", paper: 0xb98d5f };
-  if (cls === "IfcSlab" || cls === "IfcRoof" || cls === "IfcFooting" || cls === "IfcCovering") return { kind: "slab", paper: 0xd8d3c7 };
+  if (cls === "IfcRoof") return { kind: "roof", paper: 0xd8d3c7 };
+  if (cls === "IfcSlab" || cls === "IfcFooting" || cls === "IfcCovering") return { kind: "slab", paper: 0xd8d3c7 };
   if (cls === "room") return { kind: "floor", paper: 0xe9e4d8 };
   if (cls.startsWith("IfcFurnishing") || cls === "IfcFurniture") return { kind: "furniture", paper: 0xc8c0b0 };
   if (cls === "IfcStair" || cls === "IfcStairFlight" || cls === "IfcRailing" || cls === "IfcRamp") return { kind: "stair", paper: 0xbcb5a6 };
@@ -97,14 +98,14 @@ function styleOf(cls: string): Style {
 
 // A white architectural model: sunlight and soft shadows, fine dark edges, one warm accent for the answer.
 const PAPER = {
-  background: 0xfafbfb as number | null, edge: 0x2a302b, edgeOpacity: 0.26, grid: 0xdfe2e0, gridOpacity: 0.7,
+  edge: 0x2a302b, edgeOpacity: 0.26, table: 0xf4f8f1, rim: 0xcfdccb,
   count: new THREE.Color(0xc46103), area: new THREE.Color(0xe8843a), off: new THREE.Color(0xa9b0a9),
   countEdge: 0x7a3a00, areaEdge: 0xa65100, sheet: "#ffffff",
   sky: 0xffffff, bounce: 0xe9ebe9, ambient: 2.35, sun: 2.1, fill: 0.5, shadow: 0.26,
 };
 // The same model at night: one key light on a dark table, so the paper and the walls stand out.
 const NIGHT: typeof PAPER = {
-  ...PAPER, background: null, edge: 0x0c1f0e, edgeOpacity: 0.34, grid: 0x2f5a34, gridOpacity: 0.32,
+  ...PAPER, edge: 0x0c1f0e, edgeOpacity: 0.34, table: 0x174a1e, rim: 0x2c6a34,
   count: new THREE.Color(0xf07a14), area: new THREE.Color(0xf0903f), sheet: "#f4f6f1",
   sky: 0xf2f6f2, bounce: 0x2c5a31, ambient: 2.0, sun: 2.7, fill: 0.42, shadow: 0.5,
 };
@@ -112,6 +113,7 @@ const NIGHT: typeof PAPER = {
 const FACE: Record<string, number> = {
   wall: 0xfffdf8, slab: 0xf0e8da, floor: 0xffffff, glass: 0x7cc4ff, door: 0xdfa368, furniture: 0xf4c25a,
   stair: 0xe58a6b, frame: 0x7f93b3, fixture: 0x4fc3e0, proxy: 0xe0d8cc, other: 0xb9d9c6, space: 0xe8843a, site: 0xcfe3bf,
+  roof: 0xe07f63,
 };
 
 // Rooms are tinted by what they are for, read from the name printed in them (German, French, Italian, English).
@@ -208,7 +210,7 @@ export function Viewer3D({ meshUrl, groundUrl, imageUrl, highlights, visible, ho
     let disposed = false;
     setStatus("loading");
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true, alpha: look.background === null });
+    const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true, alpha: true });  // the page shows behind
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -220,7 +222,6 @@ export function Viewer3D({ meshUrl, groundUrl, imageUrl, highlights, visible, ho
     el.appendChild(labels.domElement);
 
     const scene = new THREE.Scene();
-    if (look.background !== null) scene.background = new THREE.Color(look.background);
     const camera = new THREE.PerspectiveCamera(38, el.clientWidth / Math.max(el.clientHeight, 1), 0.1, 5000);
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
@@ -448,14 +449,15 @@ export function Viewer3D({ meshUrl, groundUrl, imageUrl, highlights, visible, ho
         modelBox.set(new THREE.Vector3(b[0], b[2], -b[4]), new THREE.Vector3(b[3], b[5], -b[1]));
       }
 
-      // A drafting grid under the model.
+      // A round table under the model, with a fine rim.
       const span = modelBox.getSize(new THREE.Vector3());
       const reach = Math.max(span.x, span.z) * 2.6;
-      const cells = Math.max(10, Math.min(80, Math.round(reach / (reach > 120 ? 5 : 1))));
-      const grid = new THREE.GridHelper(reach, cells, look.grid, look.grid);
-      const gridMaterial = grid.material as THREE.LineBasicMaterial;
-      gridMaterial.transparent = true;
-      gridMaterial.opacity = look.gridOpacity;
+      const round = Math.hypot(span.x, span.z) * 0.78;
+      const grid = new THREE.Group();
+      const top = new THREE.Mesh(new THREE.CircleGeometry(round, 128), new THREE.MeshBasicMaterial({ color: look.table }));
+      const rim = new THREE.Mesh(new THREE.RingGeometry(round, round * 1.012, 128), new THREE.MeshBasicMaterial({ color: look.rim }));
+      top.rotation.x = rim.rotation.x = -Math.PI / 2;
+      grid.add(top, rim);
       grid.position.set((modelBox.min.x + modelBox.max.x) / 2, modelBox.min.y - 0.03, (modelBox.min.z + modelBox.max.z) / 2);
       scene.add(grid);
 
@@ -471,7 +473,9 @@ export function Viewer3D({ meshUrl, groundUrl, imageUrl, highlights, visible, ho
       shade.far = radius * 7;
       shade.updateProjectionMatrix();
       // What the model stands on takes its shadow: on the sheet, or on the table when there is none.
-      const catcher = new THREE.Mesh(new THREE.PlaneGeometry(reach, reach), new THREE.ShadowMaterial({ opacity: look.shadow, depthWrite: false }));
+      // Round like the table when there is one, so no shadow falls past its edge.
+      const catcher = new THREE.Mesh(directed.current ? new THREE.PlaneGeometry(reach, reach) : new THREE.CircleGeometry(round, 96),
+        new THREE.ShadowMaterial({ opacity: look.shadow, depthWrite: false }));
       catcher.position.set(middle.x, -middle.z, modelBox.min.y + 0.012);
       catcher.receiveShadow = true;
       catcher.renderOrder = 1;
@@ -485,7 +489,7 @@ export function Viewer3D({ meshUrl, groundUrl, imageUrl, highlights, visible, ho
         // Fit the narrower of the two view angles, so a tall pane does not crop the model.
         const vertical = (camera.fov * Math.PI) / 360;
         const half = Math.min(vertical, Math.atan(Math.tan(vertical) * camera.aspect));
-        const distance = (radius / Math.sin(half)) * (bare ? 1.22 : 0.92);  // as a backdrop the model keeps its distance
+        const distance = (radius / Math.sin(half)) * (bare ? 1.22 : 1.04);  // as a backdrop the model keeps its distance
         // Keep the side the viewer is on; come lower to look at one item.
         const side = new THREE.Vector3().subVectors(camera.position, controls.target).setY(0);
         if (side.lengthSq() < 1e-6 || options.fromAbove) {  // stand facing the model's long side, a little off square

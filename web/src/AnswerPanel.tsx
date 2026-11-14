@@ -344,8 +344,13 @@ export function AnswerPanel(props: Props) {
     <article className={`answer state-${result.state}${asking ? " stale" : ""}`}>
       <p className="asked">{result.question}</p>
 
+      <div className={`result-card ${result.state}${settled ? " settled" : ""}`}>
       <div className="verdict">
-        <span className="pill"><i />{state.label}</span>
+        <span className="pill"><i />{state.label}
+          {settled && result.state === "verified" && (
+            <span className="burst" aria-hidden>{Array.from({ length: 14 }, (_, i) => <b key={i} style={{ "--a": `${i * 25.7 + 8}deg`, "--d": `${46 + (i % 4) * 16}px`, "--c": ["#ffffff", "#8be28f", "#ffd45e", "#ff9a5c"][i % 4] } as React.CSSProperties} />)}</span>
+          )}
+        </span>
         <span className="line">{state.line}</span>
         {props.onShare && result.answer !== null && (
           <button className="share" onClick={props.onShare} disabled={props.sharing} title="A single image of this answer with its evidence marked, to send or attach">
@@ -370,6 +375,7 @@ export function AnswerPanel(props: Props) {
           <button onClick={props.onRestore}>Put back</button>
         </p>
       )}
+      </div>
 
       {settled && (
         <section className="proof">
