@@ -1,0 +1,130 @@
+{
+  "title": "Kaava: the tech partners, and what each one does",
+  "subtitle": "Three Junction partner technologies around one rule: the number is computed by Kaava's own code, never by a partner's model",
+  "destination": "slide",
+  "theme": "sketch",
+  "zones": [
+    {
+      "id": "app",
+      "label": "Kaava",
+      "color": "service"
+    },
+    {
+      "id": "partners",
+      "label": "Junction tech partners",
+      "color": "ai"
+    },
+    {
+      "id": "out",
+      "label": "What the engineer gets",
+      "color": "output"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "user",
+      "label": "Project engineer",
+      "sub": "asks, checks, listens",
+      "shape": "ellipse",
+      "color": "client"
+    },
+    {
+      "id": "kaava",
+      "label": "Router + engines",
+      "sub": "counts, measures, computes",
+      "zone": "app",
+      "icon": "logos:Python",
+      "highlight": true
+    },
+    {
+      "id": "gemini",
+      "label": "Google Gemini API",
+      "sub": "points: boxes, figures",
+      "zone": "partners",
+      "icon": "brands:Google Gemini"
+    },
+    {
+      "id": "cloudinary",
+      "label": "Cloudinary",
+      "sub": "enhance a scan · share",
+      "zone": "partners",
+      "icon": "brands:Cloudinary"
+    },
+    {
+      "id": "eleven",
+      "label": "ElevenLabs",
+      "sub": "reads the answer aloud",
+      "zone": "partners",
+      "icon": "brands:ElevenLabs"
+    },
+    {
+      "id": "number",
+      "label": "The number",
+      "sub": "from Kaava's code only",
+      "zone": "out",
+      "color": "output",
+      "icon": "ui:Check mark"
+    },
+    {
+      "id": "evidence",
+      "label": "Evidence sheet",
+      "sub": "a link anyone can open",
+      "zone": "out",
+      "color": "output",
+      "icon": "it:Document"
+    },
+    {
+      "id": "voice",
+      "label": "Spoken answer",
+      "sub": "hands busy on site",
+      "zone": "out",
+      "color": "output",
+      "icon": "it:Speaker"
+    }
+  ],
+  "edges": [
+    {
+      "from": "user",
+      "to": "kaava",
+      "step": 1,
+      "label": "A question about one drawing"
+    },
+    {
+      "from": "kaava",
+      "to": "gemini",
+      "step": 2,
+      "label": "Gemini points; it has no answer field",
+      "both": true
+    },
+    {
+      "from": "kaava",
+      "to": "number",
+      "step": 3,
+      "label": "Kaava's code computes the number"
+    },
+    {
+      "from": "kaava",
+      "to": "cloudinary",
+      "step": 4,
+      "label": "Cloudinary enlarges and hosts"
+    },
+    {
+      "from": "cloudinary",
+      "to": "evidence"
+    },
+    {
+      "from": "kaava",
+      "to": "eleven",
+      "step": 5,
+      "label": "ElevenLabs speaks the answer"
+    },
+    {
+      "from": "eleven",
+      "to": "voice"
+    }
+  ],
+  "legend": {
+    "highlight": "the only place a number is made",
+    "client": "the person asking"
+  }
+}

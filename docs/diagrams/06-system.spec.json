@@ -1,5 +1,5 @@
 {
-  "title": "Blueprints Talk: how it is built",
+  "title": "Kaava: how it is built",
   "subtitle": "One FastAPI app in a container on a 2-vCPU VM: exact engines first, one vision model behind them, every paid answer kept",
   "destination": "slide",
   "theme": "sketch",

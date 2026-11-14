@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "blueprints"
 version = "0.1.0"
-description = "Verified answers to questions about construction drawings (Junction 2026, Stoa: Make Blueprints Talk)"
+description = "Kaava: verified answers to questions about construction drawings (Junction 2026, Stoa: Make Blueprints Talk)"
 requires-python = ">=3.11"
 license = "MIT"
 dependencies = [

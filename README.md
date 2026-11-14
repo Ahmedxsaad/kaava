@@ -1,10 +1,12 @@
 <div align="center">
 
-# Blueprints Talk
+# Kaava
 
 **Ask a construction drawing a question. Get a number you do not have to double-check,<br>with the evidence drawn on the sheet.**
 
-[**Live demo: stoa.ahmedxsaad.me**](https://stoa.ahmedxsaad.me) &nbsp;·&nbsp; [How it works](#how-it-works) &nbsp;·&nbsp; [Results](#results) &nbsp;·&nbsp; [Run it](#run-it) &nbsp;·&nbsp; [Diagrams](#more-diagrams)
+*Kaava* is Finnish for both **formula** and **plan**: the model writes the formula, the code computes the number, on the plan.
+
+[**Live demo: stoa.ahmedxsaad.me**](https://stoa.ahmedxsaad.me) &nbsp;·&nbsp; [How it works](#how-it-works) &nbsp;·&nbsp; [Results](#results) &nbsp;·&nbsp; [Tech partners](#tech-partners) &nbsp;·&nbsp; [Run it](#run-it) &nbsp;·&nbsp; [Diagrams](#more-diagrams)
 
 ![Four questions answered in the app: 23 doors counted on a plan and lit in 3D, a corridor measured with the lift cut out of it, a slab's area with two trenches taken out, and 14 windows boxed on a scan that stands in 3D](docs/demo.gif)
 
@@ -20,6 +22,20 @@ Built at Junction 2026 (Helsinki, 13 to 15 November) for Stoa's challenge **Make
 | Cost per question on the dataset | **€0.003** | €0.008 for the vision model alone |
 
 **The rule that holds everywhere:** a number is computed by code from things you can see on the drawing (counted objects, measured geometry, printed figures). A language model never writes it. Where a model is used at all, its reply format has no field for the answer.
+
+### Tech partners in this build
+
+The Junction 2026 partner technologies Kaava really uses, and what each one does ([details and measurements below](#tech-partners)):
+
+| Partner | What it does in Kaava | Where you see it |
+| --- | --- | --- |
+| **Google Gemini API** · Gemini 4 Carbon | The only model in the answer path, and only ever as a pointer. It boxes each counted symbol on a scan, names the printed figures and the formula on a sheet, reads a question in your own words as a query (twice), and examines a measured area for what must be taken out. It never states a number: its reply formats have no field for one. | Any scan or sheet. The steps under each answer name every call and its cost |
+| **Cloudinary** | **Enhance:** a small scan shown enlarged with AI super-resolution, laid over the original so every mark keeps its place. **Share:** hosts an answer's evidence sheet and delivers it in the format that suits whoever opens it. | "Enhance" under a scan · "Share" on an answer |
+| **ElevenLabs** | Reads the answer aloud in a natural voice (Flash v2.5), for checking with your hands busy on site. | The speaker button by the question box |
+
+Each is optional and switches on when its key is set; with no key at all the exact engines still answer. Hosting is not a challenge partner: a Cloudflare Tunnel in front of a small Azure VM. Claude is the fallback model when no Gemini key is set.
+
+![The tech partners around Kaava: what is sent to each, and that the number never comes from any of them](docs/diagrams/08-partners.png)
 
 Every answer ends in one of three states:
 
@@ -95,6 +111,7 @@ Scans get the same treatment, and a 3D view of their own: the walls are found in
 | [What it answers](docs/diagrams/05-what-it-answers.png) | the kinds of question by kind of drawing, and when it says no |
 | [How it is built](docs/diagrams/06-system.png) | browser, app, engines, the one outside model, what is kept on disk |
 | [Where the scale comes from](docs/diagrams/07-scale.png) | scale bar, printed dimension, doors as a standard; the door check; estimates said as estimates |
+| [Tech partners](docs/diagrams/08-partners.png) | what goes to Gemini, Cloudinary and ElevenLabs, and what never does |
 
 Each diagram is in `docs/diagrams/` as a spec, an editable Excalidraw scene, PNG, SVG and an animated SVG that reveals it step by step.
 
@@ -187,13 +204,13 @@ The landing page opens by itself: a real drawing from the dataset answers one qu
 
 The left and right arrow keys step through seventeen prepared examples, five of them on Stoa's sample sheets; "Play examples" runs them on their own.
 
-## Partner technology
+## Tech partners
 
 Each of these is optional and switches on when its key is in `.env` (see `.env.example`). Without any key the exact engines still answer.
 
 | Partner | What it does here | Status |
 | --- | --- | --- |
-| Google Gemini | **On sheets:** Gemini 4 Carbon names the printed figures, rows and rooms that answer a question, working from the image and the list of texts a program read at full size; it boxes small symbols tile by tile. It never states the number. **On scans:** Gemini 4 Carbon boxes each counted item in its native detection format (`[ymin, xmin, ymax, xmax]` on a 0 to 1000 grid); the code counts the boxes and draws them on the sheet, so the number never comes from the model and every item can be checked or left out. **For free-form questions:** Gemini 4 Hydrogen restates the question so an exact engine can read it (about €0.003); the number still comes from geometry, and such an answer is never Verified. | In use; all figures above are measured on it |
+| Google Gemini | **On sheets:** Gemini 4 Carbon names the printed figures, rows and rooms that answer a question, working from the image and the list of texts a program read at full size; it boxes small symbols tile by tile. It never states the number. **On questions in your own words:** it reads the question as a query over the drawing's own rooms and items, twice, and both readings must agree. **As examiners:** two independent calls look inside a computed area for what must be taken out (a trench, a pit) and point at a printed dimension so the program can measure it. **On scans:** Gemini 4 Carbon boxes each counted item in its native detection format (`[ymin, xmin, ymax, xmax]` on a 0 to 1000 grid); the code counts the boxes and draws them on the sheet, so the number never comes from the model and every item can be checked or left out. **For free-form questions:** Gemini 4 Hydrogen restates the question so an exact engine can read it (about €0.003); the number still comes from geometry, and such an answer is never Verified. | In use; all figures above are measured on it |
 | Cloudinary | **Enhance:** a small scan is shown enlarged with AI super-resolution, loaded straight from Cloudinary in the format that suits the browser and laid over the original so every mark keeps its place. **Share:** hosts the evidence sheet of an answer and delivers it in the format and quality that suit whoever opens it. | In use, checked against a Cloudinary account |
 | ElevenLabs | Reads the answer aloud with a natural voice (Flash v2.5, about half a second per answer), for hands-busy checking on site; the browser's own voice is the fallback. | In use, checked against an ElevenLabs account |
 | Anthropic Claude | The vision and language model when no Gemini key is set, and the model of the earlier measurements. | Fallback |
@@ -275,7 +292,7 @@ Leave out `--env-file .env` to run without a vision model. The first time a larg
 | `src/blueprints/server.py` | API for the app |
 | `web/` | The verification app (React, Three.js) |
 | `examples/stoa/` | Stoa's four sample sheets, our 27 questions on them with our answer key, and the kept answers |
-| `docs/diagrams/` | Seven diagrams of how it works: spec, editable Excalidraw scene, PNG, SVG, animated SVG |
+| `docs/diagrams/` | Eight diagrams of how it works: spec, editable Excalidraw scene, PNG, SVG, animated SVG |
 | `scripts/` | Measurements (each logged in `results/`), the benchmark on Stoa's sheets, and the deploy scripts |
 | `tests/` | The test suite (`pytest`) |
 | `results/` | Log of every evaluation run |

@@ -39,6 +39,13 @@ const HARD: { label: string; why: string }[] = [
   { label: "A question the plan cannot answer", why: "No number, and the reason. A wrong confident answer is the worst outcome." },
 ];
 
+// The Junction tech partners this build really uses: what each does here, and where it shows in the app.
+const PARTNERS: { name: string; does: string; where: string }[] = [
+  { name: "Google Gemini API", does: "Gemini 4 Carbon, the only model in the answer path, and only as a pointer: it boxes each counted symbol on a scan, names the printed figures and the formula on a sheet, reads a question in your own words as a query (twice), and examines a measured area for what must be taken out. It never states a number.", where: "Any scan or sheet. The steps under each answer name every call and its cost." },
+  { name: "Cloudinary", does: "Enhance: a small scan shown enlarged with AI super-resolution, laid over the original so every mark keeps its place. Share: hosts an answer's evidence sheet and delivers it in the format that suits whoever opens it.", where: "\"Enhance\" under a scan, \"Share\" on an answer." },
+  { name: "ElevenLabs", does: "Reads the answer aloud in a natural voice, for checking with your hands busy on site.", where: "The speaker button by the question box." },
+];
+
 const pct = (v: number | null | undefined, digits = 2) => (v == null ? "—" : `${(100 * v).toFixed(digits)}%`);
 
 export function How({ onOpen }: { onOpen(stop: Stop): void }) {
@@ -183,6 +190,17 @@ export function How({ onOpen }: { onOpen(stop: Stop): void }) {
             </table>
           </section>
         )}
+
+        <section className="n-card">
+          <h2>Tech partners in this build</h2>
+          <p>The Junction 2026 partner technologies Kaava really uses. Each is optional: with no key at all the exact engines still answer.</p>
+          <table className="how-tools">
+            <thead><tr><th>Partner</th><th>What it does here</th><th>Where you see it</th></tr></thead>
+            <tbody>
+              {PARTNERS.map((row) => <tr key={row.name}><td><b>{row.name}</b></td><td>{row.does}</td><td>{row.where}</td></tr>)}
+            </tbody>
+          </table>
+        </section>
       </div>
     </main>
   );

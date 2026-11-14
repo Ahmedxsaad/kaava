@@ -446,7 +446,7 @@ export function App() {
       <header className="top">
         <button className="brand" onClick={() => go("home")} aria-label="Home">
           <svg viewBox="0 0 28 22" aria-hidden><path d="M9 1h18l-4.5 7H4.500z" /><path d="M5.500 14h18L19 21H1z" /></svg>
-          <span>Blueprints Talk</span>
+          <span>Kaava</span>
         </button>
         <nav>
           <button className={page === "home" ? "on" : ""} onClick={() => go("home")}>Home</button>

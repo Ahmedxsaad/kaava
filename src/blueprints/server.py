@@ -1474,7 +1474,7 @@ def _box_ref(index: dict | None, bbox: list) -> str | None:
 
 
 def create_app(dataset_root: Path | str | None = None) -> FastAPI:
-    app = FastAPI(title="Make Blueprints Talk", docs_url="/api/docs", openapi_url="/api/openapi.json")
+    app = FastAPI(title="Kaava", docs_url="/api/docs", openapi_url="/api/openapi.json")
     service = Service(dataset_root)
     app.state.service = service
 
