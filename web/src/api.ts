@@ -177,6 +177,7 @@ export interface Stats {
     }>;
   };
   full_set_mix: { source: string; type: string; questions: number }[];
+  labels_on_scans: { run_id: string; scan_questions: number; answered: number; correct: number; share: number } | null;
   model_budget_eur: number;
   model_spent_eur: number;
 }

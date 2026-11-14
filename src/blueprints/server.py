@@ -564,6 +564,17 @@ class Service:
                         "label": item.get("label", ""), "why": item.get("why", "")})
         return out
 
+    @staticmethod
+    def _labels_share(runs: list[dict]) -> dict | None:
+        """From the latest full dev run of the router (no fallback): what the label engine covers on scans."""
+        full = [r for r in runs if r["method"] == router.METHOD and r["split"] == "dev" and r["sample"].startswith("all-dev")]
+        # The full dataset's run before the preview's, the newest first.
+        for run in sorted(full, key=lambda r: (not r["dataset"].endswith("preview"), r["timestamp"]), reverse=True):
+            share = _labels_share_of(run["run_id"])
+            if share and share["answered"]:
+                return share
+        return None
+
     # ---- numbers for the pitch, straight from the run log
 
     def stats(self) -> dict:
@@ -590,6 +601,7 @@ class Service:
             run["rows"].append({"scope": r["scope"], "source": r["source"], "type": r["type"],
                                 **{k: _num(r[k]) for k in number}})
         return {"runs": list(runs.values()), "thresholds": self.thresholds,
+                "labels_on_scans": self._labels_share(list(runs.values())),
                 "full_set_mix": [{"source": s, "type": t, "questions": n}
                                  for (s, t), n in sorted(config.FULL_SET_MIX.items())],
                 "model_budget_eur": self.budget_eur, "model_spent_eur": round(self.spent_eur, 4)}
@@ -638,6 +650,29 @@ def _fit_affine(pairs: list) -> dict | None:
     if keep.sum() < 4 or keep.sum() < 0.6 * len(pairs) or residual[keep].max() > 15.0:
         return None
     return {"coef": coef.tolist(), "anchors": int(keep.sum()), "residual_pt": round(float(residual[keep].max()), 2)}
+
+
+@lru_cache(maxsize=8)
+def _labels_share_of(run_id: str) -> dict | None:
+    """In a logged router run: the share of scan questions the label engine answered on its own."""
+    preds = config.RESULTS_DIR / "runs" / run_id / "predictions.jsonl"
+    if not preds.is_file():
+        return None
+    scans = stood = right = 0
+    with open(preds, encoding="utf-8") as f:
+        for line in f:
+            if '"cubicasa5k"' not in line:
+                continue
+            row = json.loads(line)
+            scans += 1
+            if (row.get("method") == raster_labels.METHOD and row.get("pred") is not None
+                    and (row.get("confidence") or 0.0) >= router.LABELS_STAND_FROM):
+                stood += 1
+                right += row.get("status") == "correct"
+    if not scans:
+        return None
+    return {"run_id": run_id, "scan_questions": scans, "answered": stood, "correct": right,
+            "share": stood / scans}
 
 
 def _num(text: str):

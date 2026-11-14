@@ -349,7 +349,7 @@ ul { list-style: none; }
 .numbers {
   overflow-y: auto; min-height: 0;
   --surface-1: #fcfbf8; --text-primary: #161a21; --text-secondary: #474e5c; --text-muted: #7a8090;
-  --grid: #e7e3d9; --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a; --series-other: #c9c5ba;
+  --grid: #e7e3d9; --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a; --series-4: #eda100; --series-other: #c9c5ba;
   --series-muted: #a9a59b; --track: #cde2fb; --critical: #d03b3b; --critical-track: #f6d5d3;
 }
 .n-page { max-width: 1180px; margin: 0 auto; padding: 28px 28px 60px; display: grid; gap: 18px; }
