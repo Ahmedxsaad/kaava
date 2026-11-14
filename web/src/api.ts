@@ -98,6 +98,7 @@ export interface AskResult {
   latency_ms: number;
   replayed_from: string | null;
   interpreted: string | null;
+  restated: { question: string | null; reason: string; model: string; cost_eur: number; latency_ms: number } | null;
   checks: { name: string; value: number | string }[];
   verified_because: {
     family: string;

@@ -60,6 +60,12 @@ function why(result: AskResult): { title: string; text: React.ReactNode } {
   }
   if (result.state === "check") {
     const bar = result.family?.threshold;
+    if (result.restated?.question) {
+      return {
+        title: "Why it needs a look",
+        text: `The question was restated by a language model (${result.restated.model}) before the engine could read it. The number is computed from the drawing as usual, but an answer that rests on a model's reading of the question is never marked Verified.`,
+      };
+    }
     return {
       title: "Why it needs a look",
       text: bar != null && result.confidence != null
@@ -104,7 +110,14 @@ function Steps({ result, marked }: { result: AskResult; marked: number }) {
   const total = result.evidence.filter((e) => e.kind !== "formula" && e.kind !== "context").length;
   const formula = result.evidence.find((e) => e.kind === "formula");
   const steps: { title: string; body?: React.ReactNode }[] = [
-    { title: "Read the question", body: result.interpreted ?? (method.startsWith("vlm") ? "Passed on as written, with the counting rules it states." : "Taken as written.") },
+    {
+      title: "Read the question",
+      body: result.restated?.question
+        ? <>Restated by {result.restated.model} as “{result.restated.question}”{result.interpreted ? <>, then read as: {result.interpreted}</> : null}</>
+        : result.restated
+          ? <>The rules could not read it, and {result.restated.model} found no engine question for it: {result.restated.reason}</>
+          : result.interpreted ?? (method.startsWith("vlm") ? "Passed on as written, with the counting rules it states." : "Taken as written."),
+    },
     { title: `Chose the method: ${result.engine}`, body: route },
   ];
   if (result.answer !== null) {

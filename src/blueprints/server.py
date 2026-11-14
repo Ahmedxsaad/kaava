@@ -29,12 +29,12 @@ from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import config, mesh, overlay, verify
+from . import config, interpret, mesh, overlay, verify
 from .answer import Answer
 from .data import Dataset, Question, drawing_of, question_id, source_of
-from .engines import dxf, dxf_index, ifc, raster_labels, router
+from .engines import dxf, dxf_index, ifc, ifc_index, raster_labels, router
 from .harness import FatalEngineError
-from .scoring import score_answer
+from .scoring import CHECK, VERIFIED, score_answer
 from .split import Split
 
 VIEW_LONG_EDGE = 3200
@@ -111,6 +111,7 @@ class Service:
         self._views: dict[tuple[str, int], View] = {}
         self._meshes: dict[str, tuple] = {}
         self._plan_fits: dict[str, dict | None] = {}
+        self._restated: dict[tuple[str, str], interpret.Restated] = {}  # a question is only restated once
         self.logged = self._load_logged_runs()
 
     # ---- which drawings may be shown
@@ -481,6 +482,70 @@ class Service:
             raise HTTPException(503, "no vision-model key is configured on the server")
         return pointing.make_engine(vlm)
 
+    def _text_model(self):
+        """A language model for restating questions: Gemini when its key is set, else Claude Sonnet."""
+        from dotenv import load_dotenv
+
+        from .vlm import make_vlm
+
+        load_dotenv(config.REPO_ROOT / ".env")
+        if os.environ.get("GEMINI_API_KEY"):
+            return make_vlm("gemini", "gemini-4-hydrogen", "low")
+        if os.environ.get("ANTHROPIC_API_KEY"):
+            return make_vlm("anthropic", "claude-sonnet-5-5", "low")
+        return None
+
+    def _restate(self, asked: Question, drawing: str, engine: str) -> tuple[Answer | None, dict | None]:
+        """Have a language model restate a question the engine could not read, then ask the engine again.
+
+        Returns the engine's answer to the restated question (never Verified) and a note for the UI.
+        """
+        if self.spent_eur >= self.budget_eur and (drawing, asked.question) not in self._restated:
+            return None, None
+        try:
+            llm = self._text_model()
+        except FatalEngineError:
+            llm = None
+        if llm is None:
+            return None, None
+        own = [q.question for q in self.questions.get(drawing, [])]
+        if not own:  # an IFC model whose plans carry the questions: borrow theirs
+            model = self.model_of(drawing)
+            own = [q.question for d, qs in self.questions.items() if model and self.model_of(d) == model for q in qs]
+        english = [q for q in dict.fromkeys(own) if q[:4] in ("How ", "What", "Whic")]
+        examples = (english or list(dict.fromkeys(own)))[:interpret.MAX_EXAMPLES]
+        try:
+            if engine == "dxf":
+                names = interpret.names_on_dxf(dxf_index.load_index(self.ds.abspath(self.files_of(drawing)[".dxf"])))
+            else:
+                names = interpret.names_in_ifc(ifc_index.load_index(self.ds.abspath(self.model_of(drawing))))
+            key = (drawing, asked.question)
+            fresh = key not in self._restated
+            if fresh:
+                self._restated[key] = interpret.restate(asked.question, examples, names, llm)
+            restated = self._restated[key]
+        except FatalEngineError:
+            return None, None
+        if fresh:
+            self.spent_eur += config.usd_to_eur(restated.cost_usd)
+        elif restated.error is None:  # shown again: already paid for
+            restated = interpret.Restated(restated.question, restated.reason, restated.model, 0.0, 0.0)
+        note = {"question": restated.question, "reason": restated.reason, "model": restated.model,
+                "cost_eur": round(config.usd_to_eur(restated.cost_usd), 6), "latency_ms": round(restated.latency_ms, 1)}
+        if restated.question is None:
+            return None, note
+        again = Question(qid=question_id(asked.path, restated.question), path=asked.path, question=restated.question,
+                         answer=None, unit=None, type="", source=asked.source, drawing=asked.drawing, group=asked.group)
+        ans = router.make(self.thresholds)(again, self.ds)
+        if ans.answer is None:
+            note["reason"] = f"restated, but the engine still declined: {ans.reason}"
+            return None, note
+        if ans.state == VERIFIED:  # the answer rests on a model's reading of the question
+            ans.state = CHECK
+            ans.meta = {k: v for k, v in ans.meta.items() if k != "verified_because"}
+        ans.cost_usd = (ans.cost_usd or 0.0) + restated.cost_usd
+        return ans, note
+
     def ask(self, req: AskRequest) -> dict:
         drawing, text = req.drawing, " ".join(req.question.split())
         if not text:
@@ -489,7 +554,16 @@ class Service:
         t0 = time.perf_counter()
         replayed = None
         ans = router.make(self.thresholds)(asked, self.ds)
-        exact = router.route(asked, self.ds) in ("ifc", "dxf")
+        engine = router.route(asked, self.ds)
+        exact = engine in ("ifc", "dxf")
+        restated = None
+        if exact and ans.answer is None:  # the rules could not read it: let a language model restate it
+            again, restated = self._restate(asked, drawing, engine)
+            if again is not None:
+                ans = again
+                known = next((q for q in self.questions.get(drawing, []) if q.question == restated["question"]), known)
+            elif restated is not None:  # the attempt was paid for even though it led nowhere
+                ans.cost_usd = (ans.cost_usd or 0.0) + restated["cost_eur"] * config.USD_PER_EUR
         # Scans: no exact engine. A weak or missing label reading gives way to a vision model.
         if not exact and (ans.answer is None or router.is_weak(ans)):
             labels = ans if ans.method == raster_labels.METHOD and ans.answer is not None else None
@@ -524,6 +598,7 @@ class Service:
             "latency_ms": round(latency, 1),
             "replayed_from": replayed,
             "interpreted": ans.meta.get("interpreted"),
+            "restated": restated,
             "checks": _checks(ans),
             "verified_because": ans.meta.get("verified_because"),
             "family": self._family_stats(ans),

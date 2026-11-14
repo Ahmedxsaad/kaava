@@ -23,10 +23,13 @@ DOORS = "How many doors (interior doors and entrance doors together) are drawn o
 
 @pytest.fixture(scope="module")
 def client():
+    import os
+
     from fastapi.testclient import TestClient
 
     from blueprints.server import create_app
 
+    os.environ["BLUEPRINTS_UI_BUDGET_EUR"] = "0"  # no paid model call from a test, whatever keys are in .env
     return TestClient(create_app(PREVIEW))
 
 
