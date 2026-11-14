@@ -434,6 +434,7 @@ class Service:
         exact = router.route(asked, self.ds) in ("ifc", "dxf")
         # Scans: no exact engine. A weak or missing label reading gives way to a vision model.
         if not exact and (ans.answer is None or router.is_weak(ans)):
+            labels = ans if ans.method == raster_labels.METHOD and ans.answer is not None else None
             logged = self.logged["pointing"].get(asked.qid)
             if logged and logged.get("pred") is not None:  # already paid for: show it again, free
                 ans = _answer_from_row(logged)
@@ -446,6 +447,8 @@ class Service:
                 except FatalEngineError as exc:
                     raise HTTPException(503, f"cannot ask the vision model: {exc}")
                 self.spent_eur += config.usd_to_eur(ans.cost_usd or 0.0)
+            if labels is not None and ans is not labels and ans.answer is not None:
+                _second_opinion(ans, labels)
         latency = ans.latency_ms if ans.latency_ms else (time.perf_counter() - t0) * 1000
         view = self.view(drawing)
         out = {
@@ -610,6 +613,22 @@ class Service:
                 "full_set_mix": [{"source": s, "type": t, "questions": n}
                                  for (s, t), n in sorted(config.FULL_SET_MIX.items())],
                 "model_budget_eur": self.budget_eur, "model_spent_eur": round(self.spent_eur, 4)}
+
+
+def _second_opinion(ans: Answer, labels: Answer) -> None:
+    """Put the label engine's reading next to a vision model's answer: two methods on one plan.
+
+    The model's items stay the numbered evidence; the labels the OCR counted are added as
+    boxes that are drawn but not counted, with a check line saying whether the two agree.
+    """
+    agree = labels.answer == ans.answer
+    for item in labels.evidence:
+        if item.get("kind") == "box" and item.get("space") == "image_px" and not item.get("role"):
+            ans.evidence.append({**item, "role": "label read by OCR"})
+    ans.meta = {**ans.meta, "labels_said": labels.answer, "labels_score": labels.confidence,
+                "checks": {**(ans.meta.get("checks") or {}),
+                           "labels printed on the plan (local OCR)":
+                               f"{labels.answer}: {'the same count' if agree else 'a different count'}"}}
 
 
 def _slug(text: str) -> str:

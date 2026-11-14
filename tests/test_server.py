@@ -194,3 +194,21 @@ def test_archive_drawings_with_dots_in_their_names_open(client):
     assert detail["view"]["kind"] in ("image", "page") and detail["view"]["width"] > 0
     assert client.get(detail["view"]["url"]).status_code == 200
     assert detail["suggested"] == []
+
+
+def test_labels_are_shown_beside_a_model_answer_as_a_second_method():
+    from blueprints.answer import Answer
+    from blueprints.server import _second_opinion
+
+    model = Answer(answer=3, unit="count", method="vlm-pointing:x",
+                   evidence=[{"kind": "point", "space": "image_px", "x": 5, "y": 6, "label": "bedroom"}] * 3)
+    labels = Answer(answer=2, unit="count", confidence=0.6, method="raster-labels:v1", evidence=[
+        {"kind": "box", "space": "image_px", "bbox": [1, 2, 3, 4], "label": "MH"},
+        {"kind": "box", "space": "image_px", "bbox": [5, 6, 7, 8], "label": "MH"},
+        {"kind": "box", "space": "image_px", "bbox": [9, 9, 9, 9], "label": "3H+K", "role": "type line"},
+    ])
+    _second_opinion(model, labels)
+    assert model.answer == 3 and model.state == "check"  # the answer and its state are the model's
+    added = [e for e in model.evidence if e.get("role") == "label read by OCR"]
+    assert len(added) == 2 and model.meta["labels_said"] == 2
+    assert "a different count" in model.meta["checks"]["labels printed on the plan (local OCR)"]
