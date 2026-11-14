@@ -81,6 +81,16 @@ export const TOUR: Stop[] = [
     view: "plan",
   },
   {
+    label: "Baseboards of a hall, measured on the sheet",
+    card: true,
+    hard: true,
+    note: "No dimension is printed: walls found in the pixels, scale read from the bar, 8 door openings left out",
+    state: "check",
+    drawing: "uploads/072d5e992c68",
+    question: "How many linear metres of baseboard are needed in the Multi-Purpose Hall?",
+    view: "plan",
+  },
+  {
     label: "Asked in German, shown in 3D",
     note: "Plan raised from the DXF · model alone said 69.5",
     state: "verified",

@@ -300,6 +300,8 @@ h1, h2 { font-family: var(--serif); font-weight: 650; letter-spacing: -0.028em; 
 .tape path { fill: none; stroke: var(--ink); }
 .aside rect { fill: none; stroke: var(--ink-4); }
 .aside.doubt rect { stroke: var(--warn); }
+.aside.opening rect { stroke: #e8690a; fill: rgb(232 105 10 / .55); }
+.aside.ruler rect { stroke: #12903d; fill: rgb(22 163 74 / .12); }
 .aside.second rect { stroke: var(--ink-2); stroke-opacity: .75; fill: rgba(1, 30, 1, .04); }
 .sweep { pointer-events: none; }
 .sweep line { stroke: var(--ink); stroke-opacity: 0.45; }
@@ -824,5 +826,6 @@ html[data-on-stage] .app.page-home .top .ghost { color: rgb(255 255 255 / 0.8); 
 
 /* The harder sheets on the home page: a line of what they are, then their cards */
 .try-note { max-width: 780px; margin: -14px 0 28px; font-size: 16.5px; line-height: 1.55; color: var(--ink-2); }
-.examples.hard { margin-bottom: 84px; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.examples.hard { margin-bottom: 84px; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 16px; }
+.examples.hard .example strong { font-size: 18px; }
 @media (max-width: 1180px) { .examples.hard { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

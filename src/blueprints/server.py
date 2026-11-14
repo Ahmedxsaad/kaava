@@ -1144,7 +1144,9 @@ def _engine_label(method: str) -> str:
     if method in ENGINE_LABELS:
         return ENGINE_LABELS[method]
     if method.startswith("sheet-working"):
-        return "Boxed tile by tile, counted" if method.endswith(":tiles") else "Printed figures and rows, computed"
+        return ("Boxed tile by tile, counted" if method.endswith(":tiles")
+                else "Measured on the sheet against its scale bar" if method.endswith(":measured")
+                else "Printed figures and rows, computed")
     if method.startswith("scan-index"):
         return "Scan read once, items boxed"
     if "pointing" in method:

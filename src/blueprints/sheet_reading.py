@@ -27,19 +27,19 @@ import math
 import re
 from typing import Callable
 
-from . import sheet_text, tiles
+from . import measure, sheet_text, tiles
 from .answer import Answer
 from .data import Dataset, Question
 from .pointing import _box
 from .render import can_render, render
 from .scoring import CHECK
 
-PROMPT = 3
+PROMPT = 4
 MAX_TEXTS = 1100
 
 SYSTEM = """You answer a question about one sheet of a construction drawing set. You get the sheet as an image and a list of the texts printed on it. The list was read by a program at full resolution; each line is `id | text | y x`, where y and x give the centre of the text on a 0-1000 grid (y from the top edge, x from the left edge). Small text may be unreadable in the image: trust the list for what a text says, and the image for where things are and how they belong together.
 
-You do not state the final number. You give what you read and how it combines, and a program does the counting and the arithmetic. Reply in exactly one of four forms and leave the others empty.
+You do not state the final number. You give what you read and how it combines, and a program does the counting and the arithmetic. Reply in exactly one of five forms and leave the others empty.
 
 1. items: for a question asking how many of something there are (rows of a schedule that match a condition, tagged pieces of equipment, symbols on a plan). List every instance once. text_id is the id of the printed text that identifies the instance (the door number of a schedule row, an equipment tag) when the list has it, otherwise -1. box_2d is a box around the instance in the image: [ymin, xmin, ymax, xmax] on the 0-1000 grid. label is a few words. The answer is the length of your list, so the list must be complete and hold nothing that does not count.
 
@@ -48,6 +48,8 @@ You do not state the final number. You give what you read and how it combines, a
 3. text: for a descriptive answer, in the language of the question, short. sources lists the printed texts it was read from (text_id, box_2d).
 
 4. look_closer: for a question asking how many drawn symbols there are on a plan when they are many and small and carry no identifying text (doors, windows, fixtures, columns, outlets). Do not list them. Give `what`: one sentence saying exactly what counts as one item and how it is drawn, and box_2d: the part of the sheet that holds the plan to search (leave out the title block, legends and notes). The program then looks at that part piece by piece at full size. In the other three forms, leave `what` empty.
+
+5. measure: for the size of a room or of several rooms (floor area, perimeter, length of baseboard or skirting) when the sheet prints no figure for it but the plan is drawn to scale with a graphic scale bar. Do not estimate the size. Set quantity to area, perimeter or baseboard, and list the rooms: for each, text_id of the room's name on the plan (-1 when the list does not have it), name, box_2d: a box whose four sides lie on the inner faces of the room's walls, and rectangular: false when the room is not a plain rectangle. The program finds the walls along your box, measures the room against the scale bar, and for baseboard leaves out the door openings. In the other forms, leave quantity empty.
 
 - If the sheet does not let you answer in one of these forms, set cannot_tell to true and say in basis what is missing.
 - basis: one or two sentences on how you got there."""
@@ -76,10 +78,19 @@ SCHEMA = {
             "required": ["text_id", "box_2d"], "additionalProperties": False}},
         "look_closer": {"type": "object", "properties": {"what": {"type": "string"}, "box_2d": _BOX},
                         "required": ["what", "box_2d"], "additionalProperties": False},
+        "measure": {"type": "object", "properties": {
+            "quantity": {"type": "string", "enum": ["", "area", "perimeter", "baseboard"]},
+            "rooms": {"type": "array", "items": {
+                "type": "object",
+                "properties": {"text_id": {"type": "integer"}, "name": {"type": "string"}, "box_2d": _BOX,
+                               "rectangular": {"type": "boolean"}},
+                "required": ["text_id", "name", "box_2d", "rectangular"], "additionalProperties": False}}},
+            "required": ["quantity", "rooms"], "additionalProperties": False},
         "cannot_tell": {"type": "boolean"},
         "basis": {"type": "string"},
     },
-    "required": ["items", "figures", "expression", "result_unit", "text", "sources", "look_closer", "cannot_tell", "basis"],
+    "required": ["items", "figures", "expression", "result_unit", "text", "sources", "look_closer", "measure",
+                 "cannot_tell", "basis"],
     "additionalProperties": False,
 }
 
@@ -296,6 +307,13 @@ def make_engine(vlm) -> Callable[[Question, Dataset], Answer]:
         said = str(data.get("text") or "").strip()
         closer = data.get("look_closer") if isinstance(data.get("look_closer"), dict) else {}
         what = str(closer.get("what") or "").strip()
+        wanted = data.get("measure") if isinstance(data.get("measure"), dict) else {}
+        rooms = [r for r in wanted.get("rooms") or [] if isinstance(r, dict)]
+
+        if wanted.get("quantity") and rooms and not figures and not items:
+            meta["basis"] = basis
+            common["method"] = method + ":measured"
+            return _measured(q, path, index, wanted["quantity"], rooms, width, height, common)
 
         if what and not figures and not items:
             # Many small symbols: the part of the sheet that holds the plan is searched tile by tile.
@@ -416,4 +434,64 @@ def _quantity(q: Question, figures: list[dict], expression: str, result_unit, te
     return Answer(answer=round(shown, 2), unit=shown_unit, state=CHECK, confidence=confidence, evidence=evidence,
                   explanation=f"{working}. Computed from {len(figures)} figure{'' if len(figures) == 1 else 's'} "
                               f"printed on the sheet. {note}",
+                  **common)
+
+
+def _measured(q: Question, path, index: dict, quantity: str, rooms: list[dict], width: float, height: float,
+              common: dict) -> Answer:
+    """Rooms measured on the sheet itself: wall pixels against the scale bar (measure.py)."""
+    if path.suffix.lower() == ".pdf":
+        return Answer.decline("measuring on the sheet needs it as an image", **common)
+    bar = measure.scale_bar(path, index)
+    if bar is None:
+        return Answer.decline("no graphic scale bar was found on the sheet to measure against", **common)
+    evidence, parts, checks = [], [], {}
+    checks["scale bar"] = f"{bar['label']} = {bar['length_px']:,} px ({bar['px_per_m']:.1f} px per metre)"
+    checks["scale bar labels standing at their marks"] = f"{bar['labels_in_place']} of {bar['labels']}"
+    total = 0.0
+    left_out: list[dict] = []
+    for room in rooms:
+        name = str(room.get("name") or "room").strip()[:60]
+        if room.get("rectangular") is False:
+            return Answer.decline(f"{name} is not a plain rectangle, and only rectangular rooms are measured so far", **common)
+        rough = _box(room, width, height)
+        if rough is None:
+            return Answer.decline(f"no usable box for {name}", **common)
+        found = measure.measure_room(path, rough["bbox"], bar["px_per_m"])
+        if not found["ok"]:
+            return Answer.decline(f"{name} could not be measured: {found['why']}", **common)
+        w, h = found["width_m"], found["height_m"]
+        checks[f"wall along each side of {name} (share of the side that is wall)"] = ", ".join(
+            f"{side} {share:.0%}" for side, share in found["sides"].items())
+        if quantity == "area":
+            total += found["area_m2"]
+            parts.append(f"{w:.2f} m × {h:.2f} m")
+            label = f"{name}: {w:.2f} m × {h:.2f} m = {found['area_m2']:.2f} m²"
+        else:
+            openings = found["openings"] if quantity == "baseboard" else []
+            gone = sum(o["width_m"] for o in openings)
+            total += found["perimeter_m"] - gone
+            parts.append(f"2 × ({w:.2f} m + {h:.2f} m)" + (f" − {gone:.2f} m of door openings" if openings else ""))
+            label = f"{name}: {w:.2f} m × {h:.2f} m, perimeter {found['perimeter_m']:.2f} m"
+            left_out.extend({**o, "room": name} for o in openings)
+        evidence.append({"kind": "box", "space": "image_px", "bbox": found["bbox"], "label": label})
+    for opening in left_out:
+        evidence.append({"kind": "box", "space": "image_px", "bbox": opening["bbox"], "role": "door opening, left out",
+                         "label": f"{opening['width_m']:.2f} m"})
+    evidence.append({"kind": "box", "space": "image_px", "bbox": [float(v) for v in bar["bbox"]], "role": "scale bar",
+                     "label": f"{bar['label']} = {bar['length_px']:,} px"})
+    unit = "m2" if quantity == "area" else "m"
+    shown, shown_unit = convert(total, unit, asked_unit(q.question))
+    working = " + ".join(parts) + f" = {_fmt(total)} {pretty(unit)}"
+    if shown_unit != unit:
+        working += f" = {_fmt(shown)} {pretty(shown_unit)}"
+    evidence.append({"kind": "formula", "text": working})
+    what = {"area": "floor area", "perimeter": "perimeter", "baseboard": "baseboard length: the perimeter less the door openings"}[quantity]
+    common["meta"] = {**common["meta"], "checks": checks, "working": working,
+                      "interpreted": f"{what} of {len(rooms)} room{'' if len(rooms) == 1 else 's'}, measured on the sheet"}
+    doors = f" {len(left_out)} door opening{'' if len(left_out) == 1 else 's'} left out." if quantity == "baseboard" else ""
+    return Answer(answer=round(shown, 2), unit=shown_unit, state=CHECK, confidence=0.6, evidence=evidence,
+                  explanation=f"{working}. Measured on the sheet: each side of the room was moved onto the inner face "
+                              f"of its wall, and the lengths were read against the scale bar ({bar['label']} = "
+                              f"{bar['length_px']:,} px).{doors}",
                   **common)

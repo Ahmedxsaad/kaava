@@ -340,12 +340,16 @@ export function Viewer2D(props: Props) {
             const [x0, y0, x1, y1] = item.bbox!;
             const doubt = item.role === "not counted";
             const second = item.role === "marked by the vision model";  // the same thing, counted a second way
+            // Measured on the sheet: a door opening left out of a length, and the scale bar it was read against.
+            const opening = item.role === "door opening, left out";
+            const measured = opening || item.role === "scale bar";
+            const pad = opening ? 1.5 * u : 4 * u;
             return (
-              <g key={`ctx-${i}`} className={`aside${doubt ? " doubt" : ""}${second ? " second" : ""}`}>
-                <rect x={x0 - 4 * u} y={y0 - 4 * u} width={x1 - x0 + 8 * u} height={y1 - y0 + 8 * u} rx={3 * u}
-                  strokeWidth={1.2 * u} strokeDasharray={`${4 * u} ${3 * u}`} />
+              <g key={`ctx-${i}`} className={`aside${doubt ? " doubt" : ""}${second ? " second" : ""}${opening ? " opening" : ""}${measured && !opening ? " ruler" : ""}`}>
+                <rect x={x0 - pad} y={y0 - pad} width={x1 - x0 + 2 * pad} height={y1 - y0 + 2 * pad} rx={opening ? u : 3 * u}
+                  strokeWidth={1.2 * u} strokeDasharray={measured ? undefined : `${4 * u} ${3 * u}`} />
                 <g transform={`translate(${(x0 + x1) / 2},${y1 + 18 * u}) scale(${u})`}>
-                  <Plate text={doubt ? "not counted" : second ? "vision model" : item.role ?? ""} className="quiet" />
+                  <Plate text={doubt ? "not counted" : second ? "vision model" : measured ? item.label || item.role! : item.role ?? ""} className="quiet" />
                 </g>
               </g>
             );

@@ -97,6 +97,8 @@ function why(result: AskResult): { title: string; text: React.ReactNode } {
           ? notVerified(result)
           : result.method.startsWith("sheet-working") && result.method.endsWith(":tiles")
             ? "Each box was drawn by a vision model on a tile of the sheet at full size; the program merged and counted them. Look over the boxes: a click leaves one out and the count follows."
+          : result.method.startsWith("sheet-working") && result.method.endsWith(":measured")
+            ? "A vision model said which room and drew a rough box; the program moved each side onto the wall and measured against the scale bar. Check that the rectangle is the room and that the marked openings are doors."
           : result.method.startsWith("sheet-working")
             ? "Which figures and rows matter was a vision model's choice. The counting and the arithmetic are the program's, and each figure was read again by the program at the place marked. Check that the marked figures are the right ones."
           : result.method.startsWith("vlm")
@@ -134,6 +136,7 @@ function Steps({ result, marked }: { result: AskResult; marked: number }) {
     : method.startsWith("raster-labels") ? "A scan with no vector data: the room labels printed on it are read by a local OCR model, at no cost."
     : method.startsWith("labels+model") ? "A scan with no vector data, read twice: the room labels printed on it by a local OCR model, and the rooms themselves by a vision model."
     : method.startsWith("sheet-working") && method.endsWith(":tiles") ? "A sheet with many small symbols and no model or DXF behind it. It was cut into overlapping tiles, a vision model boxed each item at full size, and the program merged and counted the boxes. This is the paid path."
+    : method.startsWith("sheet-working") && method.endsWith(":measured") ? "A plan drawn to scale that prints no figure for this. A vision model pointed at the room; the program found the walls in the pixels, read the scale from the scale bar and measured. This is the paid path."
     : method.startsWith("sheet-working") ? "A sheet with no model or DXF behind it. Every text on it was read at full size by a program (the PDF's own text, or local OCR). A vision model chose the figures and rows that answer the question; the program did the counting and the arithmetic. This is the paid path."
     : method.startsWith("vlm") ? "No exact engine covers this, so a vision model points at each item. This is the paid path."
     : "No exact engine covers this kind of drawing.";

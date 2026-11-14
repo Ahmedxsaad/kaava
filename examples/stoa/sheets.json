@@ -34,9 +34,10 @@
     "title": "Special school plan, level 00",
     "credit": "Sample sheet posted by Stoa for this challenge. UK Department for Education, sample design SEN-DFE-XX-00-D-X-0201.",
     "questions": [
-      "How many rooms on this plan are named Group Room?",
       "How many doors are shown on this floor plan?",
-      "What is the scale of this drawing?"
+      "What is the floor area of the Multi-Purpose Hall in m²?",
+      "How many linear metres of baseboard are needed in the Multi-Purpose Hall?",
+      "How many rooms on this plan are named Group Room?"
     ]
   }
 ]
