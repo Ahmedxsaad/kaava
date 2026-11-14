@@ -41,9 +41,24 @@ All figures come from the run log in `results/` and are shown live on the app's 
 
 The vision model in these runs is Claude Sonnet 5.5, image only, high effort.
 
-![32 doors pinned on the plan and lit in a 3D model raised from the DXF](docs/screenshots/doors-verified.png)
+## The app
 
-More screenshots are in `docs/screenshots/`.
+![32 doors marked on a blueprint and lit in the 3D model raised from it, stamped Verified](docs/screenshots/doors-verified.png)
+
+The drawing is shown as a blueprint, or on its paper, and the evidence is marked on it the way an engineer redlines a sheet:
+
+- A pen loop and a handwritten number round every counted item; highlighter and a handwritten area on every measured room; a revision cloud round text that was read and not counted. The marks are drawn one by one as a reading line sweeps the sheet, and the count climbs with them.
+- The verdict lands as an inked stamp that carries its proof in the small print (for example "error < 0.25% · 6,354 held-out answers").
+- The plan is the floor of the 3D scene. Walls rise out of a Swiss plan; an IFC model is cut open at the storey with its plan sheet under it; an answer spread over several storeys lifts them apart and tallies each one.
+- The panel reads like a title block: the answer, this system against a vision model alone (answer, cost, time), how the answer was worked out step by step, and a contact sheet with every counted item cut out of the drawing. Items can be left out, or inspected one by one.
+- Where the sheet's scale is known you can measure on it yourself. A loupe shows the drawing as it came.
+
+| | |
+| --- | --- |
+| ![An apartment's rooms highlighted on paper with handwritten areas](docs/screenshots/apartment-paper.png) | ![A storey of an IFC model cut open, its doors lit, the plan sheet under it](docs/screenshots/ifc-storey.png) |
+| ![An IFC model with its storeys lifted apart and a door tally beside each](docs/screenshots/ifc-storeys-apart.png) | ![Bedrooms on a scan, read from its printed labels](docs/screenshots/scan-labels.png) |
+
+The left and right arrow keys step through ten prepared examples; the play button runs them on their own.
 
 ## Run it
 
