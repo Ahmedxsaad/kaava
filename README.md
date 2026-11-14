@@ -1,12 +1,20 @@
 <div align="center">
 
-# Kaava
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/logo-dark.svg">
+  <img src="docs/logo.svg" alt="Kaava" width="400">
+</picture>
 
 **Ask a construction drawing a question. Get a number you do not have to double-check,<br>with the evidence drawn on the sheet.**
 
 *Kaava* is Finnish for both **formula** and **plan**: the model writes the formula, the code computes the number, on the plan.
 
 [**Live demo: stoa.ahmedxsaad.me**](https://stoa.ahmedxsaad.me) &nbsp;·&nbsp; [How it works](#how-it-works) &nbsp;·&nbsp; [Results](#results) &nbsp;·&nbsp; [Tech partners](#tech-partners) &nbsp;·&nbsp; [Run it](#run-it) &nbsp;·&nbsp; [Diagrams](#more-diagrams)
+
+[![Live demo](https://img.shields.io/badge/live_demo-stoa.ahmedxsaad.me-0b3d1a?style=flat-square)](https://stoa.ahmedxsaad.me)
+![Junction 2026](https://img.shields.io/badge/Junction_2026-Stoa_·_Make_Blueprints_Talk-e8690a?style=flat-square)
+![Python 3.12](https://img.shields.io/badge/python-3.12-3776ab?style=flat-square)
+![License: MIT](https://img.shields.io/badge/license-MIT-555?style=flat-square)
 
 ![Four questions answered in the app: 23 doors counted on a plan and lit in 3D, a corridor measured with the lift cut out of it, a slab's area with two trenches taken out, and 14 windows boxed on a scan that stands in 3D](docs/demo.gif)
 
@@ -36,6 +44,16 @@ The Junction 2026 partner technologies Kaava really uses, and what each one does
 Each is optional and switches on when its key is set; with no key at all the exact engines still answer. Hosting is not a challenge partner: a Cloudflare Tunnel in front of a small Azure VM. Claude is the fallback model when no Gemini key is set.
 
 ![The tech partners around Kaava: what is sent to each, and that the number never comes from any of them](docs/diagrams/08-partners.png)
+
+### Documentation
+
+| | |
+| --- | --- |
+| [How Kaava works](docs/ARCHITECTURE.md) | the path of a question, each engine, the sheet agent, examiners, the ruler, what is kept |
+| [Evaluation](docs/EVALUATION.md) | the split, the scoring rule, the commands, the run log, thresholds and results |
+| [Running and deploying](docs/DEPLOYMENT.md) | local, Docker, a public copy, a small VM, every setting |
+| [The API](docs/API.md) | `/api/ask` and the rest, with the fields of an answer |
+| [Diagrams](docs/diagrams/) | eight diagrams, each as PNG, SVG, animated SVG and an editable Excalidraw scene |
 
 Every answer ends in one of three states:
 
@@ -149,7 +167,7 @@ What else is measured, and what is not:
 
 | | |
 | --- | --- |
-| ![A slab's area from two printed dimensions, both boxed](docs/screenshots/slab-working.png) | ![Four entries of a printed table boxed and added up](docs/screenshots/table-added-up.png) |
+| ![A slab's area from two printed dimensions, with the two trenches inside it measured and taken out](docs/screenshots/slab-working.png) | ![Four entries of a printed table boxed and added up](docs/screenshots/table-added-up.png) |
 | ![The doors of a school plan, each boxed; the ones only one pass boxed are dashed](docs/screenshots/doors-tiled.png) | ![A corridor around a lift: the lift is cut out of the area and hatched](docs/screenshots/room-with-hole.png) |
 
 ![The How it works page: the route a question takes and the model's tools](docs/screenshots/how-it-works.png)

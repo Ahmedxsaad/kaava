@@ -445,7 +445,7 @@ export function App() {
     <div className={`app page-${page}`}>
       <header className="top">
         <button className="brand" onClick={() => go("home")} aria-label="Home">
-          <svg viewBox="0 0 28 22" aria-hidden><path d="M9 1h18l-4.5 7H4.500z" /><path d="M5.500 14h18L19 21H1z" /></svg>
+          <svg viewBox="0 0 28 22" aria-hidden><path className="kv1" d="M9 1h18l-4.5 7H4.500z" /><path className="kv2" d="M5.500 14h18L19 21H1z" /></svg>
           <span>Kaava</span>
         </button>
         <nav>
