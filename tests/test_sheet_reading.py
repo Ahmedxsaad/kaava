@@ -138,3 +138,24 @@ def test_nothing_printed_means_no_number(sheet):
 def test_a_descriptive_answer_carries_where_it_was_read(sheet):
     ans = sheet(Reader(text="1:200", sources=[{"text_id": 0, "box_2d": [0, 0, 5, 5]}]), "What is the scale?")
     assert ans.answer == "1:200" and ans.evidence[0]["role"] == "read here"
+
+
+def test_a_pdf_page_is_turned_into_pixels_and_back(tmp_path, monkeypatch):
+    """Tiles and measuring work on pixels; on a PDF what they find is given back in the page's points."""
+    import pymupdf
+
+    from blueprints import config
+
+    monkeypatch.setattr(config, "REPO_ROOT", tmp_path)
+    path = tmp_path / "sheet.pdf"
+    doc = pymupdf.open()
+    doc.new_page(width=1200, height=600).insert_text((100, 100), "0", fontsize=12)
+    doc.save(path)
+    index = {"source": "pdf", "width": 1200, "height": 600, "items": [{"id": 0, "text": "0", "box": [100, 90, 108, 102]}]}
+    picture, zoom, in_pixels = sr.as_pixels(path, index)
+    assert picture.suffix == ".png" and picture.is_file() and zoom == 5.0     # 6000 pixels for 1200 points
+    assert in_pixels["items"][0]["box"] == [500, 450, 540, 510] and in_pixels["width"] == 6000
+    assert sr._to_source({"bbox": [500, 450, 540, 510]}, zoom) == {"bbox": [100, 90, 108, 102]}
+    image = tmp_path / "plan.png"
+    image.write_bytes(b"x")
+    assert sr.as_pixels(image, index) == (image, 1.0, index)                   # an image is itself

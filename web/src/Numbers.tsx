@@ -208,6 +208,10 @@ export function Numbers() {
   const reweighted = freshScans?.accuracy != null && scansHere?.accuracy != null && weighted(ours)?.accuracy != null
     ? weighted(ours)!.accuracy! - scanShare * (scansHere.accuracy - freshScans.accuracy) : null;
   const model = baseline?.method.split(":")[1] ?? "vision model";
+  // Sheets with no model or DXF: the engine that shows its working, on every graded question of its family.
+  const sheets = overall([...runs].reverse().find((r) => r.method.startsWith("sheet-working") && r.sample === "dev_us_sheets_graded_31"));
+  const aloneOnSheets = (baseline?.rows ?? []).filter((r) => r.scope === "family" && r.source === "opening_design" && r.type !== "text")
+    .reduce((sum, r) => ({ n: sum.n + (r.n ?? 0), correct: sum.correct + (r.correct ?? 0) }), { n: 0, correct: 0 });
   const worstBound = Math.max(0, ...Object.values(stats.thresholds.families).filter((f) => f.threshold != null).map((f) => f.upper_bound ?? 0));
 
   return (
@@ -269,6 +273,21 @@ export function Numbers() {
             </p>
           )}
         </section>
+
+        {sheets?.n != null && (
+          <section className="n-card">
+            <h2>Harder sheets: the working is shown</h2>
+            <p>
+              Schedules, structural plans and piping plans have no model or DXF behind them. There the vision model may
+              not state the number: it names the printed figures and rows that matter, and the code counts, computes
+              and reads each figure again where it is marked. On every count and area question about the US drawing
+              sets in the development split: <b>{int(sheets.correct)} of {int(sheets.n)}</b> right, at{" "}
+              <b>€{(sheets.eur_per_question ?? 0).toFixed(3)}</b> per question.
+              {aloneOnSheets.n > 0 && <> The vision model alone, on the {aloneOnSheets.n} of them in the sample above: <b>{aloneOnSheets.correct} of {aloneOnSheets.n}</b>.</>}
+              {" "}Such an answer is never Verified: which figures matter is the model's judgement.
+            </p>
+          </section>
+        )}
 
         <div className="n-two">
           <section className="n-card">

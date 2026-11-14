@@ -25,6 +25,7 @@ from __future__ import annotations
 import ast
 import math
 import re
+from pathlib import Path
 from typing import Callable
 
 from . import measure, sheet_text, tiles
@@ -237,6 +238,40 @@ def spelled_out(expression: str, figures: list[dict]) -> str:
 # ----------------------------------------------------------------- the engine
 
 
+PIXELS_LONG_EDGE = 6000  # a PDF page is rendered this large when its pixels are needed
+
+
+def as_pixels(path: Path, index: dict) -> tuple[Path, float, dict]:
+    """The sheet as an image file, how many of its pixels make one unit of the source, and the text index in pixels.
+
+    An image is itself. A PDF page is rendered once (kept in the cache) so that symbols can be boxed
+    tile by tile and walls can be measured; what is found in pixels is turned back into the page's points.
+    """
+    if path.suffix.lower() != ".pdf":
+        return path, 1.0, index
+    import hashlib
+
+    import pymupdf
+
+    from . import config
+
+    with pymupdf.open(path) as doc:
+        page = doc[0]
+        zoom = PIXELS_LONG_EDGE / max(page.rect.width, page.rect.height)
+        digest = hashlib.sha1(path.read_bytes()).hexdigest()[:16]
+        picture = config.REPO_ROOT / "cache" / "sheets" / f"{digest}-{PIXELS_LONG_EDGE}.png"
+        if not picture.is_file():
+            picture.parent.mkdir(parents=True, exist_ok=True)
+            page.get_pixmap(matrix=pymupdf.Matrix(zoom, zoom), alpha=False).save(picture)
+    scaled = {**index, "width": index["width"] * zoom, "height": index["height"] * zoom,
+              "items": [{**item, "box": [v * zoom for v in item["box"]]} for item in index["items"]]}
+    return picture, zoom, scaled
+
+
+def _to_source(box: dict, zoom: float) -> dict:
+    return box if zoom == 1.0 else {**box, "bbox": [round(v / zoom, 2) for v in box["bbox"]]}
+
+
 def _listing(index: dict) -> tuple[str, bool]:
     width, height = index["width"], index["height"]
     items = index["items"]
@@ -318,10 +353,10 @@ def make_engine(vlm) -> Callable[[Question, Dataset], Answer]:
         if what and not figures and not items:
             # Many small symbols: the part of the sheet that holds the plan is searched tile by tile.
             region = _box(closer, width, height)
-            if path.suffix.lower() == ".pdf":
-                return Answer.decline("counting symbols tile by tile needs the sheet as an image", **common)
-            result = tiles.count(vlm, path, f"{q.question}\nWhat counts as one item: {what}",
-                                 region["bbox"] if region else None)
+            picture, zoom, _ = as_pixels(path, index)
+            result = tiles.count(vlm, picture, f"{q.question}\nWhat counts as one item: {what}",
+                                 [v * zoom for v in region["bbox"]] if region else None)
+            result["boxes"] = [_to_source(box, zoom) for box in result["boxes"]]
             common["cost_usd"] = (reply.cost_usd or 0.0) + result["cost_usd"]
             common["latency_ms"] = (reply.latency_ms or 0.0) + result["latency_ms"]
             meta["interpreted"] = f"count of symbols boxed tile by tile. Counted as: {what}"
@@ -440,8 +475,8 @@ def _quantity(q: Question, figures: list[dict], expression: str, result_unit, te
 def _measured(q: Question, path, index: dict, quantity: str, rooms: list[dict], width: float, height: float,
               common: dict) -> Answer:
     """Rooms measured on the sheet itself: wall pixels against the scale bar (measure.py)."""
-    if path.suffix.lower() == ".pdf":
-        return Answer.decline("measuring on the sheet needs it as an image", **common)
+    source_index = index
+    path, zoom, index = as_pixels(path, source_index)
     bar = measure.scale_bar(path, index)
     if bar is None:
         return Answer.decline("no graphic scale bar was found on the sheet to measure against", **common)
@@ -457,7 +492,7 @@ def _measured(q: Question, path, index: dict, quantity: str, rooms: list[dict], 
         rough = _box(room, width, height)
         if rough is None:
             return Answer.decline(f"no usable box for {name}", **common)
-        found = measure.measure_room(path, rough["bbox"], bar["px_per_m"])
+        found = measure.measure_room(path, [v * zoom for v in rough["bbox"]], bar["px_per_m"])
         if not found["ok"]:
             return Answer.decline(f"{name} could not be measured: {found['why']}", **common)
         w, h = found["width_m"], found["height_m"]
@@ -474,12 +509,12 @@ def _measured(q: Question, path, index: dict, quantity: str, rooms: list[dict], 
             parts.append(f"2 × ({w:.2f} m + {h:.2f} m)" + (f" − {gone:.2f} m of door openings" if openings else ""))
             label = f"{name}: {w:.2f} m × {h:.2f} m, perimeter {found['perimeter_m']:.2f} m"
             left_out.extend({**o, "room": name} for o in openings)
-        evidence.append({"kind": "box", "space": "image_px", "bbox": found["bbox"], "label": label})
+        evidence.append(_to_source({"kind": "box", "space": "image_px", "bbox": found["bbox"], "label": label}, zoom))
     for opening in left_out:
-        evidence.append({"kind": "box", "space": "image_px", "bbox": opening["bbox"], "role": "door opening, left out",
-                         "label": f"{opening['width_m']:.2f} m"})
-    evidence.append({"kind": "box", "space": "image_px", "bbox": [float(v) for v in bar["bbox"]], "role": "scale bar",
-                     "label": f"{bar['label']} = {bar['length_px']:,} px"})
+        evidence.append(_to_source({"kind": "box", "space": "image_px", "bbox": opening["bbox"],
+                                    "role": "door opening, left out", "label": f"{opening['width_m']:.2f} m"}, zoom))
+    evidence.append(_to_source({"kind": "box", "space": "image_px", "bbox": [float(v) for v in bar["bbox"]],
+                                "role": "scale bar", "label": f"{bar['label']} = {bar['length_px']:,} px"}, zoom))
     unit = "m2" if quantity == "area" else "m"
     shown, shown_unit = convert(total, unit, asked_unit(q.question))
     working = " + ".join(parts) + f" = {_fmt(total)} {pretty(unit)}"

@@ -14,7 +14,7 @@ page.on("pageerror", (e) => problems.push(`page: ${e.message}`));
 page.on("response", (r) => r.status() >= 400 && problems.push(`${r.status()} ${r.url()}`));
 await page.goto(base, { waitUntil: "domcontentloaded" });
 await page.waitForSelector(".example", { timeout: 60000 });
-await page.click(".example");
+await page.click(".examples:not(.hard) .example");  // the first of the dataset examples, below the harder sheets
 await page.waitForSelector(".answer .verdict", { timeout: 120000 });
 const count = Number(process.env.STOPS ?? 10);
 for (let i = 0; i < count; i++) {
