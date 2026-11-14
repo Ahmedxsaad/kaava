@@ -70,12 +70,15 @@ export function App() {
   const [listening, setListening] = useState(false);
   const [speaking, setSpeaking] = useState(false);
   const [playing, setPlaying] = useState(false);  // the examples play on their own, one after another
+  const [bringing, setBringing] = useState(false);
+  const [shared, setShared] = useState<string | null>(null);
   // What this session's answers cost, and what the vision model alone costs for the same questions.
   const [meter, setMeter] = useState({ answers: 0, spent: 0, alone: 0 });
   const ticket = useRef(0);
   const aloneRef = useRef<number | null>(null);
   const pending = useRef<string | null>(route.question || null);
   const wanted = useRef<Mode | null>(route.view ?? null);  // a view asked for in the link wins once
+  const voiced = useRef(false);  // the server can read answers aloud with a natural voice
 
   const ask = useCallback(async (drawing: DrawingDetail, text: string, useModel = false) => {
     const clean = text.trim();
@@ -141,12 +144,41 @@ export function App() {
     }
   }, [ask]);
   const openStop = useCallback((stop: Stop) => open(stop.drawing, stop.question, stop.view), [open]);
+  const bring = useCallback(async (file: File) => {
+    setError(null);
+    setBringing(true);
+    try {
+      const made = await api.upload(file);
+      setSources(await api.sources());
+      await open(made.id);
+    } catch (e) {
+      setPage("ask");
+      setError((e as Error).message);
+    } finally {
+      setBringing(false);
+    }
+  }, [open]);
+  const share = useCallback(async () => {
+    if (!detail || !asked) return;
+    setShared("working");
+    try {
+      const made = await api.share(detail.id, asked);
+      const url = new URL(made.url, window.location.origin).toString();
+      try { await navigator.clipboard.writeText(url); } catch { /* the sheet still opens */ }
+      window.open(url, "_blank", "noopener");
+      setShared(made.hosted === "cloudinary" ? "Link copied · hosted by Cloudinary" : "Link copied");
+    } catch (e) {
+      setShared((e as Error).message);
+    }
+    window.setTimeout(() => setShared(null), 4000);
+  }, [detail, asked]);
 
   useEffect(() => {
     api.stats().then((stats) => {
       const run = stats.runs.find((r) => r.method.startsWith("vlm-image-only") && r.sample === "dev_baseline_200");
       aloneRef.current = run?.rows.find((r) => r.scope === "overall")?.eur_per_question ?? null;
     }).catch(() => undefined);
+    api.partners().then((p) => { voiced.current = p.elevenlabs; }).catch(() => undefined);
     api.sources().then(async (list) => {
       setSources(list);
       if (route.drawing) await open(route.drawing, pending.current ?? undefined);
@@ -201,10 +233,19 @@ export function App() {
     const verdict = result.state === "verified" ? "Verified." : result.state === "check" ? "Check this." : "I can't answer that reliably.";
     const unit = result.unit === "m2" ? "square metres" : result.unit === "m3" ? "cubic metres" : result.unit === "m" ? "metres" : "";
     const value = result.answer === null ? result.reason : `${formatValue(result.answer, result.unit)} ${unit}`;
-    const utterance = new SpeechSynthesisUtterance(`${verdict} ${value}`);
-    utterance.lang = "en-GB";
-    window.speechSynthesis.cancel();
-    window.speechSynthesis.speak(utterance);
+    const sentence = `${verdict} ${value}`;
+    const browserVoice = () => {
+      const utterance = new SpeechSynthesisUtterance(sentence);
+      utterance.lang = "en-GB";
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(utterance);
+    };
+    if (!voiced.current) return browserVoice();
+    // A natural voice from ElevenLabs when the server has a key; the browser's own voice otherwise.
+    fetch("/api/speak", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text: sentence }) })
+      .then((res) => (res.ok ? res.blob() : Promise.reject(new Error("no voice"))))
+      .then((blob) => new Audio(URL.createObjectURL(blob)).play())
+      .catch(browserVoice);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [result, settled, speaking]);
 
@@ -365,7 +406,9 @@ export function App() {
         </div>
       </header>
 
-      {page === "home" && <Home onOpen={(stop) => void openStop(stop)} onBrowse={() => setPicking(true)} onNumbers={() => go("numbers")} />}
+      {page === "home" && <Home onOpen={(stop) => void openStop(stop)} onBrowse={() => setPicking(true)} onNumbers={() => go("numbers")} onBring={(file) => void bring(file)} />}
+      {bringing && <div className="toast">Reading your drawing…</div>}
+      {shared && shared !== "working" && <div className="toast">{shared}</div>}
       {page === "numbers" && <Numbers />}
       {page === "ask" && (
         <main className="work">
@@ -389,6 +432,8 @@ export function App() {
                 onFocus={setFocus}
                 onRestore={() => setExcluded(new Set())}
                 onUseModel={() => detail && void ask(detail, asked, true)}
+                onShare={has2d ? () => void share() : null}
+                sharing={shared === "working"}
                 onAsk={(text) => detail && void ask(detail, text)}
               />
             </div>
@@ -439,7 +484,10 @@ export function App() {
                 {detail && (
                   <>
                     <strong>{detail.title}</strong>
-                    <span>{SOURCE_NAMES[detail.source] ?? detail.source} · {detail.formats.join(", ").toUpperCase()}{detail.paper_scale ? ` · 1:${detail.paper_scale}` : ""}</span>
+                    <span>
+                      {SOURCE_NAMES[detail.source] ?? detail.source} · {detail.formats.join(", ").toUpperCase()}{detail.paper_scale ? ` · 1:${detail.paper_scale}` : ""}
+                      {detail.prepared?.public_id ? ` · prepared by Cloudinary${detail.prepared.upscaled ? " (enlarged)" : ""}` : ""}
+                    </span>
                   </>
                 )}
               </div>

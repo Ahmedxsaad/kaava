@@ -21,6 +21,8 @@ interface Props {
   onRestore(): void;
   onUseModel(): void;
   onAsk(question: string): void;
+  onShare: (() => void) | null;  // an evidence sheet of this answer, when the drawing has a 2D sheet
+  sharing: boolean;
 }
 
 const STATE = {
@@ -333,6 +335,11 @@ export function AnswerPanel(props: Props) {
       <div className="verdict">
         <span className="pill"><i />{state.label}</span>
         <span className="line">{state.line}</span>
+        {props.onShare && result.answer !== null && (
+          <button className="share" onClick={props.onShare} disabled={props.sharing} title="A single image of this answer with its evidence marked, to send or attach">
+            {props.sharing ? "Making the sheet…" : "Share ↗"}
+          </button>
+        )}
       </div>
 
       <div className="figure" aria-live="polite">

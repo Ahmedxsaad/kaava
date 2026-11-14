@@ -6,6 +6,7 @@ interface Props {
   onOpen(stop: Stop): void;
   onBrowse(): void;
   onNumbers(): void;
+  onBring(file: File): void;
 }
 
 const overall = (run?: Run) => run?.rows.find((r) => r.scope === "overall");
@@ -13,7 +14,7 @@ const pct = (v: number | null | undefined) => (v == null ? "—" : `${(100 * v).
 
 const STATE_WORD = { verified: "Verified", check: "Check this", declined: "Can't answer" } as const;
 
-export function Home({ onOpen, onBrowse, onNumbers }: Props) {
+export function Home({ onOpen, onBrowse, onNumbers, onBring }: Props) {
   const [stats, setStats] = useState<Stats | null>(null);
   useEffect(() => { api.stats().then(setStats).catch(() => undefined); }, []);
   const runs = stats?.runs ?? [];
@@ -35,6 +36,10 @@ export function Home({ onOpen, onBrowse, onNumbers }: Props) {
         <div className="actions">
           <button className="primary" onClick={() => onOpen(TOUR[0])}>Open an example</button>
           <button className="quiet" onClick={onBrowse}>Browse all drawings →</button>
+          <label className="quiet bring">
+            Bring your own drawing →
+            <input type="file" accept="image/*,application/pdf" onChange={(e) => { const file = e.target.files?.[0]; if (file) onBring(file); e.target.value = ""; }} />
+          </label>
         </div>
       </section>
 

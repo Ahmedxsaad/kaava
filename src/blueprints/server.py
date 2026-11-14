@@ -24,12 +24,12 @@ from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path, PurePosixPath
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import config, interpret, mesh, overlay, verify
+from . import cloud, config, interpret, mesh, overlay, sheet, verify
 from .answer import Answer
 from .data import Dataset, Question, drawing_of, question_id, source_of
 from .engines import dxf, dxf_index, ifc, ifc_index, raster_labels, router
@@ -51,7 +51,55 @@ CREDITS = {
     "habs": "Historic American Buildings Survey, Library of Congress (public domain)",
     "europeana": "Via Europeana; licence per file in the source's LICENSE.md",
     "wikimedia": "Wikimedia Commons; licence per file in the source's LICENSE.md",
+    "uploads": "Brought by you. Not part of the dataset.",
 }
+UPLOADS_DIR = config.REPO_ROOT / "uploads"
+MAX_UPLOAD_BYTES = 25 * 1024 * 1024
+# What to offer on a drawing nobody wrote questions for.
+GENERIC_QUESTIONS = (
+    "How many doors are shown on this floor plan?",
+    "How many windows are shown on this floor plan?",
+    "How many bedrooms are on this floor plan?",
+    "How many toilet bowls are drawn on this floor plan?",
+)
+
+
+class Library:
+    """The dataset plus the drawings people bring. To the engines it looks like a Dataset."""
+
+    def __init__(self, dataset: Dataset):
+        self._ds = dataset
+        self.uploads: dict[str, Path] = {}  # "uploads/<id>.png" -> the file
+        self.notes: dict[str, dict] = {}  # drawing id -> what is known about an upload
+        if UPLOADS_DIR.is_dir():
+            for note in sorted(UPLOADS_DIR.glob("*.json")):
+                image = note.with_suffix(".png")
+                if image.is_file():
+                    self.add(image, json.loads(note.read_text(encoding="utf-8")))
+
+    def __getattr__(self, name: str):
+        return getattr(self._ds, name)
+
+    def add(self, image: Path, note: dict) -> str:
+        rel = f"uploads/{image.name}"
+        self.uploads[rel] = image
+        self.notes[drawing_of(rel)] = note
+        return drawing_of(rel)
+
+    def uploads_of(self, drawing: str) -> list[str]:
+        return [rel for rel in self.uploads if drawing_of(rel) == drawing]
+
+    def abspath(self, rel: str) -> Path:
+        return self.uploads.get(rel) or self._ds.abspath(rel)
+
+    def formats(self, path: str) -> list[str]:
+        return self.uploads_of(drawing_of(path)) or self._ds.formats(path)
+
+    def ifc_model_of(self, path: str) -> str | None:
+        return None if path.startswith("uploads/") else self._ds.ifc_model_of(path)
+
+    def group_of(self, path: str) -> str:
+        return "uploads" if path.startswith("uploads/") else self._ds.group_of(path)
 ENGINE_LABELS = {
     ifc.METHOD: "IFC model query",
     dxf.METHOD: "DXF geometry",
@@ -92,11 +140,37 @@ class AskRequest(BaseModel):
     use_model: bool = False
 
 
+class SpeakRequest(BaseModel):
+    text: str
+
+
+def speak(text: str) -> bytes:
+    """The answer read aloud by ElevenLabs, as MP3. Needs ELEVENLABS_API_KEY."""
+    import urllib.request
+
+    key = os.environ.get("ELEVENLABS_API_KEY")
+    if not key or os.environ.get("BLUEPRINTS_OFFLINE"):
+        raise HTTPException(503, "no voice service is configured")
+    voice = os.environ.get("ELEVENLABS_VOICE_ID", "21m00Tcm4TlvDq8ikWAM")
+    body = json.dumps({"text": text[:400], "model_id": os.environ.get("ELEVENLABS_MODEL_ID", "eleven_multilingual_v2")}).encode()
+    request = urllib.request.Request(
+        f"https://api.elevenlabs.io/v1/text-to-speech/{voice}?output_format=mp3_44100_128", data=body,
+        headers={"xi-api-key": key, "content-type": "application/json", "accept": "audio/mpeg"})
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            return response.read()
+    except Exception as exc:
+        raise HTTPException(502, f"the voice service did not answer: {type(exc).__name__}") from None
+
+
 class Service:
     """Everything the API needs, loaded once."""
 
     def __init__(self, dataset_root: Path | str | None = None):
-        self.ds = Dataset(dataset_root)
+        from dotenv import load_dotenv
+
+        load_dotenv(config.REPO_ROOT / ".env")  # partner keys, if any; never printed
+        self.ds = Library(Dataset(dataset_root))
         self.split = Split.load()
         self.thresholds = verify.load_thresholds()
         self.lock = threading.Lock()
@@ -119,6 +193,8 @@ class Service:
     def allowed(self, drawing: str) -> bool:
         if drawing in self.questions:
             return True
+        if drawing.startswith("uploads/"):
+            return bool(self.ds.uploads_of(drawing))
         if source_of(drawing) in ARCHIVE_SOURCES:
             return drawing in set(self.archive)
         files = self._files(drawing)  # an IFC model that only its plans have questions about
@@ -127,7 +203,7 @@ class Service:
     def _files(self, drawing: str) -> list[str]:
         """Every format of a drawing. `drawing` is already a path without its extension, and archive
         names contain dots, so it must not be stripped a second time."""
-        return self.ds._by_drawing.get(drawing, [])
+        return self.ds.uploads_of(drawing) or self.ds._by_drawing.get(drawing, [])
 
     def files_of(self, drawing: str) -> dict[str, str]:
         return {PurePosixPath(f).suffix.lower(): f for f in self._files(drawing)}
@@ -388,7 +464,7 @@ class Service:
         return {
             "id": drawing,
             "source": source_of(drawing),
-            "title": PurePosixPath(drawing).name,
+            "title": self.ds.notes.get(drawing, {}).get("title") or PurePosixPath(drawing).name,
             "formats": sorted(e.lstrip(".") for e in files),
             "questions": len({q.question for q in qs}),
             "engine": engine,
@@ -443,7 +519,10 @@ class Service:
             "mesh": (f"/api/mesh?drawing={_quote(drawing)}" if self.engine_of(drawing) else None),
             "mesh_kind": "ifc" if model else "plan" if self.engine_of(drawing) == "dxf" else None,
             "model_file": PurePosixPath(model).name if model else None,
-            "suggested": list(seen.values()),
+            "suggested": list(seen.values()) or (
+                [{"question": q, "type": "count", "unit": "count"} for q in GENERIC_QUESTIONS]
+                if view.kind == "image" else []),
+            "prepared": self.ds.notes.get(drawing, {}).get("cloudinary"),
             "paper_scale": (round(view.transform["paper_scale"]) if view.transform else None),
         }
 
@@ -481,6 +560,81 @@ class Service:
         else:
             raise HTTPException(503, "no vision-model key is configured on the server")
         return pointing.make_engine(vlm)
+
+    def upload(self, name: str, data: bytes) -> dict:
+        """Take in a drawing someone brings: an image or a PDF. Returns its summary."""
+        import pymupdf
+        from PIL import Image
+
+        if not data or len(data) > MAX_UPLOAD_BYTES:
+            raise HTTPException(413, "a drawing can be at most 25 MB")
+        ident = hashlib.sha1(data).hexdigest()[:12]
+        UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+        image_path = UPLOADS_DIR / f"{ident}.png"
+        try:
+            if data[:5] == b"%PDF-":
+                with pymupdf.open(stream=data, filetype="pdf") as doc:
+                    page = doc[0]
+                    zoom = min(3000 / max(page.rect.width, page.rect.height), 6.0)
+                    picture = Image.open(io.BytesIO(page.get_pixmap(matrix=pymupdf.Matrix(zoom, zoom), alpha=False).tobytes("png")))
+            else:
+                picture = Image.open(io.BytesIO(data))
+                picture.load()
+            if picture.mode in ("RGBA", "LA", "P"):
+                picture = picture.convert("RGBA")
+                flat = Image.new("RGB", picture.size, "white")
+                flat.paste(picture, mask=picture.getchannel("A"))
+                picture = flat
+            picture = picture.convert("RGB")
+        except Exception:
+            raise HTTPException(415, "this file is not an image or a PDF the app can read") from None
+        if max(picture.size) > 6000:
+            picture.thumbnail((6000, 6000), Image.Resampling.LANCZOS)
+        picture.save(image_path)
+        note: dict = {"title": PurePosixPath(name or "drawing").stem[:80] or "drawing",
+                      "size": list(picture.size), "cloudinary": None}
+        if cloud.configured():  # normalise, even out and, for a small scan, enlarge it before it is read
+            try:
+                prepared, info = cloud.prepare(image_path, ident, *picture.size)
+                with Image.open(io.BytesIO(prepared)) as better:
+                    better.convert("RGB").save(image_path)
+                    info["size"] = list(better.size)
+                note["cloudinary"] = info
+            except Exception as exc:  # the drawing still opens, as it came
+                note["cloudinary"] = {"error": f"{type(exc).__name__}: {str(exc)[:160]}"}
+        (UPLOADS_DIR / f"{ident}.json").write_text(json.dumps(note, ensure_ascii=False), encoding="utf-8")
+        drawing = self.ds.add(image_path, note)
+        for key in [k for k in self._views if k[0] == drawing]:
+            del self._views[key]
+        return self.summary(drawing)
+
+    def share(self, req: AskRequest) -> dict:
+        """An evidence sheet for one answer: the drawing with its evidence marked, hosted to share."""
+        answer = self.ask(AskRequest(drawing=req.drawing, question=req.question, use_model=False))
+        view = self.view(req.drawing)
+        if view.kind == "none":
+            raise HTTPException(409, "this drawing has no 2D sheet to mark; its evidence is in 3D")
+        source, _ = self.view_png(req.drawing)
+        unit = {"m2": " m²", "m3": " m³", "m": " m"}.get(answer["unit"] or "", "")
+        value = answer["answer"]
+        text = "No number" if value is None else (f"{value:,.2f}{unit}" if isinstance(value, float) else f"{value}{unit}")
+        ident = hashlib.sha1(f"{req.drawing}|{answer['question']}|{value}".encode()).hexdigest()[:14]
+        out = config.REPO_ROOT / "cache" / "shared" / f"{ident}.png"
+        why = answer["verified_because"]
+        lines = [answer["explanation"] or answer["reason"]]
+        if why:
+            lines.append(f"Verified: {why['calibration_errors']} wrong in {why['calibration_answers']:,} held-out answers of "
+                         f"this kind (error rate below {100 * why['error_upper_bound']:.2f}%).")
+        lines.append(f"{self.summary(req.drawing)['title']} · {answer['engine']} · {CREDITS.get(source_of(req.drawing), '')}")
+        sheet.render(Path(source), answer["evidence"], question=answer["question"], answer_text=text,
+                     state=answer["state"], lines=lines, out_path=out)
+        if cloud.configured():
+            try:
+                hosted = cloud.host(out, ident, caption=f"{text} · {answer['question']}")
+                return {"url": hosted["url"], "hosted": "cloudinary"}
+            except Exception as exc:
+                return {"url": f"/api/shared/{ident}.png", "hosted": "local", "note": f"{type(exc).__name__}: {str(exc)[:120]}"}
+        return {"url": f"/api/shared/{ident}.png", "hosted": "local"}
 
     def _text_model(self):
         """A language model for restating questions: Gemini when its key is set, else Claude Sonnet."""
@@ -892,7 +1046,7 @@ def create_app(dataset_root: Path | str | None = None) -> FastAPI:
         return drawing
 
     @lru_cache(maxsize=1)
-    def catalogue() -> dict[str, list[str]]:
+    def dataset_catalogue() -> dict[str, list[str]]:
         by_source: dict[str, list[str]] = defaultdict(list)
         for drawing in sorted(service.questions):
             by_source[source_of(drawing)].append(drawing)
@@ -900,12 +1054,16 @@ def create_app(dataset_root: Path | str | None = None) -> FastAPI:
             by_source[source_of(drawing)].append(drawing)
         return dict(by_source)
 
+    def catalogue() -> dict[str, list[str]]:
+        brought = sorted(service.ds.notes, key=lambda d: service.ds.notes[d].get("title", ""))
+        return {**({"uploads": brought} if brought else {}), **dataset_catalogue()}
+
     @app.get("/api/sources")
     def sources() -> list[dict]:
-        order = ("swiss_dwellings", "ifc_models", "cubicasa5k", "opening_design", "ifc_bench") + ARCHIVE_SOURCES
+        order = ("uploads", "swiss_dwellings", "ifc_models", "cubicasa5k", "opening_design", "ifc_bench") + ARCHIVE_SOURCES
         found = catalogue()
         return [{"source": s, "drawings": len(found[s]), "credit": CREDITS.get(s, ""),
-                 "archive": s in ARCHIVE_SOURCES}
+                 "archive": s in ARCHIVE_SOURCES or s == "uploads"}
                 for s in sorted(found, key=lambda s: order.index(s) if s in order else len(order))]
 
     @app.get("/api/drawings")
@@ -959,6 +1117,35 @@ def create_app(dataset_root: Path | str | None = None) -> FastAPI:
     def ask(req: AskRequest) -> dict:
         need(req.drawing)
         return service.ask(req)
+
+    @app.post("/api/upload")
+    async def upload(request: Request, name: str = "drawing") -> dict:
+        return service.upload(name, await request.body())
+
+    @app.post("/api/share")
+    def share(req: AskRequest) -> dict:
+        need(req.drawing)
+        return service.share(req)
+
+    @app.get("/api/shared/{name}")
+    def shared(name: str):
+        path = config.REPO_ROOT / "cache" / "shared" / PurePosixPath(name).name
+        if path.suffix != ".png" or not path.is_file():
+            raise HTTPException(404, "no such sheet")
+        return FileResponse(path, media_type="image/png")
+
+    @app.post("/api/speak")
+    def speak_aloud(req: SpeakRequest):
+        return Response(speak(" ".join(req.text.split())), media_type="audio/mpeg")
+
+    @app.get("/api/partners")
+    def partners() -> dict:
+        """Which partner services this server is set up to use (no secrets)."""
+        from dotenv import load_dotenv
+
+        load_dotenv(config.REPO_ROOT / ".env")
+        return {"gemini": bool(os.environ.get("GEMINI_API_KEY")), "claude": bool(os.environ.get("ANTHROPIC_API_KEY")),
+                "cloudinary": cloud.configured(), "elevenlabs": bool(os.environ.get("ELEVENLABS_API_KEY"))}
 
     @app.get("/api/stats")
     def stats() -> dict:

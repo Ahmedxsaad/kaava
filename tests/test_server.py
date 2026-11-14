@@ -30,6 +30,7 @@ def client():
     from blueprints.server import create_app
 
     os.environ["BLUEPRINTS_UI_BUDGET_EUR"] = "0"  # no paid model call from a test, whatever keys are in .env
+    os.environ["BLUEPRINTS_OFFLINE"] = "1"  # and no partner service either
     return TestClient(create_app(PREVIEW))
 
 
@@ -196,7 +197,8 @@ def test_archive_drawings_with_dots_in_their_names_open(client):
     detail = client.get("/api/drawing", params={"drawing": dotted["id"]}).json()
     assert detail["view"]["kind"] in ("image", "page") and detail["view"]["width"] > 0
     assert client.get(detail["view"]["url"]).status_code == 200
-    assert detail["suggested"] == []
+    # Nobody wrote questions for it: a few general ones are offered, none with an answer on file.
+    assert all(s["type"] == "count" for s in detail["suggested"])
 
 
 def test_labels_are_shown_beside_a_model_answer_as_a_second_method():
@@ -244,3 +246,44 @@ def test_the_sheet_scale_lets_a_reader_measure(client):
     assert shoelace / scale ** 2 == pytest.approx(room["area_m2"], rel=0.03)
     scan = client.get("/api/drawing", params={"drawing": "data/cubicasa5k/high_quality_architectural-14441"}).json()
     assert scan["view"]["px_per_m"] is None  # a scan has no known scale: nothing to measure with
+
+
+@needs_data
+def test_a_brought_drawing_opens_and_can_be_shared(client):
+    """Someone brings their own plan: it opens, offers questions, and an answer becomes a sheet to share."""
+    import io
+
+    from PIL import Image, ImageDraw
+
+    from blueprints.server import UPLOADS_DIR
+
+    picture = Image.new("RGB", (900, 600), "white")
+    ImageDraw.Draw(picture).rectangle([80, 80, 820, 520], outline="black", width=6)
+    buffer = io.BytesIO()
+    picture.save(buffer, format="PNG")
+    made = client.post("/api/upload", params={"name": "site sketch.png"}, content=buffer.getvalue())
+    assert made.status_code == 200, made.text
+    summary = made.json()
+    try:
+        assert summary["source"] == "uploads" and summary["title"] == "site sketch"
+        detail = client.get("/api/drawing", params={"drawing": summary["id"]}).json()
+        assert detail["view"]["kind"] == "image" and (detail["view"]["width"], detail["view"]["height"]) == (900, 600)
+        assert detail["suggested"] and detail["prepared"] is None  # offline: read as it came
+        assert client.get(detail["view"]["url"]).status_code == 200
+        assert any(s["source"] == "uploads" for s in client.get("/api/sources").json())
+        shared = client.post("/api/share", json={"drawing": summary["id"], "question": "How many windows are shown on this floor plan?"}).json()
+        assert shared["hosted"] == "local"
+        sheet_png = client.get(shared["url"])
+        assert sheet_png.status_code == 200 and sheet_png.headers["content-type"] == "image/png"
+        assert client.post("/api/upload", params={"name": "x.txt"}, content=b"not a drawing").status_code == 415
+    finally:
+        ident = summary["id"].split("/")[-1]
+        for suffix in (".png", ".json"):
+            (UPLOADS_DIR / f"{ident}{suffix}").unlink(missing_ok=True)
+
+
+@needs_data
+def test_a_dataset_answer_becomes_an_evidence_sheet(client):
+    shared = client.post("/api/share", json={"drawing": SWISS, "question": DOORS}).json()
+    picture = client.get(shared["url"])
+    assert picture.status_code == 200 and len(picture.content) > 50_000

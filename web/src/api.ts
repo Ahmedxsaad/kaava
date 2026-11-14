@@ -54,6 +54,7 @@ export interface DrawingDetail extends DrawingSummary {
   model_file: string | null;
   suggested: Suggested[];
   paper_scale: number | null;
+  prepared: { public_id?: string; url?: string; upscaled?: boolean; steps?: string[]; size?: number[]; error?: string } | null;
 }
 
 export interface Evidence {
@@ -218,6 +219,21 @@ export const api = {
     if (!res.ok) throw new Error(await message(res));
     return res.json();
   },
+  async upload(file: File): Promise<DrawingSummary> {
+    const res = await fetch(`/api/upload?name=${encodeURIComponent(file.name)}`, { method: "POST", body: file });
+    if (!res.ok) throw new Error(await message(res));
+    return res.json();
+  },
+  async share(drawing: string, question: string): Promise<{ url: string; hosted: "cloudinary" | "local"; note?: string }> {
+    const res = await fetch("/api/share", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ drawing, question }),
+    });
+    if (!res.ok) throw new Error(await message(res));
+    return res.json();
+  },
+  partners: () => get<{ gemini: boolean; claude: boolean; cloudinary: boolean; elevenlabs: boolean }>("/api/partners"),
   async mesh(url: string): Promise<ArrayBuffer> {
     const res = await fetch(url);
     if (!res.ok) throw new Error(await message(res));
@@ -231,6 +247,7 @@ export const SOURCE_NAMES: Record<string, string> = {
   ifc_models: "IFC models",
   ifc_bench: "IFC-Bench",
   opening_design: "US drawing sets",
+  uploads: "Your drawings",
   finna: "Helsinki archive",
   habs: "US historic survey",
   europeana: "Europeana",
