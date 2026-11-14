@@ -3,8 +3,10 @@ import { AnswerPanel } from "./AnswerPanel";
 import { api, type AskResult, type DrawingDetail, type Evidence, euro, formatValue, type Source, SOURCE_NAMES } from "./api";
 import { Numbers } from "./Numbers";
 import { Picker } from "./Picker";
+import * as sound from "./sound";
+import { Stamp } from "./Stamp";
 import { TOUR } from "./tour";
-import { Viewer2D } from "./Viewer2D";
+import { anchorOf, type Theme, Viewer2D } from "./Viewer2D";
 import { type Highlight, Viewer3D } from "./Viewer3D";
 
 type Mode = "plan" | "3d" | "both";
@@ -37,6 +39,23 @@ function writeRoute(route: Route) {
   if (next !== window.location.hash) window.history.replaceState(null, "", next);
 }
 
+function remembered<T extends string>(key: string, allowed: readonly T[], fallback: T): T {
+  try {
+    const value = window.localStorage.getItem(key);
+    return allowed.includes(value as T) ? (value as T) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function remember(key: string, value: string) {
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    // a private window: the choice simply lasts for this visit
+  }
+}
+
 // Evidence that stands for one unit of the answer (a counted item or a measured part).
 function countable(evidence: Evidence[]): Evidence[] {
   return evidence.filter((e) => e.kind !== "formula" && e.kind !== "context");
@@ -46,9 +65,16 @@ function measureOf(item: Evidence): number | null {
   return item.area_m2 ?? item.volume_m3 ?? item.length_m ?? null;
 }
 
+const ZONES = ["A", "B", "C", "D", "E", "F", "G", "H"];
+
 export function App() {
   const [route] = useState(readRoute);
   const [page, setPage] = useState<Page>(route.page);
+  const [theme, setTheme] = useState<Theme>(() => {
+    const asked = new URLSearchParams(window.location.hash.replace(/^#/, "")).get("t");  // a link can ask for one
+    return asked === "paper" || asked === "blueprint" ? asked : remembered("blueprints.theme", ["blueprint", "paper"] as const, "blueprint");
+  });
+  const [audible, setAudible] = useState(() => remembered("blueprints.sound", ["on", "off"] as const, "on") === "on");
   const [sources, setSources] = useState<Source[]>([]);
   const [detail, setDetail] = useState<DrawingDetail | null>(null);
   const [question, setQuestion] = useState(route.question);
@@ -59,6 +85,7 @@ export function App() {
   const [revealed, setRevealed] = useState(0);
   const [excluded, setExcluded] = useState<Set<number>>(new Set());
   const [hover, setHover] = useState<number | null>(null);
+  const [focus, setFocus] = useState<number | null>(null);
   const [picking, setPicking] = useState(false);
   const [touring, setTouring] = useState(false);
   const [suggesting, setSuggesting] = useState(false);
@@ -72,6 +99,7 @@ export function App() {
   const aloneRef = useRef<number | null>(null);
   const pending = useRef<string | null>(route.question || null);
   const wanted = useRef<Mode | null>(route.view ?? null);  // a view asked for in the link wins once
+  const stamped = useRef("");
 
   const ask = useCallback(async (drawing: DrawingDetail, text: string, useModel = false) => {
     const clean = text.trim();
@@ -87,6 +115,7 @@ export function App() {
       if (ticket !== asked.current) return;
       setExcluded(new Set());
       setHover(null);
+      setFocus(null);
       setRevealed(0);
       setResult(answer);
       setMeter((m) => ({
@@ -100,7 +129,7 @@ export function App() {
       const in3d = answer.evidence.some((e) => e.kind === "element");
       const forced = wanted.current;
       wanted.current = null;
-      setMode((current) => forced ?? (in3d ? (has2d && current === "both" ? "both" : "3d") : onPlan && current === "3d" ? "plan" : current));
+      setMode((current) => forced ?? (in3d && !onPlan ? (has2d && current === "both" ? "both" : "3d") : onPlan && current === "3d" ? "plan" : current));
     } catch (e) {
       if (ticket === asked.current) {
         setResult(null);
@@ -122,6 +151,7 @@ export function App() {
       setResult(null);
       setRevealed(0);
       setExcluded(new Set());
+      setFocus(null);
       setFocusKey("");
       setQuestion(then ?? "");
       setMode(next.view.kind === "none" ? "3d" : wanted.current ?? "plan");
@@ -148,13 +178,19 @@ export function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Evidence lands one item at a time; the counter follows.
+  // Evidence is marked one item at a time, in the order a line sweeping the sheet from the
+  // left meets them; the counter follows.
   const units = useMemo(() => (result ? countable(result.evidence) : []), [result]);
+  const sequence = useMemo(() => {
+    const placed = units.map((e) => ({ n: e.n!, x: anchorOf(e)?.[0] ?? null }));
+    const onSheet = placed.length > 0 && placed.every((p) => p.x !== null);
+    return { order: (onSheet ? [...placed].sort((a, b) => a.x! - b.x!) : placed), onSheet };
+  }, [units]);
   useEffect(() => {
     if (!result || !units.length) return;
     // By the clock, not by counting ticks: a busy page must not slow the count down.
-    const step = Math.min(170, Math.max(16, 1500 / units.length));
-    const began = performance.now() + 420;
+    const step = Math.min(170, Math.max(16, 1700 / units.length));
+    const began = performance.now() + 450;
     const timer = window.setInterval(() => {
       const n = Math.min(units.length, Math.floor((performance.now() - began) / step));
       if (n > 0) setRevealed(n);
@@ -162,8 +198,25 @@ export function App() {
     }, 16);
     return () => window.clearInterval(timer);
   }, [result, units.length]);
-
+  const visible = useMemo(() => new Set(sequence.order.slice(0, revealed).map((p) => p.n)), [sequence, revealed]);
   const settled = !result || revealed >= units.length;
+  const sweepAt = !settled && sequence.onSheet && detail
+    ? (revealed === 0 ? 0 : sequence.order[revealed - 1].x!) : null;
+
+  // The pen ticks as items are marked; the stamp lands when the last one is in.
+  useEffect(() => {
+    if (audible && result && revealed > 0 && revealed <= units.length) sound.tick(revealed / units.length);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [revealed]);
+  useEffect(() => {
+    if (!result || !settled || stamped.current === focusKey) return;
+    stamped.current = focusKey;
+    if (!audible) return;
+    const timer = window.setTimeout(() => sound.stamp(result.state), 230);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [result, settled, focusKey]);
+
   // "Make blueprints talk", literally: read the verdict and the number aloud once the evidence has landed.
   useEffect(() => {
     if (!speaking || !result || !settled || !("speechSynthesis" in window)) return;
@@ -176,6 +229,7 @@ export function App() {
     window.speechSynthesis.speak(utterance);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [result, settled, speaking]);
+
   const tracksCount = !!result && result.unit === "count" && typeof result.answer === "number" && units.length === result.answer;
   const parts = units.map(measureOf);
   const tracksSum = !!result && typeof result.answer === "number" && result.unit !== "count" && units.length > 0 &&
@@ -183,9 +237,9 @@ export function App() {
   const shown = useMemo(() => {
     if (!result || settled) return result?.answer ?? null;
     if (tracksCount) return revealed;
-    if (tracksSum) return units.slice(0, revealed).reduce((s, e) => s + (measureOf(e) ?? 0), 0);
+    if (tracksSum) return units.filter((e) => visible.has(e.n!)).reduce((s, e) => s + (measureOf(e) ?? 0), 0);
     return result.answer;
-  }, [result, settled, tracksCount, tracksSum, revealed, units]);
+  }, [result, settled, tracksCount, tracksSum, revealed, units, visible]);
   const adjusted = useMemo(() => {
     if (!result || !excluded.size || typeof result.answer !== "number") return null;
     if (tracksCount) return result.answer - excluded.size;
@@ -216,26 +270,36 @@ export function App() {
     if (!detail || !result || result.unit !== "m2") return [];
     const used = new Set(result.evidence.filter((e) => e.kind === "polygon").map((e) => e.ref));
     if (used.size < 2 || !/indoor|without|ohne|excluding/i.test(result.interpreted ?? "")) return [];
-    const units = new Set(detail.rooms.filter((r) => used.has(r.ref)).map((r) => r.unit));
-    return detail.rooms.filter((r) => r.outdoor && !used.has(r.ref) && units.has(r.unit));
+    const flats = new Set(detail.rooms.filter((r) => used.has(r.ref)).map((r) => r.unit));
+    return detail.rooms.filter((r) => r.outdoor && !used.has(r.ref) && flats.has(r.unit));
   }, [detail, result]);
 
-  // Presenting: the left and right arrow keys step through the examples.
+  // Keys. While inspecting: arrows step through the items, X leaves one out, Escape ends.
+  // Otherwise the arrows step through the examples, for presenting.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
       if (page !== "ask" || picking || e.altKey || e.ctrlKey || e.metaKey) return;
       if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) return;
+      if (focus !== null) {
+        const at = units.findIndex((u) => u.n === focus);
+        if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+          e.preventDefault();
+          setFocus(units[(at + (e.key === "ArrowRight" ? 1 : -1) + units.length) % units.length].n!);
+        } else if (e.key === "x" || e.key === "X") toggle(focus);
+        else if (e.key === "Escape") setFocus(null);
+        return;
+      }
       if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
       const at = TOUR.findIndex((stop) => stop.drawing === detail?.id && stop.question === question);
-      const next = TOUR[(at + (e.key === "ArrowRight" ? 1 : -1) + TOUR.length) % TOUR.length];
       if (at === -1 && e.key === "ArrowLeft") return;
+      const next = TOUR[(at + (e.key === "ArrowRight" ? 1 : -1) + TOUR.length) % TOUR.length];
       e.preventDefault();
       void open(next.drawing, next.question, next.view);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [page, picking, detail, question, open]);
+  }, [page, picking, detail, question, open, focus, units, toggle]);
 
   // A few of the dataset's questions about this drawing to start from: one count, one area, one in another language.
   const starters = useMemo(() => {
@@ -278,9 +342,12 @@ export function App() {
     recognition.start();
   };
   const canListen = typeof window !== "undefined" && ("SpeechRecognition" in window || "webkitSpeechRecognition" in window);
+  const go = (next: Page) => { setPage(next); writeRoute({ drawing: detail?.id ?? null, question, page: next }); };
+  const groundUrl = detail && has3d && (detail.view.kind === "plan" || detail.view.kind === "page")
+    ? `/api/ground?drawing=${encodeURIComponent(detail.id)}` : null;
 
   return (
-    <div className="app">
+    <div className={`app theme-${theme}`}>
       <header className="top">
         <div className="brand">
           <svg viewBox="0 0 32 32" aria-hidden>
@@ -291,8 +358,8 @@ export function App() {
           <span>Blueprints Talk</span>
         </div>
         <nav className="pages">
-          <button className={page === "ask" ? "on" : ""} onClick={() => { setPage("ask"); writeRoute({ drawing: detail?.id ?? null, question, page: "ask" }); }}>Ask</button>
-          <button className={page === "numbers" ? "on" : ""} onClick={() => { setPage("numbers"); writeRoute({ drawing: detail?.id ?? null, question, page: "numbers" }); }}>Numbers</button>
+          <button className={page === "ask" ? "on" : ""} onClick={() => go("ask")}>Ask</button>
+          <button className={page === "numbers" ? "on" : ""} onClick={() => go("numbers")}>Numbers</button>
         </nav>
         <div className="spacer" />
         {page === "ask" && meter.answers > 0 && (
@@ -304,6 +371,22 @@ export function App() {
         )}
         {page === "ask" && (
           <>
+            <div className="switch" role="group" aria-label="How the drawing is shown">
+              <button className={theme === "blueprint" ? "on" : ""} onClick={() => { setTheme("blueprint"); remember("blueprints.theme", "blueprint"); }}>Blueprint</button>
+              <button className={theme === "paper" ? "on" : ""} onClick={() => { setTheme("paper"); remember("blueprints.theme", "paper"); }}>Paper</button>
+            </div>
+            <button
+              className={`icon${audible ? " on" : ""}`}
+              onClick={() => { setAudible(!audible); remember("blueprints.sound", audible ? "off" : "on"); }}
+              aria-pressed={audible}
+              title={audible ? "Sounds on" : "Sounds off"}
+            >
+              <svg viewBox="0 0 24 24" aria-hidden>
+                <path d="M9 18V6l10-2v12" fill="none" strokeWidth="2" strokeLinejoin="round" />
+                <circle cx="7" cy="18" r="2.4" /><circle cx="17" cy="16" r="2.4" />
+                {!audible && <path d="M4 4l16 16" fill="none" strokeWidth="2.2" strokeLinecap="round" />}
+              </svg>
+            </button>
             <div className="tour">
               <button onClick={() => setTouring(!touring)} aria-expanded={touring}>Examples</button>
               {touring && (
@@ -338,10 +421,7 @@ export function App() {
       ) : (
         <main className="work">
           <section className="left">
-            <form
-              className="ask"
-              onSubmit={(e) => { e.preventDefault(); if (detail) void ask(detail, question); }}
-            >
+            <form className="ask" onSubmit={(e) => { e.preventDefault(); if (detail) void ask(detail, question); }}>
               <div className="field">
                 <input
                   value={question}
@@ -352,7 +432,7 @@ export function App() {
                   spellCheck={false}
                 />
                 {canListen && (
-                  <button type="button" className={`mic${listening ? " on" : ""}`} onClick={listen} aria-label="Ask by voice">
+                  <button type="button" className={`mic${listening ? " on" : ""}`} onClick={listen} aria-label="Ask by voice" title="Ask by voice">
                     <svg viewBox="0 0 24 24" aria-hidden><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" fill="none" strokeWidth="2" strokeLinecap="round" /></svg>
                   </button>
                 )}
@@ -361,9 +441,7 @@ export function App() {
                     <svg viewBox="0 0 24 24" aria-hidden><path d="M4 9.5h3.5L12 6v12l-4.5-3.5H4z" /><path d="M15.5 9a4.2 4.2 0 0 1 0 6M18 6.5a7.6 7.6 0 0 1 0 11" fill="none" strokeWidth="2" strokeLinecap="round" /></svg>
                   </button>
                 )}
-                <button type="submit" className="go" disabled={!detail || asking || !question.trim()}>
-                  {asking ? "Asking…" : "Ask"}
-                </button>
+                <button type="submit" className="go" disabled={!detail || asking || !question.trim()}>{asking ? "Asking…" : "Ask"}</button>
                 {suggesting && detail && matches.length > 0 && (
                   <ul className="suggest">
                     {matches.slice(0, 60).map((s) => (
@@ -381,7 +459,7 @@ export function App() {
                 <div className="modes" role="tablist">
                   {(["plan", "both", "3d"] as Mode[]).map((m) => (
                     <button type="button" key={m} role="tab" aria-selected={effective === m} className={effective === m ? "on" : ""} onClick={() => setMode(m)}>
-                      {m === "plan" ? "Plan" : m === "3d" ? "3D" : "Both"}
+                      {m === "plan" ? "Plan" : m === "3d" ? "Raise to 3D" : "Both"}
                     </button>
                   ))}
                 </div>
@@ -392,11 +470,14 @@ export function App() {
               {detail && has2d && effective !== "3d" && (
                 <Viewer2D
                   detail={detail}
+                  theme={theme}
                   evidence={drawable}
                   context={settled ? context : []}
-                  revealed={revealed}
+                  visible={visible}
+                  sweepAt={sweepAt}
                   excluded={excluded}
                   hover={hover}
+                  focus={focus}
                   leftOut={leftOut}
                   focusKey={focusKey}
                   onHover={setHover}
@@ -407,25 +488,40 @@ export function App() {
                 <Viewer3D
                   key={detail.mesh!}
                   meshUrl={detail.mesh!}
+                  groundUrl={groundUrl}
+                  imageUrl={detail.view.url}
+                  theme={theme}
                   highlights={highlights}
-                  revealed={revealed}
+                  visible={visible}
                   hover={hover}
+                  focus={focus}
                   excluded={excluded}
                   focusKey={focusKey}
                 />
               )}
-              {!detail && !error && <div className="viewer-wait">Loading the drawing…</div>}
+              {!detail && !error && <div className="viewer-wait">Unrolling the drawing…</div>}
+
+              {/* The sheet's frame: zone letters and numbers, as on a real drawing. */}
+              <div className="frame" aria-hidden>
+                <div className="zones top">{ZONES.map((z) => <span key={z}>{z}</span>)}</div>
+                <div className="zones side">{[1, 2, 3, 4, 5].map((z) => <span key={z}>{z}</span>)}</div>
+              </div>
+              {result && settled && <Stamp key={focusKey} result={result} />}
             </div>
 
-            <footer className="credit">
+            {/* The sheet's title block: what the drawing is, where it came from, whose it is. */}
+            <div className="titleblock" aria-label="About this drawing">
               {detail && (
                 <>
-                  <span>{detail.credit}</span>
-                  {detail.paper_scale && <span>Sheet scale 1:{detail.paper_scale}, measured from the drawing</span>}
-                  {detail.model_file && <span>Model: {detail.model_file}</span>}
+                  <div><span>Drawing</span><b>{detail.title}</b></div>
+                  <div><span>Source</span><b>{SOURCE_NAMES[detail.source] ?? detail.source}</b></div>
+                  <div><span>Formats</span><b>{detail.formats.join(" · ").toUpperCase()}</b></div>
+                  {detail.paper_scale && <div><span>Scale, measured from the sheet</span><b>1:{detail.paper_scale}</b></div>}
+                  {detail.model_file && <div><span>Model</span><b>{detail.model_file}</b></div>}
+                  <div className="credit"><span>Credit</span><b>{detail.credit}</b></div>
                 </>
               )}
-            </footer>
+            </div>
           </section>
 
           <AnswerPanel
@@ -437,11 +533,15 @@ export function App() {
             adjusted={adjusted}
             excluded={excluded}
             hover={hover}
+            focus={focus}
+            view={detail && has2d ? detail.view : null}
+            theme={theme}
+            starters={starters}
             onHover={setHover}
             onToggle={toggle}
+            onFocus={setFocus}
             onRestore={() => setExcluded(new Set())}
             onUseModel={() => detail && void ask(detail, question, true)}
-            starters={starters}
             onAsk={(text) => detail && void ask(detail, text)}
           />
         </main>

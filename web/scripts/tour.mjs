@@ -26,10 +26,11 @@ for (let i = 0; i < count; i++) {
     state: document.querySelector(".verdict strong")?.textContent,
     value: document.querySelector(".value")?.textContent,
     question: document.querySelector(".asked")?.textContent?.slice(0, 70),
-    pins: document.querySelectorAll(".pin").length,
-    rooms: document.querySelectorAll(".ev-room").length,
+    loops: document.querySelectorAll(".mark.count").length,
+    rooms: document.querySelectorAll(".mark.room").length,
     tags3d: document.querySelectorAll(".tag3d").length,
-    chips: document.querySelectorAll(".chips button, .rows li").length,
+    listed: document.querySelectorAll(".contact button, .chips button, .rows li").length,
+    stamp: document.querySelector(".stamp .main")?.textContent,
   }));
   console.log(i + 1, JSON.stringify(seen));
   if (out) await page.screenshot({ path: `${out}/stop-${String(i + 1).padStart(2, "0")}.png` });

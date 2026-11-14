@@ -1,13 +1,19 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { DrawingDetail, Evidence, Room } from "./api";
+import { centroid, cloud, loop, squiggle, strike, trace } from "./sketch";
+
+export type Theme = "blueprint" | "paper";
 
 interface Props {
   detail: DrawingDetail;
+  theme: Theme;
   evidence: Evidence[];
   context: Evidence[];
-  revealed: number;
+  visible: Set<number>;  // the items marked so far
+  sweepAt: number | null;  // where the reading line is, in image pixels, while items are being marked
   excluded: Set<number>;
   hover: number | null;
+  focus: number | null;  // an item being inspected: the view moves to it
   leftOut: Room[];
   focusKey: string;
   onHover(n: number | null): void;
@@ -20,48 +26,39 @@ interface Transform {
   y: number;
 }
 
-const PIN = "M0 0C-3.5-7-11-11-11-21a11 11 0 1 1 22 0C11-11 3.5-7 0 0Z";
+type Box = [number, number, number, number];
 
-function centroid(points: [number, number][]): [number, number] {
-  let area = 0;
-  let cx = 0;
-  let cy = 0;
-  for (let i = 0; i < points.length; i++) {
-    const [x0, y0] = points[i];
-    const [x1, y1] = points[(i + 1) % points.length];
-    const cross = x0 * y1 - x1 * y0;
-    area += cross;
-    cx += (x0 + x1) * cross;
-    cy += (y0 + y1) * cross;
+export function boxOf(item: Evidence): Box | null {
+  if (item.points?.length) {
+    const xs = item.points.map((p) => p[0]), ys = item.points.map((p) => p[1]);
+    return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)];
   }
-  if (Math.abs(area) < 1e-6) {
-    const n = points.length || 1;
-    return [points.reduce((s, p) => s + p[0], 0) / n, points.reduce((s, p) => s + p[1], 0) / n];
-  }
-  return [cx / (3 * area), cy / (3 * area)];
-}
-
-function anchorOf(item: Evidence): [number, number] | null {
-  if (item.x !== undefined && item.y !== undefined) return [item.x, item.y];
-  if (item.bbox) return [(item.bbox[0] + item.bbox[2]) / 2, (item.bbox[1] + item.bbox[3]) / 2];
-  if (item.points) return centroid(item.points);
+  if (item.bbox) return item.bbox;
+  if (item.x !== undefined && item.y !== undefined) return [item.x, item.y, item.x, item.y];
   return null;
 }
 
-function boundsOf(items: Evidence[]): [number, number, number, number] | null {
+export function anchorOf(item: Evidence): [number, number] | null {
+  if (item.x !== undefined && item.y !== undefined) return [item.x, item.y];
+  if (item.bbox) return [(item.bbox[0] + item.bbox[2]) / 2, (item.bbox[1] + item.bbox[3]) / 2];
+  if (item.points?.length) return centroid(item.points);
+  return null;
+}
+
+function boundsOf(items: Evidence[]): Box | null {
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-  const grow = (x: number, y: number) => {
-    x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y);
-  };
   for (const item of items) {
-    if (item.bbox) { grow(item.bbox[0], item.bbox[1]); grow(item.bbox[2], item.bbox[3]); }
-    else if (item.points) item.points.forEach(([x, y]) => grow(x, y));
-    else if (item.x !== undefined && item.y !== undefined) grow(item.x, item.y);
+    const box = boxOf(item);
+    if (!box) continue;
+    x0 = Math.min(x0, box[0]); y0 = Math.min(y0, box[1]); x1 = Math.max(x1, box[2]); y1 = Math.max(y1, box[3]);
   }
   return Number.isFinite(x0) ? [x0, y0, x1, y1] : null;
 }
 
-export function Viewer2D({ detail, evidence, context, revealed, excluded, hover, leftOut, focusKey, onHover, onToggle }: Props) {
+const points = (list: [number, number][]) => list.map((p) => p.join(",")).join(" ");
+
+export function Viewer2D(props: Props) {
+  const { detail, theme, evidence, context, visible, sweepAt, excluded, hover, focus, leftOut, focusKey, onHover, onToggle } = props;
   const frame = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [t, setT] = useState<Transform>({ k: 1, x: 0, y: 0 });
@@ -72,10 +69,10 @@ export function Viewer2D({ detail, evidence, context, revealed, excluded, hover,
   const { width, height, url } = detail.view;
 
   const fitTo = useCallback(
-    (box: [number, number, number, number] | null, pad = 0.9): Transform => {
+    (box: Box | null, pad = 0.9): Transform => {
       const [x0, y0, x1, y1] = box ?? [0, 0, width, height];
       const bw = Math.max(x1 - x0, 1), bh = Math.max(y1 - y0, 1);
-      const k = Math.min((size.w * pad) / bw, (size.h * pad) / bh, 6);
+      const k = Math.min((size.w * pad) / bw, (size.h * pad) / bh, 8);
       return { k, x: (size.w - bw * k) / 2 - x0 * k, y: (size.h - bh * k) / 2 - y0 * k };
     },
     [width, height, size.w, size.h],
@@ -84,7 +81,7 @@ export function Viewer2D({ detail, evidence, context, revealed, excluded, hover,
   const glide = useCallback((next: Transform) => {
     setGliding(true);
     setT(next);
-    window.setTimeout(() => setGliding(false), 750);
+    window.setTimeout(() => setGliding(false), 780);
   }, []);
 
   useLayoutEffect(() => {
@@ -104,19 +101,30 @@ export function Viewer2D({ detail, evidence, context, revealed, excluded, hover,
 
   useEffect(() => setLoaded(false), [url]);
 
-  // A new answer: move to its evidence when that is a small part of the sheet.
+  // A new answer: move to its evidence when that would be small with the whole sheet in view.
   useEffect(() => {
     if (!focusKey || !size.w) return;
     const box = boundsOf(evidence);
-    if (!box) return glide(fitTo(null));
-    // Zoom in only when the evidence would be small on screen with the whole sheet in view.
     const whole = fitTo(null);
+    if (!box) return glide(whole);
     const onScreen = Math.max(box[2] - box[0], box[3] - box[1]) * whole.k;
-    const margin = 60 / whole.k;
-    const padded: [number, number, number, number] = [box[0] - margin, box[1] - 1.3 * margin, box[2] + margin, box[3] + margin];
-    glide(onScreen < 0.42 * Math.min(size.w, size.h) ? fitTo(padded, 0.86) : whole);
+    const margin = 70 / whole.k;
+    glide(onScreen < 0.42 * Math.min(size.w, size.h)
+      ? fitTo([box[0] - margin, box[1] - 1.3 * margin, box[2] + margin, box[3] + margin], 0.86) : whole);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusKey]);
+
+  // Inspecting one item: bring it close, with its surroundings.
+  useEffect(() => {
+    if (focus === null || !size.w) return;
+    const item = evidence.find((e) => e.n === focus);
+    const box = item && boxOf(item);
+    if (!box) return;
+    const reach = Math.max(box[2] - box[0], box[3] - box[1], 40) * 2.2 + 120;
+    const cx = (box[0] + box[2]) / 2, cy = (box[1] + box[3]) / 2;
+    glide(fitTo([cx - reach / 2, cy - reach / 2, cx + reach / 2, cy + reach / 2], 1));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focus]);
 
   useEffect(() => {
     const el = frame.current;
@@ -126,7 +134,7 @@ export function Viewer2D({ detail, evidence, context, revealed, excluded, hover,
       const rect = el.getBoundingClientRect();
       const cx = e.clientX - rect.left, cy = e.clientY - rect.top;
       setT((prev) => {
-        const k = Math.min(24, Math.max(0.03, prev.k * Math.exp(-e.deltaY * 0.0016)));
+        const k = Math.min(30, Math.max(0.03, prev.k * Math.exp(-e.deltaY * 0.0016)));
         return { k, x: cx - ((cx - prev.x) * k) / prev.k, y: cy - ((cy - prev.y) * k) / prev.k };
       });
     };
@@ -136,19 +144,18 @@ export function Viewer2D({ detail, evidence, context, revealed, excluded, hover,
 
   const zoomBy = (factor: number) => {
     const cx = size.w / 2, cy = size.h / 2;
-    const k = Math.min(24, Math.max(0.03, t.k * factor));
+    const k = Math.min(30, Math.max(0.03, t.k * factor));
     glide({ k, x: cx - ((cx - t.x) * k) / t.k, y: cy - ((cy - t.y) * k) / t.k });
   };
 
-  const shown = useMemo(() => evidence.filter((e) => (e.n ?? 0) <= revealed), [evidence, revealed]);
-  const inverse = 1 / t.k;
-  // Pins keep their size on screen, but shrink a little when the whole sheet is in view.
-  const pinScale = inverse * Math.min(1, Math.max(0.6, t.k * 2.4));
+  const shown = useMemo(() => evidence.filter((e) => visible.has(e.n ?? -1)), [evidence, visible]);
+  const u = 1 / t.k;  // one screen pixel, in image pixels
+  const pen = 2.5 * u;
 
   return (
     <div
       ref={frame}
-      className={`viewer2d${drag.current ? " dragging" : ""}`}
+      className={`viewer2d theme-${theme}`}
       onPointerDown={(e) => {
         if (e.button !== 0) return;
         drag.current = { x: e.clientX, y: e.clientY, moved: false };
@@ -175,9 +182,13 @@ export function Viewer2D({ detail, evidence, context, revealed, excluded, hover,
         {url && <img src={url} width={width} height={height} alt="" draggable={false} onLoad={() => setLoaded(true)} />}
         <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
           <defs>
-            <pattern id="hatch" width={10 * inverse} height={10 * inverse} patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-              <line x1="0" y1="0" x2="0" y2={10 * inverse} className="hatch-line" strokeWidth={2.4 * inverse} />
+            <pattern id="hatch" width={11 * u} height={11 * u} patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+              <line x1="0" y1="0" x2="0" y2={11 * u} className="hatch-line" strokeWidth={2.2 * u} />
             </pattern>
+            <linearGradient id="sweep-glow" x1="0" x2="1" y1="0" y2="0">
+              <stop offset="0" className="sweep-stop-0" />
+              <stop offset="1" className="sweep-stop-1" />
+            </linearGradient>
           </defs>
 
           {/* Every room of the plan: invisible until hovered, so any area can be checked. */}
@@ -185,7 +196,9 @@ export function Viewer2D({ detail, evidence, context, revealed, excluded, hover,
             <polygon
               key={room.ref}
               className="room-hit"
-              points={room.points.map((p) => p.join(",")).join(" ")}
+              points={points(room.points)}
+              strokeWidth={1.5 * u}
+              strokeDasharray={`${5 * u} ${4 * u}`}
               onPointerMove={(e) => {
                 if (drag.current?.moved) return;
                 const rect = frame.current!.getBoundingClientRect();
@@ -195,94 +208,93 @@ export function Viewer2D({ detail, evidence, context, revealed, excluded, hover,
             />
           ))}
 
+          {/* Rooms a sum leaves out (balconies and other outdoor space): hatched, with a note. */}
           {leftOut.map((room) => {
             const [cx, cy] = centroid(room.points);
             return (
               <g key={room.ref} className="left-out">
-                <polygon points={room.points.map((p) => p.join(",")).join(" ")} fill="url(#hatch)" />
-                <g transform={`translate(${cx},${cy}) scale(${inverse})`}>
-                  <text className="left-out-label" textAnchor="middle" y={-14}>left out</text>
-                </g>
+                <polygon points={points(room.points)} fill="url(#hatch)" strokeWidth={1.6 * u} strokeDasharray={`${6 * u} ${5 * u}`} />
+                <g transform={`translate(${cx},${cy}) scale(${u})`}><text className="hand note" textAnchor="middle" y={-12}>left out</text></g>
               </g>
             );
           })}
 
+          {/* Measured rooms: coloured in with a highlighter, traced with the pen, the area written in. */}
           {shown.filter((e) => e.points).map((item) => {
-            // The drawing prints a room's own name and area around its middle; the computed
-            // area sits below that, so the two can be compared side by side.
             const [cx, mid] = centroid(item.points!);
             const ys = item.points!.map((q) => q[1]);
-            const cy = mid + 0.24 * (Math.max(...ys) - Math.min(...ys));
+            const xs = item.points!.map((q) => q[0]);
+            const cy = mid + 0.24 * (Math.max(...ys) - Math.min(...ys));  // below the room's own printed text
+            // Written to fit the room: a cupboard gets small figures, a living room large ones.
+            const across = (Math.max(...xs) - Math.min(...xs)) * t.k;
+            const lettering = Math.min(22, Math.max(10.5, across / 5.2));
             const off = excluded.has(item.n!);
-            const label = item.area_m2 != null ? `${item.area_m2.toFixed(2)} m²` : String(item.n);
-            const w = label.length * 7.4 + 16;
             return (
               <g
-                key={`poly-${item.n}`}
-                className={`ev-room${hover === item.n ? " hot" : ""}${off ? " off" : ""}`}
+                key={`room-${item.n}`}
+                className={`mark room${hover === item.n ? " hot" : ""}${off ? " off" : ""}`}
                 onPointerEnter={() => onHover(item.n!)}
                 onPointerLeave={() => onHover(null)}
                 onClick={() => !drag.current?.moved && onToggle(item.n!)}
               >
-                <polygon points={item.points!.map((p) => p.join(",")).join(" ")} />
-                <g transform={`translate(${cx},${cy}) scale(${inverse})`}>
-                  <g className="plate">
-                    <rect x={-w / 2} y={-11} width={w} height={22} rx={4} />
-                    <text textAnchor="middle" y={4.5}>{label}</text>
-                  </g>
+                <polygon className="highlighter" points={points(item.points!)} />
+                <path className="ink draw" pathLength={1} d={trace(item.points!, item.n!, 1.6 * u)} strokeWidth={pen} />
+                <g transform={`translate(${cx},${cy}) scale(${u})`}>
+                  <text className="hand figure" textAnchor="middle" y={lettering / 3} style={{ fontSize: lettering, strokeWidth: lettering / 4.5 }}>
+                    {item.area_m2 != null ? `${item.area_m2.toFixed(2)} m²` : item.n}
+                  </text>
                 </g>
               </g>
             );
           })}
 
-          {/* Text the engine read and did not count: the type line it checked against, and doubtful labels. */}
+          {/* Text the engine read and did not count: the type line it checked against, labels it doubted. */}
           {context.map((item, i) => {
             const [x0, y0, x1, y1] = item.bbox!;
-            const pad = 4 * inverse;
             const doubt = item.role === "not counted";
             return (
-              <g key={`ctx-${i}`} className={`ev-context${doubt ? " doubt" : ""}`}>
-                <rect x={x0 - pad} y={y0 - pad} width={x1 - x0 + 2 * pad} height={y1 - y0 + 2 * pad} rx={3 * inverse} />
-                <g transform={`translate(${(x0 + x1) / 2},${y0 - pad}) scale(${inverse})`}>
-                  <text textAnchor="middle" y={-5}>{doubt ? "not counted" : item.role}</text>
+              <g key={`ctx-${i}`} className={`mark aside${doubt ? " doubt" : ""}`}>
+                {doubt
+                  ? <path className="ink draw" pathLength={1} d={cloud(x0 - 6 * u, y0 - 6 * u, x1 + 6 * u, y1 + 6 * u, 7 * u)} strokeWidth={1.8 * u} />
+                  : <path className="ink draw" pathLength={1} d={squiggle(x0 - 2 * u, x1 + 2 * u, y1 + 5 * u, 2.2 * u)} strokeWidth={1.8 * u} />}
+                <g transform={`translate(${(x0 + x1) / 2},${doubt ? y0 - 9 * u : y1 + 9 * u}) scale(${u})`}>
+                  <text className="hand note" textAnchor="middle" y={doubt ? -4 : 16}>{doubt ? "not counted" : item.role}</text>
                 </g>
               </g>
             );
           })}
 
-          {shown.filter((e) => e.bbox && !e.points).map((item) => {
-            const [x0, y0, x1, y1] = item.bbox!;
-            const pad = 5 * inverse;
-            return (
-              <rect
-                key={`box-${item.n}`}
-                className={`ev-box${hover === item.n ? " hot" : ""}${excluded.has(item.n!) ? " off" : ""}`}
-                x={x0 - pad} y={y0 - pad} width={x1 - x0 + 2 * pad} height={y1 - y0 + 2 * pad} rx={3 * inverse}
-              />
-            );
-          })}
-
-          {shown.filter((e) => !e.points && (e.bbox || e.x !== undefined)).map((item) => {
-            const at = anchorOf(item);
-            if (!at) return null;
+          {/* Counted items: a loop round each one and its number, as a reviewer would mark them. */}
+          {shown.filter((e) => !e.points).map((item) => {
+            const box = boxOf(item)!;
+            const cx = (box[0] + box[2]) / 2, cy = (box[1] + box[3]) / 2;
+            const rx = Math.max(((box[2] - box[0]) / 2) * 1.5, 12 * u), ry = Math.max(((box[3] - box[1]) / 2) * 1.5, 12 * u);
             const off = excluded.has(item.n!);
             return (
               <g
-                key={`pin-${item.n}`}
-                transform={`translate(${at[0]},${at[1]}) scale(${pinScale})`}
-                className={`pin${hover === item.n ? " hot" : ""}${off ? " off" : ""}`}
+                key={`loop-${item.n}`}
+                className={`mark count${hover === item.n ? " hot" : ""}${off ? " off" : ""}`}
                 onPointerEnter={() => onHover(item.n!)}
                 onPointerLeave={() => onHover(null)}
                 onClick={(e) => { e.stopPropagation(); if (!drag.current?.moved) onToggle(item.n!); }}
               >
-                <g className="pin-drop">
-                  <ellipse className="pin-shadow" cx="0" cy="0" rx="5" ry="2" />
-                  <path d={PIN} />
-                  <text textAnchor="middle" y={-17}>{item.n}</text>
+                <ellipse className="hit" cx={cx} cy={cy} rx={rx * 1.15} ry={ry * 1.15} />
+                <path className="ink draw" pathLength={1} d={loop(cx, cy, rx, ry, item.n!)} strokeWidth={hover === item.n ? pen * 1.7 : pen} />
+                {off && <path className="ink" d={strike(cx, cy, rx * 0.8, ry * 0.8, item.n!)} strokeWidth={pen} />}
+                <g transform={`translate(${cx + rx * 0.78},${cy - ry * 0.78}) scale(${u})`}>
+                  <text className="hand number" x={5} y={-3}>{item.n}</text>
                 </g>
               </g>
             );
           })}
+
+          {/* The reading line that sweeps the sheet while items are marked. */}
+          {sweepAt !== null && (
+            <g className="sweep" style={{ transform: `translateX(${sweepAt}px)` }}>
+              <rect x={-90 * u} y={0} width={90 * u} height={height} fill="url(#sweep-glow)" />
+              <line x1={0} y1={0} x2={0} y2={height} strokeWidth={1.6 * u} />
+            </g>
+          )}
         </svg>
       </div>
 

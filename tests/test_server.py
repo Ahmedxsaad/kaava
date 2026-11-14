@@ -212,3 +212,18 @@ def test_labels_are_shown_beside_a_model_answer_as_a_second_method():
     added = [e for e in model.evidence if e.get("role") == "label read by OCR"]
     assert len(added) == 2 and model.meta["labels_said"] == 2
     assert "a different count" in model.meta["checks"]["labels printed on the plan (local OCR)"]
+
+
+@needs_data
+def test_the_plan_image_is_placed_under_the_3d_model(client):
+    """The four corners of the plan image, in mesh coordinates, enclose the walls raised from it."""
+    ground = client.get("/api/ground", params={"drawing": SWISS}).json()
+    header, positions, _ = mesh.unpack(client.get("/api/mesh", params={"drawing": SWISS}).content)
+    xs = [c[0] for c in ground["corners"]]
+    ys = [c[1] for c in ground["corners"]]
+    assert min(xs) <= header["bbox"][0] and max(xs) >= header["bbox"][3]
+    assert min(ys) <= header["bbox"][1] and max(ys) >= header["bbox"][4]
+    # The image is not mirrored: its top-left corner is up and to the left of its bottom-right one.
+    (x0, y0, _), _, (x2, y2, _), _ = ground["corners"]
+    assert x0 < x2 and y0 > y2
+    assert client.get("/api/ground", params={"drawing": "data/cubicasa5k/high_quality_architectural-14441"}).status_code == 404

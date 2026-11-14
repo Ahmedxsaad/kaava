@@ -337,6 +337,47 @@ class Service:
         self._plan_fits[drawing] = fit
         return fit
 
+    def ground(self, drawing: str) -> dict | None:
+        """Where the plan image lies under the 3D model: its four corners in the mesh's coordinates.
+
+        A Swiss plan is lined up with its DXF, an IFC plan with its model's storey, so the
+        drawing itself can be the floor the 3D walls stand on.
+        """
+        view = self.view(drawing)
+        if view.kind not in ("plan", "page") or not view.clip:
+            return None
+        w, h = view.width, view.height
+        corners_px = [(0, 0), (w, 0), (w, h), (0, h)]
+
+        def pdf(u: float, v: float) -> tuple[float, float]:
+            return u / view.zoom + view.clip[0], v / view.zoom + view.clip[1]
+
+        if view.kind == "plan" and view.transform and view.dxf_file:
+            header, _, _ = mesh.unpack(mesh.plan_mesh(self.ds.abspath(view.dxf_file)))
+            ox, oy, oz = header["offset"]
+            t = view.transform
+            corners = []
+            for u, v in corners_px:
+                X, Y = pdf(u, v)
+                corners.append([round((X - t["tx"]) / t["scale"] - ox, 4),
+                                round(-(Y - t["ty"]) / t["scale"] - oy, 4), round(0.0 - oz + 0.012, 4)])
+            return {"corners": corners, "storey": 0}
+        fit = self.plan_fit(drawing)
+        if fit is None:
+            return None
+        header = self._model_mesh(self.model_of(drawing))[0]
+        (a, d), (b, e), (c, f) = fit["coef"]  # X = a x + b y + c, Y = d x + e y + f
+        det = a * e - b * d
+        if abs(det) < 1e-9:
+            return None
+        z = header["storeys"][fit["storey"]].get("z") or 0.0
+        corners = []
+        for u, v in corners_px:
+            X, Y = pdf(u, v)
+            corners.append([round((e * (X - c) - b * (Y - f)) / det, 4),
+                            round((-d * (X - c) + a * (Y - f)) / det, 4), round(z + 0.03, 4)])
+        return {"corners": corners, "storey": fit["storey"]}
+
     # ---- drawing descriptions
 
     def summary(self, drawing: str) -> dict:
@@ -814,6 +855,13 @@ def create_app(dataset_root: Path | str | None = None) -> FastAPI:
         except mesh.MeshTooLarge as exc:
             raise HTTPException(413, f"this model is too large to show in the browser ({exc})")
         return Response(data, media_type="application/octet-stream", headers={"Cache-Control": "max-age=3600"})
+
+    @app.get("/api/ground")
+    def ground(drawing: str) -> dict:
+        placed = service.ground(need(drawing))
+        if placed is None:
+            raise HTTPException(404, "this plan is not lined up with a 3D model")
+        return placed
 
     @app.post("/api/ask")
     def ask(req: AskRequest) -> dict:
