@@ -1,6 +1,25 @@
+<div align="center">
+
 # Blueprints Talk
 
-Answers to questions about construction drawings and building models that a project engineer does not need to double-check. Built at Junction 2026 for Stoa's challenge "Make Blueprints Talk".
+**Ask a construction drawing a question. Get a number you do not have to double-check,<br>with the evidence drawn on the sheet.**
+
+[**Live demo: stoa.ahmedxsaad.me**](https://stoa.ahmedxsaad.me) &nbsp;·&nbsp; [How it works](#how-it-works) &nbsp;·&nbsp; [Results](#results) &nbsp;·&nbsp; [Run it](#run-it) &nbsp;·&nbsp; [Diagrams](#more-diagrams)
+
+![Four questions answered in the app: 23 doors counted on a plan and lit in 3D, a corridor measured with the lift cut out of it, a slab's area with two trenches taken out, and 14 windows boxed on a scan that stands in 3D](docs/demo.gif)
+
+</div>
+
+Built at Junction 2026 (Helsinki, 13 to 15 November) for Stoa's challenge **Make Blueprints Talk**: answers to questions about construction drawings and building models that a project engineer does not need to double-check.
+
+| Measured | This system | For comparison |
+| --- | --- | --- |
+| Right, on 200 held-out dataset questions | **95.8%** | 62.5% for the vision model alone |
+| Verified answers on the development split that turned out wrong | **0 of 16,982** | the bar is under 1%, 95% sure |
+| Stoa's four sample sheets, 27 questions | **27 right, 0 wrong** | slab areas, baseboards, door counts, piping |
+| Cost per question on the dataset | **€0.003** | €0.008 for the vision model alone |
+
+**The rule that holds everywhere:** a number is computed by code from things you can see on the drawing (counted objects, measured geometry, printed figures). A language model never writes it. Where a model is used at all, its reply format has no field for the answer.
 
 Every answer ends in one of three states:
 
@@ -118,7 +137,7 @@ What else is measured, and what is not:
 
 ![The How it works page: the route a question takes and the model's tools](docs/screenshots/how-it-works.png)
 
-## Results so far
+## Results
 
 All figures come from the run log in `results/` and are shown live on the app's Numbers page. The test split has not been opened.
 
@@ -245,16 +264,23 @@ Leave out `--env-file .env` to run without a vision model. The first time a larg
 
 | Path | What |
 | --- | --- |
-| `src/blueprints/engines/` | IFC engine, DXF engine, router |
+| `src/blueprints/engines/` | The exact engines (IFC, DXF), the label reader for scans, the router |
+| `src/blueprints/plan_query.py`, `model_query.py` | A question in your own words, read twice as a query and run on the geometry |
+| `src/blueprints/sheet_reading.py`, `sheet_text.py`, `tiles.py` | Sheets with no model or DXF: texts read at full size, the model's working, the calculator, symbols boxed tile by tile |
+| `src/blueprints/examiner.py` | Examiners: second readers that look inside what was measured for what must be taken out |
+| `src/blueprints/measure.py`, `scale.py` | The ruler: rooms of any shape with their holes, drawn rectangles, and the scale from a bar, a printed dimension or the doors |
+| `src/blueprints/scan_plan.py`, `mesh.py` | Walls found in a scan's pixels; 3D meshes from IFC models, DXF plans and scans |
 | `src/blueprints/verify.py` | Calibrated Verified thresholds |
 | `src/blueprints/harness.py`, `scoring.py`, `split.py` | Evaluation harness, Stoa's scoring rule, the frozen split by drawing |
-| `src/blueprints/server.py`, `mesh.py` | API for the app; 3D meshes from IFC models and DXF plans |
-| `src/blueprints/interpret.py`, `cloud.py`, `sheet.py` | Question restating by a language model; Cloudinary enlarged view and hosting; evidence sheets |
+| `src/blueprints/server.py` | API for the app |
 | `web/` | The verification app (React, Three.js) |
-| `scripts/` | One-off measurements, each logged in `results/` |
-| `pitch/` | The pitch deck (`node pitch/build.mjs`), the narrated video (`pitch/video/make.py`) and the submission text |
+| `examples/stoa/` | Stoa's four sample sheets, our 27 questions on them with our answer key, and the kept answers |
+| `docs/diagrams/` | Seven diagrams of how it works: spec, editable Excalidraw scene, PNG, SVG, animated SVG |
+| `scripts/` | Measurements (each logged in `results/`), the benchmark on Stoa's sheets, and the deploy scripts |
+| `tests/` | The test suite (`pytest`) |
 | `results/` | Log of every evaluation run |
 | `splits/` | The split, the fixed samples and the Verified thresholds |
+| `pitch/` | An earlier pitch deck and narrated video, built by script |
 | `CLAUDE.md`, `01-challenge/` to `04-research/` | Challenge brief, dataset notes, strategy and research |
 
 ## Data and licences
