@@ -83,8 +83,10 @@ def _space_labels(space: dict) -> set[str]:
 
 
 def _element(item: dict, **extra) -> dict:
+    name, long_name = item.get("name", ""), item.get("long_name", "")
+    label = f"{long_name} ({name})" if long_name and name else long_name or name  # rooms: as the questions name them
     return {"kind": "ifc_element", "id": item["id"], "class": item.get("cls", "IfcSpace"),
-            "label": item.get("name", ""), **extra}
+            "label": label, **extra}
 
 
 def _agreement(values: dict[str, float | None]) -> tuple[list[str], float | None]:

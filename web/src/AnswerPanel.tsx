@@ -60,7 +60,8 @@ function Why({ result }: { result: AskResult }) {
             : family
               ? "Answers of this kind are not marked Verified yet: there are too few held-back answers to prove fewer than 1% are wrong."
               : result.method.startsWith("vlm")
-                ? "A vision model read this from pixels. Its items are drawn so you can check each one; it is never marked Verified."
+                ? `A vision model read this from pixels. Its items are drawn so you can check each one; it is never marked Verified.${
+                    result.confidence != null ? ` The model's own estimate that its list is exactly right: ${Math.round(100 * result.confidence)}%.` : ""}`
                 : "This kind of answer has not been measured on held-back drawings yet."}
         </p>
       </section>

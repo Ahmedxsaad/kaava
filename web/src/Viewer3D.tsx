@@ -252,7 +252,10 @@ export function Viewer3D({ meshUrl, highlights, revealed, hover, excluded, focus
       const fly = (box: THREE.Box3, fromAbove = false) => {
         const centre = box.getCenter(new THREE.Vector3());
         const radius = Math.max(box.getSize(new THREE.Vector3()).length() / 2, 1.5);
-        const distance = (radius / Math.sin((camera.fov * Math.PI) / 360)) * 0.8;
+        // Fit the narrower of the two view angles, so a tall pane does not crop the model.
+        const vertical = (camera.fov * Math.PI) / 360;
+        const half = Math.min(vertical, Math.atan(Math.tan(vertical) * camera.aspect));
+        const distance = (radius / Math.sin(half)) * 0.8;
         const direction = new THREE.Vector3(0.62, 0.72, 0.78).normalize();
         const end = centre.clone().addScaledVector(direction, distance);
         if (fromAbove) {  // start looking straight down at the plan, then come round

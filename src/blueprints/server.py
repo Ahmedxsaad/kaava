@@ -249,13 +249,14 @@ class Service:
                 return None
             files = {".pdf": plans[len(plans) // 2]}
         raster = next((files[e] for e in RASTER if e in files), None)
-        if raster:
+        lined_up = ".dxf" in files and ".pdf" in files  # show the plan itself, not the whole sheet
+        if raster and not lined_up:
             with Image.open(self.ds.abspath(raster)) as im:
                 im = im.convert("RGBA")
                 flat = Image.new("RGB", im.size, "white")
                 flat.paste(im, mask=im.getchannel("A"))
         else:
-            view = self.view(drawing) if ".dxf" in files and ".pdf" in self.files_of(drawing) else None
+            view = self.view(drawing) if lined_up else None
             with pymupdf.open(self.ds.abspath(files[".pdf"])) as doc:
                 page = doc[0]
                 clip = pymupdf.Rect(*view.clip) if view and view.clip else page.rect
@@ -666,8 +667,11 @@ def create_app(dataset_root: Path | str | None = None) -> FastAPI:
 
     @app.get("/api/sources")
     def sources() -> list[dict]:
-        return [{"source": s, "drawings": len(d), "credit": CREDITS.get(s, ""),
-                 "archive": s in ARCHIVE_SOURCES} for s, d in catalogue().items()]
+        order = ("swiss_dwellings", "ifc_models", "cubicasa5k", "opening_design", "ifc_bench") + ARCHIVE_SOURCES
+        found = catalogue()
+        return [{"source": s, "drawings": len(found[s]), "credit": CREDITS.get(s, ""),
+                 "archive": s in ARCHIVE_SOURCES}
+                for s in sorted(found, key=lambda s: order.index(s) if s in order else len(order))]
 
     @app.get("/api/drawings")
     def drawings(source: str, q: str = "", offset: int = 0, limit: int = 48) -> dict:

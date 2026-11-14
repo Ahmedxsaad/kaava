@@ -317,7 +317,7 @@ ul { list-style: none; }
 .picker .thumb { height: 132px; display: grid; place-items: center; background: var(--paper); border-radius: 6px; overflow: hidden; }
 .picker .thumb img { max-width: 100%; max-height: 132px; mix-blend-mode: multiply; }
 .picker .name { font: 500 12px var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.picker .meta { font-size: 10.5px; letter-spacing: 0.04em; color: var(--ink-3); display: flex; justify-content: space-between; gap: 6px; }
+.picker .meta { font-size: 10.5px; letter-spacing: 0.04em; color: var(--ink-3); display: flex; justify-content: space-between; gap: 6px; white-space: nowrap; overflow: hidden; }
 .picker .meta em { font-style: normal; color: var(--ok); letter-spacing: 0; font-size: 11px; white-space: nowrap; }
 .picker .meta em.model { color: var(--warn); }
 .picker .none { color: var(--ink-3); grid-column: 1 / -1; padding: 30px 0; text-align: center; }
