@@ -503,8 +503,10 @@ class Service:
             header, _, _ = mesh.unpack(mesh.scan_mesh(path))
             unit, (ox, oy, oz) = header["scan"]["unit_per_px"], header["offset"]
             wide, high = header["scan"]["width"], header["scan"]["height"]
+            x0, y0, x1, y1 = header["scan"].get("crop") or [0, 0, wide, high]  # the part of the page the building stands on
             return {"corners": [[round(u * unit - ox, 4), round((high - v) * unit - oy, 4), round(0.012 - oz, 4)]
-                                for u, v in ((0, 0), (wide, 0), (wide, high), (0, high))], "storey": 0}
+                                for u, v in ((x0, y0), (x1, y0), (x1, y1), (x0, y1))], "storey": 0,
+                    "crop": [x0, y0, x1, y1]}
         if view.kind not in ("plan", "page") or not view.clip:
             return None
         w, h = view.width, view.height

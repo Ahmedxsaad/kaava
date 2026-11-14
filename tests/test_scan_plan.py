@@ -106,11 +106,15 @@ def test_a_scan_stands_up_in_3d_on_its_own_pixels(tmp_path, monkeypatch):
 
     assert outline.buffer(0.01).contains(model(65, 240)) and outline.buffer(0.01).contains(model(320, 65))
     top = max(positions[2::3])
-    assert top == pytest.approx(mesh.WALL_HEIGHT - oz, abs=1e-3)   # the walls stand on the sheet's top
-    # The sheet spans the whole picture, so the scan laid on it lines up corner to corner.
+    # The walls stand on the sheet's top, cut low like an architect's model so the plan under them stays in view.
+    assert top == pytest.approx(header["wall_height"] - oz, abs=1e-3)
+    assert mesh.SCAN_CUT_M[0] <= header["wall_height"] <= mesh.SCAN_CUT_M[1] < mesh.WALL_HEIGHT
+    # The sheet is the part of the page the building stands on, with a margin: the scan laid on it lines up with it.
+    x0, y0, x1, y1 = header["scan"]["crop"]
+    assert 0 <= x0 < 65 and x1 <= W and 0 <= y0 < 65 and y1 <= H
     xs, ys = positions[0::3], positions[1::3]
-    assert min(xs) == pytest.approx(-ox, abs=1e-3) and max(xs) == pytest.approx(W * unit - ox, abs=1e-3)
-    assert min(ys) == pytest.approx(-oy, abs=1e-3) and max(ys) == pytest.approx(H * unit - oy, abs=1e-3)
+    assert min(xs) == pytest.approx(x0 * unit - ox, abs=1e-3) and max(xs) == pytest.approx(x1 * unit - ox, abs=1e-3)
+    assert min(ys) == pytest.approx((H - y1) * unit - oy, abs=1e-3) and max(ys) == pytest.approx((H - y0) * unit - oy, abs=1e-3)
 
 
 def test_a_scan_whose_walls_cannot_be_found_has_no_3d_view(tmp_path, monkeypatch):

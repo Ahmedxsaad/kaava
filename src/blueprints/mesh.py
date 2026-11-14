@@ -345,6 +345,8 @@ def _build_plan_mesh(dxf_path: Path) -> bytes:
 
 SCAN_WALL_M = 0.22        # a scan has no scale: its walls are taken to be this thick...
 SCAN_SPAN_M = (7.0, 60.0)  # ...as long as the page's longer side then comes out between these
+SCAN_CUT = 0.085          # a scan's walls are cut at this share of the building's longer side...
+SCAN_CUT_M = (0.9, 1.5)   # ...and between these heights
 
 
 class NoScanWalls(Exception):
@@ -442,19 +444,30 @@ def _build_scan_mesh(plan: dict) -> bytes:
             elements.append({"id": ident, "cls": kind, "name": "", "storey": 0,
                              "v": [v0, len(positions) // 3 - v0], "i": [i0, len(indices) - i0]})
 
-    sheet = place([(0, 0), (width, 0), (width, height), (0, height)])
+    # The part of the page the building stands on (the rest of the page is left out of the view).
+    cx0, cy0, cx1, cy1 = plan.get("crop") or [0, 0, width, height]
+    sheet = place([(cx0, cy0), (cx1, cy0), (cx1, cy1), (cx0, cy1)])
+    # Cut low, like an architect's model: the plan on the floor and what was counted on it stay in view.
+    # A full-height wall on a small flat stands like a tower and hides both.
+    tall = round(min(max(SCAN_CUT * max(cx1 - cx0, cy1 - cy0) * unit, SCAN_CUT_M[0]), SCAN_CUT_M[1]), 3)
     element("IfcSlab", "sheet", lambda: _prism(positions, indices, sheet, -0.05, 0.0, [(0, 1, 2), (0, 2, 3)]))
     for n, polygon in enumerate(plan["polygons"]):
         outer, holes = place(polygon["outer"]), [place(hole) for hole in polygon["holes"]]
-        element("wall", f"wall-{n}", lambda: _prism_with_holes(positions, indices, outer, holes, 0.0, WALL_HEIGHT))
+        element("wall", f"wall-{n}", lambda: _prism_with_holes(positions, indices, outer, holes, 0.0, tall))
+    for n, (x0, y0, x1, y1) in enumerate(plan.get("windows") or []):
+        # A window: the wall below the sill, glass above it.
+        ring = place([(x0, y0), (x1, y0), (x1, y1), (x0, y1)])
+        element("wall", f"sill-{n}", lambda: _prism(positions, indices, ring, 0.0, 0.42 * tall, [(0, 1, 2), (0, 2, 3)]))
+        element("window", f"window-{n}", lambda: _prism(positions, indices, ring, 0.42 * tall, tall, [(0, 1, 2), (0, 2, 3)]))
     if len(elements) < 2:
         raise NoScanWalls("no wall outline could be raised")
     offset, bbox = _centre(positions, elements)
     header = {"version": MESH_VERSION, "kind": "scan", "elements": elements,
               "storeys": [{"name": "plan", "z": 0.0}],
               "vertices": len(positions) // 3, "triangles": len(indices) // 3,
-              "offset": offset, "bbox": bbox, "wall_height": WALL_HEIGHT,
-              "scan": {"width": width, "height": height, "unit_per_px": round(unit, 6),
+              "offset": offset, "bbox": bbox, "wall_height": tall,
+              "scan": {"width": width, "height": height, "unit_per_px": round(unit, 6), "crop": [cx0, cy0, cx1, cy1],
+                       "windows": len(plan.get("windows") or []),
                        "walls": plan["quality"].get("how"), "scale": "assumed",
                        "assumed_wall_m": SCAN_WALL_M}}
     return _pack(header, positions, indices)

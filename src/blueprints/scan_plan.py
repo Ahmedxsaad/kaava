@@ -30,7 +30,7 @@ from pathlib import Path
 
 from . import config
 
-VERSION = 4
+VERSION = 6
 
 MAX_SIDE = 1500        # morphology is done on an image no larger than this
 MAX_PIXELS = 30_000_000  # an image beyond this is not opened at all
@@ -43,6 +43,9 @@ LINE_GAP = 0.017       # of the longer side: the widest wall drawn as two lines
 LINE_PIECE = 0.12      # of the longer side: a separate piece of such a wall is at least this long
 THICKER_THAN_LINES = 1.5   # walls must be this many times thicker than the thinnest stroke kept
 CORE = 0.62            # of the walls' thickness: a piece must be this thick somewhere to be a wall
+FURNITURE = 0.45       # of the walls' thickness: strokes thinner than this are furniture drawn against a wall
+ASSUMED_WALL_M = 0.22  # a scan has no scale: where one is needed its walls are taken to be this thick
+MARGIN = 0.07          # of the building's longer side: how much of the page is kept around the walls
 MIN_COVER, MAX_COVER = 0.006, 0.30   # walls as a share of the page
 MAX_FILL = 0.42        # walls as a share of the box around them: more is a blob, not a plan
 MAX_THICK = 0.11       # of the longer side: a "wall" thicker than this is a filled area
@@ -241,7 +244,20 @@ def _solid_strokes(small, side: int, below: int):
         return None
     if 2.0 * float(depth[walls > 0].max()) > MAX_THICK * side:
         return None  # a filled area (a dark margin, a coloured room), not a wall
-    return walls, thick, int(keep.sum())
+    # Wardrobes, kitchen units and sills are drawn against a wall with a medium line: one piece with
+    # the wall, but thinner all over. Standing up in 3D they look like walls that are not there.
+    # What is thinner than a share of the walls' thickness goes, then the specks that leaves behind.
+    slim = max(stroke + 1, int(round(FURNITURE * thick)))
+    thinned = cv2.morphologyEx(walls, cv2.MORPH_OPEN, np.ones((slim, slim), np.uint8))
+    count, labels, stats, _ = cv2.connectedComponentsWithStats(thinned, connectivity=8)
+    for n in range(1, count):
+        _x, _y, bw, bh, area = stats[n]
+        if max(bw, bh) < 1.6 * thick and area < 2.5 * thick * thick:
+            thinned[labels == n] = 0
+    if thinned.sum() >= 0.6 * walls.sum():  # when most of it would go, the walls themselves are that thin: keep them
+        walls = thinned
+    count = cv2.connectedComponents(walls, connectivity=8)[0] - 1
+    return walls, thick, int(count)
 
 
 def _judge(walls, thick: float, how: str, side: int) -> tuple[str, dict]:
@@ -314,6 +330,35 @@ def find_walls(gray) -> dict:
         return _refused(width, height, why, **quality)
     walls, thick = found
 
+    # A small piece far from the building is not part of it: a logo, a legend mark, a scanner's edge.
+    count, labels, stats, _ = cv2.connectedComponentsWithStats(walls, connectivity=8)
+    if count > 2:
+        areas = stats[1:, cv2.CC_STAT_AREA]
+        main = 1 + int(areas.argmax())
+        reach = int(8 * thick) | 1
+        near = cv2.dilate((labels == main).astype(np.uint8), np.ones((reach, reach), np.uint8))
+        for n in range(1, count):
+            if n != main and stats[n, cv2.CC_STAT_AREA] < 0.05 * areas.max() and not near[labels == n].any():
+                walls[labels == n] = 0
+
+    # Windows: a stretch of wall drawn as thin lines between two pieces of solid wall (measure._glazing).
+    # They are glass in the 3D view, where a gap would read as a door.
+    from . import measure
+
+    windows = []
+    glass = measure._glazing(walls, (small < INK_BELOW).astype(np.uint8), thick / ASSUMED_WALL_M)
+    count, _, stats, _ = cv2.connectedComponentsWithStats(glass, connectivity=8)
+    for n in range(1, count):
+        left, top, w, h, _area = stats[n]
+        if max(w, h) >= 2.0 * thick:  # shorter than that it is a door jamb or a notch, not a window
+            windows.append([round(left / scale, 1), round(top / scale, 1), round((left + w) / scale, 1), round((top + h) / scale, 1)])
+
+    # What of the page the building takes up, with a margin: the rest (a title, a scanner's dark edge) is left out.
+    ys, xs = np.nonzero(walls)
+    pad = max(12.0, MARGIN * max(xs.max() - xs.min(), ys.max() - ys.min()))
+    crop = [round(max(0.0, (xs.min() - pad) / scale), 1), round(max(0.0, (ys.min() - pad) / scale), 1),
+            round(min(float(width), (xs.max() + pad) / scale), 1), round(min(float(height), (ys.max() + pad) / scale), 1)]
+
     # Outlines, with the rooms they enclose as holes, in the image's own pixels.
     contours, hierarchy = cv2.findContours(walls, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE)
     slack = max(0.8, 0.12 * thick)
@@ -346,4 +391,5 @@ def find_walls(gray) -> dict:
     if points > MAX_POINTS:
         return _refused(width, height, "the dark strokes are too ragged to be walls", **quality)
     return {"version": VERSION, "ok": True, "why": "", "width": width, "height": height,
-            "thickness_px": round(thick / scale, 2), "quality": quality, "polygons": polygons}
+            "thickness_px": round(thick / scale, 2), "quality": quality, "polygons": polygons,
+            "windows": windows, "crop": crop}

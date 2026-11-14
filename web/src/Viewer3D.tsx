@@ -553,7 +553,9 @@ export function Viewer3D({ meshUrl, groundUrl, imageUrl, highlights, visible, ho
         // Fit the narrower of the two view angles, so a tall pane does not crop the model.
         const vertical = (camera.fov * Math.PI) / 360;
         const half = Math.min(vertical, Math.atan(Math.tan(vertical) * camera.aspect));
-        const distance = (radius / Math.sin(half)) * (bare ? 1.22 : 1.04);  // as a backdrop the model keeps its distance
+        // A scan stood up is flat (its walls are cut low): the ball around it is mostly air, so the camera comes closer.
+        const flat = parsed.header.kind === "scan" ? 0.9 : 1;
+        const distance = (radius / Math.sin(half)) * (bare ? 1.22 : 1.04) * flat;  // as a backdrop the model keeps its distance
         // Keep the side the viewer is on; come lower to look at one item.
         const side = new THREE.Vector3().subVectors(camera.position, controls.target).setY(0);
         if (side.lengthSq() < 1e-6 || options.fromAbove) {  // stand facing the model's long side, a little off square
@@ -601,19 +603,24 @@ export function Viewer3D({ meshUrl, groundUrl, imageUrl, highlights, visible, ho
 
       // The drawing itself as the floor the model stands on.
       if (groundUrl && imageUrl) {
-        fetch(groundUrl).then((r) => (r.ok ? r.json() : null)).then((placed: { corners: number[][]; storey: number } | null) => {
+        fetch(groundUrl).then((r) => (r.ok ? r.json() : null)).then((placed: { corners: number[][]; storey: number; crop?: number[] } | null) => {
           if (!placed || disposed || !stage.current) return;
           const image = new Image();
           image.onload = () => {
             if (disposed || !stage.current) return;
-            const scale = Math.min(1, 2048 / Math.max(image.width, image.height));
+            // On a scan only the part of the page the building stands on is laid down, so the whole
+            // of the texture goes to it (a small scan is drawn up to twice its size, smoothed).
+            const [sx, sy, ex, ey] = placed.crop ?? [0, 0, image.width, image.height];
+            const sw = Math.max(1, ex - sx), sh = Math.max(1, ey - sy);
+            const scale = Math.min(placed.crop ? 2 : 1, 2048 / Math.max(sw, sh));
             const canvas = document.createElement("canvas");
-            canvas.width = Math.round(image.width * scale);
-            canvas.height = Math.round(image.height * scale);
+            canvas.width = Math.round(sw * scale);
+            canvas.height = Math.round(sh * scale);
             const ctx = canvas.getContext("2d")!;
             ctx.fillStyle = look.sheet;
             ctx.fillRect(0, 0, canvas.width, canvas.height);
-            ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+            ctx.imageSmoothingQuality = "high";
+            ctx.drawImage(image, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
             const texture = new THREE.CanvasTexture(canvas);
             texture.colorSpace = THREE.SRGBColorSpace;
             texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
@@ -767,7 +774,7 @@ export function Viewer3D({ meshUrl, groundUrl, imageUrl, highlights, visible, ho
         const least = Math.max(0.3, 0.012 * Math.max(scan!.width, scan!.height) * k);  // a point still shows
         const cx = ((h.box![0] + h.box![2]) / 2) * k - ox, cy = (scan!.height - (h.box![1] + h.box![3]) / 2) * k - oy;
         const wide = Math.max((h.box![2] - h.box![0]) * k, least), deep = Math.max((h.box![3] - h.box![1]) * k, least);
-        const tall = (s.parsed.header.wall_height ?? 2.6) * 0.8;
+        const tall = (s.parsed.header.wall_height ?? 2.6) * 1.12;  // a little over the walls, so no wall hides a mark
         geometry = new THREE.BoxGeometry(wide, deep, tall);
         geometry.translate(cx, cy, -oz + tall / 2);
       } else continue;
