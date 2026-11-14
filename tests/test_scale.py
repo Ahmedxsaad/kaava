@@ -124,3 +124,19 @@ def test_a_scale_that_makes_the_doors_too_wide_is_not_trusted(tmp_path):
     assert ask(path, index, quantity="baseboard", question="How many metres of baseboard?").state == CHECK
     index["items"][1]["text"] = "13m"      # ... and here the door comes out 1.3 m: a double door, of two 0.65 m leaves: still plausible
     assert ask(path, index, quantity="baseboard", question="How many metres of baseboard?").state == CHECK
+
+
+def test_measured_rooms_are_combined_by_the_calculator_as_the_model_says(tmp_path):
+    path, index, _ = plan(tmp_path)
+    q = Question(qid="x", path=str(path), question="Area of the hall without the stage, in m²?", answer=None, unit=None,
+                 type="", source="s", drawing="d", group="g")
+    hall = {"text_id": -1, "name": "Hall", "box_2d": grid([215, 165, 585, 385]), "rectangular": True}
+    common = lambda: dict(method="m", cost_usd=0.0, latency_ms=0.0, meta={})  # noqa: E731
+    one = sr._measured(q, path, index, "area", [hall], W, H, common())
+    twice = sr._measured(q, path, index, "area", [hall, hall], W, H, common())
+    assert twice.answer == pytest.approx(2 * one.answer, rel=0.001)                       # listed twice, added up
+    less = sr._measured(q, path, index, "area", [hall, hall, hall], W, H, common(), combine="a + b - c")
+    assert less.state == CHECK and less.answer == pytest.approx(one.answer, rel=0.001) and "a + b - c" in less.explanation
+    assert any(step[0].startswith("The calculator combined") for step in less.meta["trace"])
+    assert sr._measured(q, path, index, "area", [hall, hall], W, H, common(), combine="a * b").state == DECLINED
+    assert sr._measured(q, path, index, "area", [hall, hall], W, H, common(), combine="a - b").state == DECLINED   # nothing left

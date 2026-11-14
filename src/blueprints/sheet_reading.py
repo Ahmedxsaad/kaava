@@ -50,7 +50,7 @@ from .pointing import _box
 from .render import can_render, render
 from .scoring import CHECK
 
-PROMPT = 5
+PROMPT = 6
 MAX_TEXTS = 1100
 # How many times a question is worked out, independently. Two workings that disagree give no number.
 WORKINGS = max(1, int(os.environ.get("BLUEPRINTS_WORKINGS", "2")))
@@ -68,7 +68,7 @@ You do not state the final number. You give what you read and how it combines, a
 
 4. look_closer: for a question asking how many drawn symbols there are on a plan when they are many and small and carry no identifying text (doors, windows, fixtures, columns, outlets). Do not list them. Give `what`: one sentence saying exactly what counts as one item and how it is drawn, and box_2d: the part of the sheet that holds the plan to search (leave out the title block, legends and notes). The program then looks at that part piece by piece at full size. In the other three forms, leave `what` empty.
 
-5. measure: for the size of a room or of several rooms (floor area, perimeter, length of baseboard or skirting) when the sheet prints no figure for it but the plan is drawn to scale. Do not estimate the size. Set quantity to area, perimeter or baseboard, and list the rooms: for each, text_id of the room's name on the plan (-1 when the list does not have it), name, box_2d: a box whose four sides lie on the inner faces of the room's walls (for a room that is not a rectangle: the box around the whole room), and rectangular: false when the room is not a plain rectangle. The program finds the room inside its walls whatever its shape, takes out what stands in it (columns, shafts, cores), and for baseboard leaves out the door openings. It needs the sheet's scale and takes it itself from the first of these that the sheet has: (a) a graphic scale bar: then leave reference and doors empty; (b) reference: one dimension printed on the plan, given as text_id of its figure, unit (mm, cm, m, in or ft), and from and to, the two ends of its dimension line, each as [y, x] on the grid; choose a long one whose line runs straight across or straight down the sheet; (c) only when the sheet has neither: doors, boxes around up to eight ordinary single doors on the plan, each box tight around the door leaf and its swing; the program measures them against the standard width of a door and gives an estimate. In the other forms, leave quantity empty.
+5. measure: for the size of a room or of several rooms (floor area, perimeter, length of baseboard or skirting) when the sheet prints no figure for it but the plan is drawn to scale. Do not estimate the size. Set quantity to area, perimeter or baseboard, and list the rooms: for each, text_id of the room's name on the plan (-1 when the list does not have it), name, box_2d: a box whose four sides lie on the inner faces of the room's walls (for a room that is not a rectangle: the box around the whole room), and rectangular: false when the room is not a plain rectangle. The program finds the room inside its walls whatever its shape, takes out what stands in it (columns, shafts, cores), and for baseboard leaves out the door openings. It needs the sheet's scale and takes it itself from the first of these that the sheet has: (a) a graphic scale bar: then leave reference and doors empty; (b) reference: one dimension printed on the plan, given as text_id of its figure, unit (mm, cm, m, in or ft), and from and to, the two ends of its dimension line, each as [y, x] on the grid; choose a long one whose line runs straight across or straight down the sheet; (c) only when the sheet has neither: doors, boxes around up to eight ordinary single doors on the plan, each box tight around the door leaf and its swing; the program measures them against the standard width of a door and gives an estimate. The rooms are added up unless you say otherwise: to combine them another way (a hall without the stage that stands in it, one wing less another), the rooms are a, b, c, ... in the order you list them, and combine is an expression over those letters with + and - only, such as a - b; leave combine empty to add them all up. In the other forms, leave quantity empty.
 
 - If the sheet does not let you answer in one of these forms, set cannot_tell to true and say in basis what is missing.
 - basis: one or two sentences on how you got there."""
@@ -108,7 +108,9 @@ SCHEMA = {
             "reference": {"type": "object", "properties": {
                 "text_id": {"type": "integer"}, "unit": {"type": "string"}, "from": _BOX, "to": _BOX},
                 "required": ["text_id", "unit", "from", "to"], "additionalProperties": False},
-            "doors": {"type": "array", "items": _BOX}},
+            "doors": {"type": "array", "items": _BOX},
+            # How the measured rooms combine when it is not a plain sum: "a - b" over the rooms in the order listed.
+            "combine": {"type": "string"}},
             "required": ["quantity", "rooms"], "additionalProperties": False},
         "cannot_tell": {"type": "boolean"},
         "basis": {"type": "string"},
@@ -398,7 +400,8 @@ def make_engine(vlm) -> Callable[[Question, Dataset], Answer]:
             common["method"] = method + ":measured"
             return _measured(q, path, index, wanted["quantity"], rooms, width, height, common,
                              reference=wanted.get("reference") if isinstance(wanted.get("reference"), dict) else None,
-                             doors=[d for d in wanted.get("doors") or [] if isinstance(d, list)])
+                             doors=[d for d in wanted.get("doors") or [] if isinstance(d, list)],
+                             combine=str(wanted.get("combine") or "").strip())
 
         if what and not figures and not items:
             # Many small symbols: the part of the sheet that holds the plan is searched tile by tile.
@@ -698,7 +701,7 @@ def _scale_of(path, index: dict, texts: dict, reference: dict | None, doors: lis
 
 
 def _measured(q: Question, path, index: dict, quantity: str, rooms: list[dict], width: float, height: float,
-              common: dict, reference: dict | None = None, doors: list | None = None) -> Answer:
+              common: dict, reference: dict | None = None, doors: list | None = None, combine: str = "") -> Answer:
     """Rooms measured on the sheet itself: the free space inside their walls, against the sheet's scale.
 
     A plain rectangular room is measured as its rectangle (measure.measure_room) and checked against
@@ -720,6 +723,7 @@ def _measured(q: Question, path, index: dict, quantity: str, rooms: list[dict], 
     holes_taken = 0
     by_outline = 0
     unconfirmed = 0
+    each: list[float] = []  # every room's own value, in the order listed: a, b, c, ...
     for room in rooms:
         name = str(room.get("name") or "room").strip()[:60]
         rough = _box(room, width, height)
@@ -772,6 +776,7 @@ def _measured(q: Question, path, index: dict, quantity: str, rooms: list[dict], 
             checks[f"{name}: measured by its outline (not a rectangle)"] = (
                 f"{shape['gross_m2']:.2f} m² enclosed, openings narrower than {shape['seal_m']:.1f} m closed off")
         openings_seen += openings
+        each.append(area if quantity == "area" else perimeter - (sum(o["width_m"] for o in openings) if quantity == "baseboard" else 0.0))
         if quantity == "area":
             total += area
             parts.append(f"{size}{cut}" if rect["ok"] or holes else f"{area:.2f} m²")
@@ -809,8 +814,22 @@ def _measured(q: Question, path, index: dict, quantity: str, rooms: list[dict], 
                                   **common)
 
     unit = "m2" if quantity == "area" else "m"
+    combined = ""
+    if combine and len(rooms) > 1:
+        # The model said how the rooms combine; the calculator does it, over the values the program measured.
+        if not re.fullmatch(r"[a-z+\-() ]+", combine):
+            return Answer.decline(f"the rooms can only be added and subtracted, and the model asked for '{combine[:40]}'", **common)
+        letters = "abcdefghijklmnopqrstuvwxyz"
+        values = {letters[i]: value for i, value in enumerate(each[:26])}
+        try:
+            total = evaluate(combine, values)
+        except Exception as exc:  # a letter with no room, a malformed expression
+            return Answer.decline(f"the rooms could not be combined as '{combine[:40]}': {exc}", **common)
+        if total <= 0:
+            return Answer.decline(f"combining the rooms as '{combine[:40]}' gives nothing to measure ({total:.2f})", **common)
+        combined = "; ".join(f"{letters[i]} = {part}" for i, part in enumerate(parts)) + f"; {combine}"
     shown, shown_unit = convert(total, unit, asked_unit(q.question))
-    working = " + ".join(parts) + f" = {_fmt(total)} {pretty(unit)}"
+    working = (combined or " + ".join(parts)) + f" = {_fmt(total)} {pretty(unit)}"
     if shown_unit != unit:
         working += f" = {_fmt(shown)} {pretty(shown_unit)}"
     evidence.append({"kind": "formula", "text": working})
@@ -820,6 +839,8 @@ def _measured(q: Question, path, index: dict, quantity: str, rooms: list[dict], 
     if holes_taken:
         steps.append(["Took out what stands inside the room", f"{holes_taken} hole{'' if holes_taken == 1 else 's'} "
                       "(columns, shafts or cores enclosed by the room): drawn on the sheet, their area is not floor"])
+    if combined:
+        steps.append(["The calculator combined the rooms as the model said", f"{combine} = {_fmt(total)} {pretty(unit)}"])
     if doorways is not None:
         steps.append(["Checked the scale against a standard: the width of a door",
                       f"the room's door leaves come out {doorways['leaf_m']:.2f} m wide at this scale; a door is 0.8 to 1.0 m"])

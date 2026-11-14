@@ -18,12 +18,6 @@ set -a; . ./.env.deploy; set +a
 HOST_NAME=${STOA_HOST:-stoa.ahmedxsaad.me}
 SSH=(ssh -i "$STOA_VM_KEY" -o BatchMode=yes -o ConnectTimeout=15 "$STOA_VM")
 
-run_app='sudo docker rm -f blueprints-public >/dev/null 2>&1; sudo docker run -d --name blueprints-public --restart unless-stopped
-  --user "$(id -u):$(id -g)" -p 127.0.0.1:8000:8000 -v "$HOME/stoa/data:/app/data:ro" -v "$HOME/stoa/cache:/app/cache"
-  -v "$HOME/stoa/uploads-public:/app/uploads" --env-file "$HOME/stoa/.env" -e BLUEPRINTS_UI_BUDGET_EUR=${BLUEPRINTS_UI_BUDGET_EUR:-5}
-  -e HOME=/tmp blueprints-talk >/dev/null
-  for i in $(seq 1 40); do [ "$(curl -s -o /dev/null --max-time 5 -w "%{http_code}" http://127.0.0.1:8000/api/stats)" = 200 ] && break; sleep 3; done'
-
 status() {
   "${SSH[@]}" 'sudo docker ps --format "{{.Names}}: {{.Status}}"; echo "app on the VM: $(curl -s -o /dev/null --max-time 10 -w "%{http_code}" http://127.0.0.1:8000/api/stats)"; cat ~/stoa/.deployed 2>/dev/null; true'
   echo "public: $(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "https://${HOST_NAME}/api/stats" || true)  https://${HOST_NAME}"
@@ -32,9 +26,25 @@ status() {
 case "${1:-status}" in
   update)
     [ -z "$(git status --porcelain --untracked-files=no)" ] || echo "note: uncommitted changes are not sent; the last commit is" >&2
-    commit=$(git log -1 --format='%h %s')
+    commit=$(git log -1 --format='%h')
     git archive --format=tar HEAD | gzip -1 | "${SSH[@]}" 'tar -xz -C ~/stoa'
-    "${SSH[@]}" "cd ~/stoa && sudo docker build -q -t blueprints-talk . >/dev/null && echo 'image built' && $(echo $run_app) && echo 'commit: $commit' > .deployed"
+    "${SSH[@]}" "COMMIT=$commit BUDGET=${BLUEPRINTS_UI_BUDGET_EUR:-5} bash -s" <<'REMOTE'
+set -e
+cd ~/stoa
+sudo docker build -q -t blueprints-talk . >/dev/null
+echo "image built"
+sudo docker rm -f blueprints-public >/dev/null 2>&1 || true
+sudo docker run -d --name blueprints-public --restart unless-stopped --user "$(id -u):$(id -g)" \
+  -p 127.0.0.1:8000:8000 -v "$HOME/stoa/data:/app/data:ro" -v "$HOME/stoa/cache:/app/cache" \
+  -v "$HOME/stoa/uploads-public:/app/uploads" --env-file "$HOME/stoa/.env" \
+  -e BLUEPRINTS_UI_BUDGET_EUR="$BUDGET" -e HOME=/tmp blueprints-talk >/dev/null
+for i in $(seq 1 40); do
+  [ "$(curl -s -o /dev/null --max-time 5 -w '%{http_code}' http://127.0.0.1:8000/api/stats)" = 200 ] && break
+  sleep 3
+done
+echo "commit: $COMMIT" > .deployed
+sudo docker image prune -f >/dev/null 2>&1 || true
+REMOTE
     status ;;
   cache)
     rsync -az --partial --exclude 'tunnel.*' --exclude 'watch.log' -e "ssh -i $STOA_VM_KEY -o BatchMode=yes" cache/ "$STOA_VM:stoa/cache/"
