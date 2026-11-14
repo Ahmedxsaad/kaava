@@ -303,6 +303,13 @@ class Service:
             for element in header["elements"]:
                 if element["cls"] == "IfcSpace" and element["storey"] is not None:
                     by_storey[element["storey"]].append(element)
+            # The plan's file name ends with its storey's name; when that names one storey, only it is tried.
+            stem = PurePosixPath(drawing).name.lower()
+            named = [i for i, storey in enumerate(header["storeys"])
+                     if _slug(storey["name"]) and stem.endswith("-" + _slug(storey["name"]))]
+            if len(named) == 1:
+                by_storey = {named[0]: by_storey.get(named[0], [])}
+            fits = []
             for storey, spaces in by_storey.items():
                 names: dict[str, list[dict]] = defaultdict(list)
                 for space in spaces:
@@ -316,8 +323,12 @@ class Service:
                         centre = Polygon(outline).centroid
                         pairs.append(((centre.x, centre.y), on_plan[name][0]))
                 candidate = _fit_affine(pairs)
-                if candidate and (fit is None or candidate["anchors"] > fit["anchors"]):
-                    fit = {**candidate, "storey": storey}
+                if candidate:
+                    fits.append({**candidate, "storey": storey})
+            fits.sort(key=lambda f: -f["anchors"])
+            # Two storeys with the same room numbers both fit: the plan cannot tell which it shows.
+            if fits and (len(fits) == 1 or fits[1]["anchors"] < 0.8 * fits[0]["anchors"]):
+                fit = fits[0]
         self._plan_fits[drawing] = fit
         return fit
 
@@ -582,6 +593,12 @@ class Service:
                 "full_set_mix": [{"source": s, "type": t, "questions": n}
                                  for (s, t), n in sorted(config.FULL_SET_MIX.items())],
                 "model_budget_eur": self.budget_eur, "model_spent_eur": round(self.spent_eur, 4)}
+
+
+def _slug(text: str) -> str:
+    import re
+
+    return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
 
 
 def _checks(ans: Answer) -> list[dict]:
