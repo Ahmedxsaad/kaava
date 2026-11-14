@@ -235,7 +235,8 @@ class Service:
         if not runs.is_dir():
             return out
         for run in sorted(runs.iterdir()):
-            kind = ("baseline" if "-vlm-image-only-" in run.name and "router" not in run.name
+            # A router run that replayed a model run carries the model's name too; it is not a model run.
+            kind = (None if "-router-" in run.name else "baseline" if "-vlm-image-only-" in run.name
                     else "pointing" if "-vlm-pointing-" in run.name else None)
             summary, preds = run / "summary.json", run / "predictions.jsonl"
             if kind is None or not summary.is_file() or not preds.is_file():
@@ -555,7 +556,9 @@ class Service:
 
         load_dotenv(config.REPO_ROOT / ".env")
         if os.environ.get("GEMINI_API_KEY"):
-            vlm = make_vlm("gemini")
+            # Low thinking: in a pilot, high thinking cost about EUR 0.10 and three minutes per question
+            # and often ran out of tokens; low costs about EUR 0.006 and answers in under ten seconds.
+            vlm = make_vlm("gemini", "gemini-4-carbon", "low")
         elif os.environ.get("ANTHROPIC_API_KEY"):
             vlm = make_vlm("anthropic", "claude-sonnet-5-5")
         else:
@@ -757,8 +760,7 @@ class Service:
             "explanation": ans.explanation,
             "reason": ans.reason,
             "method": ans.method,
-            "engine": ENGINE_LABELS.get(ans.method, "Vision model, pointing" if "pointing" in ans.method
-                                        else "Vision model" if ans.method.startswith("vlm") else ans.method),
+            "engine": _engine_label(ans.method),
             "confidence": ans.confidence,
             "cost_eur": round(config.usd_to_eur(ans.cost_usd or 0.0), 6),
             "latency_ms": round(latency, 1),
@@ -1012,6 +1014,15 @@ def _quote(text: str) -> str:
     from urllib.parse import quote
 
     return quote(text, safe="")
+
+
+def _engine_label(method: str) -> str:
+    """What answered, in a few words for the reader."""
+    if method in ENGINE_LABELS:
+        return ENGINE_LABELS[method]
+    if "pointing" in method:
+        return "Gemini, each item boxed" if "gemini" in method and ":boxes" in method else "Vision model, pointing"
+    return "Vision model" if method.startswith("vlm") else method
 
 
 def _answer_from_row(row: dict) -> Answer:

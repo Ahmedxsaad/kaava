@@ -54,3 +54,35 @@ def test_area_questions_are_not_pointed_at(tiny):
     ans = pointing.make_engine(vlm)(q, tiny)
     assert ans.answer == 12.5
     assert "answer_number" in vlm.seen[0][2]["properties"]   # the plain image-only prompt was used
+
+
+class Boxer(Pointer):
+    native_boxes = True  # a model that locates things as 0-1000 boxes, like Gemini
+
+
+def test_a_box_model_is_asked_for_boxes_and_they_land_in_file_pixels(tiny):
+    items = [{"box_2d": [100, 250, 300, 500], "label": "door"},      # ymin, xmin, ymax, xmax on a 0-1000 grid
+             {"box_2d": [900, 800, 700, 600], "label": "door"},      # corners given the other way round
+             {"box_2d": [500, 500, 500, 500], "label": "door"}]      # a single spot: widened so it shows
+    vlm = Boxer({"items": items, "cannot_tell": False, "confidence": 0.8, "basis": "door leaves with swing arcs"})
+    ans = pointing.make_engine(vlm)(_count_question(tiny), tiny)
+    assert ans.answer == 3 and ans.state == CHECK and ":boxes" in ans.method and ans.method.endswith(f":p{pointing.PROMPT}")
+    assert [e["kind"] for e in ans.evidence] == ["box"] * 3 and all(e["space"] == "image_px" for e in ans.evidence)
+    assert ans.evidence[0]["bbox"] == [30.0, 9.0, 60.0, 27.0]         # the tiny plan is 120 x 90 pixels
+    assert ans.evidence[1]["bbox"] == [72.0, 63.0, 96.0, 81.0]
+    x0, y0, x1, y1 = ans.evidence[2]["bbox"]
+    assert x1 > x0 and y1 > y0 and all(e["inside"] for e in ans.evidence)
+    system, text, schema = vlm.seen[0]
+    assert "box_2d" in system and "0-1000" in system and "pixels" not in text
+    assert "box_2d" in schema["properties"]["items"]["items"]["properties"]
+
+
+def test_things_that_are_not_boxes_are_dropped_not_counted(tiny):
+    items = [{"box_2d": [10, 10, 60, 60], "label": "ok"}, {"box_2d": [1, 2, 3], "label": "three numbers"},
+             {"box_2d": "everywhere", "label": "text"}, {"label": "no box"}, "door"]
+    ans = pointing.make_engine(Boxer({"items": items, "cannot_tell": False, "confidence": 0.5, "basis": ""}))(
+        _count_question(tiny), tiny)
+    assert ans.answer == 1
+    off = pointing.make_engine(Boxer({"items": [{"box_2d": [900, 900, 1200, 1300], "label": "off the sheet"}],
+                                      "cannot_tell": False, "confidence": 0.5, "basis": ""}))(_count_question(tiny), tiny)
+    assert off.answer == 1 and off.evidence[0]["inside"] is False

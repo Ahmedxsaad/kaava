@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnswerPanel } from "./AnswerPanel";
-import { api, type AskResult, type DrawingDetail, type Evidence, euro, formatValue, type Source, SOURCE_NAMES } from "./api";
+import { api, type AskResult, type DrawingDetail, type Evidence, euro, formatValue, headlineRun, type Source, SOURCE_NAMES } from "./api";
 import { Home } from "./Home";
 import { Numbers } from "./Numbers";
 import { Picker } from "./Picker";
@@ -175,7 +175,7 @@ export function App() {
 
   useEffect(() => {
     api.stats().then((stats) => {
-      const run = stats.runs.find((r) => r.method.startsWith("vlm-image-only") && r.sample === "dev_baseline_200");
+      const run = headlineRun(stats.runs, "alone");
       aloneRef.current = run?.rows.find((r) => r.scope === "overall")?.eur_per_question ?? null;
     }).catch(() => undefined);
     api.partners().then((p) => { voiced.current = p.elevenlabs; }).catch(() => undefined);

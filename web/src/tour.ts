@@ -17,7 +17,7 @@ export const TOUR: Stop[] = [
   {
     label: "Count every door on a floor",
     card: true,
-    note: "Geometry · 32 pins · the vision model alone said 22",
+    note: "Geometry · 32 pins · the vision model alone said 24",
     state: "verified",
     drawing: "data/swiss_dwellings/site2150_bldg3001_floor13690",
     question: "How many doors (interior doors and entrance doors together) are drawn on this floor plan?",
@@ -25,14 +25,14 @@ export const TOUR: Stop[] = [
   {
     label: "Net area of one apartment",
     card: true,
-    note: "Rooms fill with their m² · balconies hatched out · model alone said 113",
+    note: "Rooms fill with their m² · balconies hatched out · model alone said 75.2",
     state: "verified",
     drawing: "data/swiss_dwellings/site3764_bldg5789_floor24598",
     question: "What is the net floor area of apartment B in m², summing all its rooms except balconies, loggias, terraces and other outdoor spaces?",
   },
   {
     label: "Asked in German, shown in 3D",
-    note: "Plan raised from the DXF · model alone said 14.4",
+    note: "Plan raised from the DXF · model alone said 69.5",
     state: "verified",
     drawing: "data/swiss_dwellings/site383_bldg846_floor3730",
     question: "Wie gross ist die Nettowohnfläche von Wohnung C in m² (Summe aller Räume ohne Balkone, Loggien, Terrassen und andere Aussenräume)?",
@@ -48,7 +48,7 @@ export const TOUR: Stop[] = [
   {
     label: "Doors on one storey of a building model",
     card: true,
-    note: "IFC query · 42 doors lit in 3D · model alone said 39",
+    note: "IFC query · 42 doors lit in 3D · free",
     state: "check",
     drawing: "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-04-4-korrus",
     question: "How many doors are shown on the floor plan of '4.korrus'?",
@@ -57,7 +57,7 @@ export const TOUR: Stop[] = [
   {
     label: "One room's area, asked in Estonian",
     card: true,
-    note: "IFC query · two geometry sources agree · model alone said 4.6",
+    note: "IFC query · two geometry sources agree · model alone said 3.4",
     state: "check",
     drawing: "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-04-4-korrus",
     question: "Kui suur on ruumi „TUALETTRUUM (47-3)“ netopõrandapind korrusel „4.korrus“ (m²)?",
@@ -73,17 +73,17 @@ export const TOUR: Stop[] = [
   },
   {
     label: "Windows on a scanned Finnish plan",
-    note: "No vector data: a vision model points, the code counts",
+    note: "No vector data: Gemini boxes each window, the code counts",
     state: "check",
     drawing: "data/cubicasa5k/high_quality_architectural-6081",
     question: "How many windows are shown on this floor plan?",
   },
   {
-    label: "A scan where the model over-counts",
-    note: "Why pixel answers are never Verified: check the pins at the edge",
+    label: "A scan where the model miscounts",
+    note: "23 boxes where the dataset says 20: why pixel answers are never Verified",
     state: "check",
-    drawing: "data/cubicasa5k/high_quality_architectural-13767",
-    question: "How many sinks and wash basins (kitchen and bathroom combined; a double-bowl sink counts as one) are drawn on this floor plan?",
+    drawing: "data/cubicasa5k/high_quality_architectural-504",
+    question: "How many windows are shown on this floor plan?",
   },
   {
     label: "A question the plan cannot answer",

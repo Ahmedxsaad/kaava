@@ -1,0 +1,143 @@
+{
+  "run_id": "20261114-112736-router-v1-fallback-vlm-pointing-gemini-4-carbon-thinking-low-5a09",
+  "timestamp_utc": "2026-11-14T11:27:36+00:00",
+  "commit": "369214c",
+  "dirty": true,
+  "code_sha": "e937ee923b",
+  "method": "router:v1+fallback[vlm-pointing:gemini-4-carbon:thinking=low:img=ultra_high:boxes:p2]",
+  "dataset": "junction-dataset-preview",
+  "questions_sha": "0d0a122d12",
+  "split": "dev",
+  "sample": "dev_scans_fresh_100",
+  "complete": true,
+  "stopped": "",
+  "errors": 0,
+  "fx": "ECB reference rate 2026-11-13: 1 EUR = 1.1052 USD",
+  "config": {
+    "engine": "router",
+    "mix": "full-set mix from 02-dataset/DATASET.md",
+    "fallback_runs": [
+      "20261114-111721-vlm-pointing-gemini-4-carbon-thinking-low-img-ultra_high-box-8247"
+    ]
+  },
+  "notes": "engines first; Gemini 4 Carbon (low thinking, prompt 2) for the rest: boxes on scans, image-only elsewhere; model answers replayed from logged runs",
+  "metrics": {
+    "overall": {
+      "n": 100,
+      "answered": 99,
+      "coverage": 0.99,
+      "correct": 88,
+      "wrong": 11,
+      "ungraded": 0,
+      "accuracy": 0.88,
+      "accuracy_when_answered": 0.8888888888888888,
+      "verified": 0,
+      "verified_share": 0.0,
+      "verified_wrong": 0,
+      "verified_error_rate": null,
+      "verified_error_upper95": null,
+      "check": 99,
+      "declined": 1,
+      "eur_total": 0.6045982627578719,
+      "eur_per_question": 0.006045982627578719,
+      "latency_p50_ms": 7841.452169501281,
+      "latency_p95_ms": 19178.67533960343,
+      "text_token_f1": null,
+      "text_number_recall": null
+    },
+    "by_family": {
+      "cubicasa5k/count": {
+        "n": 100,
+        "answered": 99,
+        "coverage": 0.99,
+        "correct": 88,
+        "wrong": 11,
+        "ungraded": 0,
+        "accuracy": 0.88,
+        "accuracy_when_answered": 0.8888888888888888,
+        "verified": 0,
+        "verified_share": 0.0,
+        "verified_wrong": 0,
+        "verified_error_rate": null,
+        "verified_error_upper95": null,
+        "check": 99,
+        "declined": 1,
+        "eur_total": 0.6045982627578719,
+        "eur_per_question": 0.006045982627578719,
+        "latency_p50_ms": 7841.452169501281,
+        "latency_p95_ms": 19178.67533960343,
+        "text_token_f1": null,
+        "text_number_recall": null
+      }
+    },
+    "by_source": {
+      "cubicasa5k": {
+        "n": 100,
+        "answered": 99,
+        "coverage": 0.99,
+        "correct": 88,
+        "wrong": 11,
+        "ungraded": 0,
+        "accuracy": 0.88,
+        "accuracy_when_answered": 0.8888888888888888,
+        "verified": 0,
+        "verified_share": 0.0,
+        "verified_wrong": 0,
+        "verified_error_rate": null,
+        "verified_error_upper95": null,
+        "check": 99,
+        "declined": 1,
+        "eur_total": 0.6045982627578719,
+        "eur_per_question": 0.006045982627578719,
+        "latency_p50_ms": 7841.452169501281,
+        "latency_p95_ms": 19178.67533960343,
+        "text_token_f1": null,
+        "text_number_recall": null
+      }
+    },
+    "by_type": {
+      "count": {
+        "n": 100,
+        "answered": 99,
+        "coverage": 0.99,
+        "correct": 88,
+        "wrong": 11,
+        "ungraded": 0,
+        "accuracy": 0.88,
+        "accuracy_when_answered": 0.8888888888888888,
+        "verified": 0,
+        "verified_share": 0.0,
+        "verified_wrong": 0,
+        "verified_error_rate": null,
+        "verified_error_upper95": null,
+        "check": 99,
+        "declined": 1,
+        "eur_total": 0.6045982627578719,
+        "eur_per_question": 0.006045982627578719,
+        "latency_p50_ms": 7841.452169501281,
+        "latency_p95_ms": 19178.67533960343,
+        "text_token_f1": null,
+        "text_number_recall": null
+      }
+    },
+    "weighted": {
+      "accuracy": 0.88,
+      "coverage": 0.99,
+      "eur_per_question": 0.006045982627578719,
+      "weight_covered": 0.6731053808129467,
+      "weight_graded": 0.6731053808129467,
+      "families_not_evaluated": [
+        "swiss_dwellings/count",
+        "swiss_dwellings/area",
+        "ifc_models/area",
+        "ifc_models/count",
+        "ifc_models/volume",
+        "ifc_models/length",
+        "ifc_bench/text",
+        "opening_design/count",
+        "opening_design/text",
+        "opening_design/area"
+      ]
+    }
+  }
+}

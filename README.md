@@ -29,17 +29,20 @@ All figures come from the run log in `results/` and are shown live on the app's 
 
 | | Vision model alone | This system |
 | --- | --- | --- |
-| Correct, same 200 development questions | 65.1% | 92.7% |
-| Re-weighted to the dataset's question mix | 75.7% | 88.9% |
-| Cost per 1,000 questions | €12.41 | €3.23 |
+| Correct, same 200 development questions | 62.5% | 95.8% |
+| Re-weighted to the dataset's question mix | 77.3% | 95.9% |
+| Cost per 1,000 questions | €7.99 | €2.90 |
+
+- The prompt for scans was tuned on that sample's scans, so scans were measured again on 100 questions from development drawings no sample had used: 88.0% right for the system, 90.0% for Gemini marking items on its own. With that figure for scans, the re-weighted total is near 92%.
 
 - Swiss floor plans, held-out: counts 99.9% correct (6,346 of 6,354), areas 97.6% (2,962 of 3,034).
 - Verified answers on held-out drawings: 8 wrong in 6,354 counts and 6 wrong in 2,612 areas, so the error rate is below 0.25% and 0.53% with 95% confidence.
 - Development split, exact engines only, no model: 33,452 of 63,592 questions answered at €0, 94.3% of them right; 18,198 Verified answers, none wrong.
 - Scans: where the printed labels and the type line agree, the label engine answers on its own. That is 12.7% of the scan questions on the development split (96.0% right) and 95.7% right on held-out plans (2,072 answers). It is never Verified: its best level is 2.0% wrong on held-out plans, above the 1% bar.
-- Not solved yet: symbol counts on scans (doors, windows, toilets, sinks, showers; about a third of the dataset's questions) and the number of floors a scan shows (7%) are answered by the vision model at roughly 80% and are never Verified; IFC answers are not Verified yet because too few were held out to prove 1%; free-text questions about IFC models and the US door schedules have no engine.
+- Scans, everything else: Gemini draws a box around each item the question asks about and the code counts the boxes, so the number is still a count of things you can see. That is right about nine times in ten and never Verified. Where the label engine and Gemini both answered and agreed (22 questions across the two samples), all 22 were right; proving that as a route to Verified needs a run on calibration drawings.
+- Not solved yet: scan answers that rest on the model (symbol counts, the number of floors and the room counts the labels do not settle: about 58% of the dataset's questions) are never Verified; IFC answers are not Verified yet because too few were held out to prove 1%; free-text questions about IFC models and the US door schedules have no engine.
 
-The vision model in these runs is Claude Sonnet 5.5, image only, high effort.
+The vision model in these runs is Gemini 4 Carbon at low thinking. Alone, it sees the image and states a number. In this system it is asked only where no exact engine covers the drawing, and on scans it marks each item instead of stating a number. Low thinking is a measured choice: at high thinking a pilot of 8 questions cost €0.10 and three minutes per question and often ran out of tokens; at low thinking a question costs €0.006 to €0.007 and takes about 8 seconds. Before the Gemini key arrived the same comparison was run with Claude Sonnet 5.5 at high effort: 65.1% alone against 92.7% (75.7% against 88.9% re-weighted), €12.41 against €3.23 per 1,000 questions.
 
 ## The app
 
@@ -66,12 +69,14 @@ Each of these is optional and switches on when its key is in `.env` (see `.env.e
 
 | Partner | What it does here | Status |
 | --- | --- | --- |
-| Google Gemini | The vision model for scans, and the language model that restates a free-form question so an exact engine can read it. The number still comes from geometry, and such an answer is never Verified. | Built; runs on Claude Sonnet until a Gemini key is set |
+| Google Gemini | **On scans:** Gemini 4 Carbon boxes each counted item in its native detection format (`[ymin, xmin, ymax, xmax]` on a 0 to 1000 grid); the code counts the boxes and draws them on the sheet, so the number never comes from the model and every item can be checked or left out. **For free-form questions:** Gemini 4 Hydrogen restates the question so an exact engine can read it (about €0.003); the number still comes from geometry, and such an answer is never Verified. | In use; all figures above are measured on it |
 | Cloudinary | **Enhance:** a small scan is shown enlarged with AI super-resolution, loaded straight from Cloudinary in the format that suits the browser and laid over the original so every mark keeps its place. **Share:** hosts the evidence sheet of an answer and delivers it in the format and quality that suit whoever opens it. | In use, checked against a Cloudinary account |
 | ElevenLabs | Reads the answer aloud with a natural voice; the browser's own voice is the fallback. | Built; the key at hand lacks the Text to Speech permission, so the browser's voice speaks for now |
-| Anthropic Claude | The stand-in vision and language model in the measurements above. | In use |
+| Anthropic Claude | The vision and language model when no Gemini key is set, and the model of the earlier measurements. | Fallback |
 
 **The enlarged scan is for the reader, never for the engine.** The first idea was to enlarge a small scan before the label engine reads it. Measured on 40 small development scans (348 questions, both runs in `results/`, reproduced by `scripts/eval_prepared_scans.py`): read as they came, the engine gave 236 right answers and 28 wrong; read after enlargement, 228 right and 34 wrong. At the score levels the router lets stand on their own, the wrong answers went from 2 to 6 with no more right ones. Super-resolution draws plausible detail, and a plausible label is not evidence. So the engines read every drawing as it came, which is what their error rates were measured on, and the enlarged view carries a note saying what it is.
+
+![Fourteen windows on a hand-drawn scan, each boxed by Gemini and counted by the code](docs/screenshots/scan-gemini-boxes.png)
 
 ## Run it
 

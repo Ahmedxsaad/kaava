@@ -113,6 +113,12 @@ def cmd_sample(args: argparse.Namespace) -> int:
     total = len(pool)
     if args.need_image:
         pool = [q for q in pool if can_render(q.path)]
+    if args.source:
+        pool = [q for q in pool if q.source in args.source]
+    if args.apart_from:  # a fresh sample: no drawing that an earlier sample already used
+        _, used = load_sample(Path(args.apart_from), ds)
+        groups = {q.group for q in used}
+        pool = [q for q in pool if q.group not in groups]
     name = args.name or f"{args.split}_{args.n}"
     path = config.SPLITS_DIR / f"{name}.json"
     if path.exists() and not args.force:
@@ -340,12 +346,13 @@ def cmd_run(args: argparse.Namespace) -> int:
 
         if args.engine != "router":
             raise SystemExit("--fallback-run only applies to the router")
-        logged = config.RESULTS_DIR / "runs" / args.fallback_run / "predictions.jsonl"
-        if not logged.is_file():
-            raise SystemExit(f"no such run: {logged}")
-        fallback_method = json.loads((logged.parent / "summary.json").read_text())["method"]
-        method = f"{router.METHOD}+fallback[{fallback_method}]"
-        answer_fn = router.make(verify.load_thresholds(), fallback=router.replay(logged))
+        logged = [config.RESULTS_DIR / "runs" / run_id / "predictions.jsonl" for run_id in args.fallback_run]
+        for file in logged:
+            if not file.is_file():
+                raise SystemExit(f"no such run: {file}")
+        fallback_methods = [json.loads((file.parent / "summary.json").read_text())["method"] for file in logged]
+        method = f"{router.METHOD}+fallback[{' then '.join(fallback_methods)}]"
+        answer_fn = router.make(verify.load_thresholds(), fallback=router.replay(*logged))
     if args.sample:
         sample, questions = load_sample(Path(args.sample), ds)
         sample_name, split_name = sample["name"], sample["split"]
@@ -382,7 +389,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     summary = finalize_run(
         run_id=run_id, run_dir=run_dir, method=method, result=result, dataset=ds,
         split_name=split_name, sample_name=sample_name, weights=weights,
-        run_config={"engine": args.engine, "mix": mix_note}, notes=args.notes,
+        run_config={"engine": args.engine, "mix": mix_note, "fallback_runs": args.fallback_run or []}, notes=args.notes,
         log=result["complete"] and not offline,
     )
     print()
@@ -579,6 +586,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--name", default=None)
     p.add_argument("--need-image", action="store_true",
                    help="only questions whose file is a picture (PNG, PDF, ...), not IFC/DXF")
+    p.add_argument("--source", action="append", help="only these sources (repeatable)")
+    p.add_argument("--apart-from", default=None, metavar="SAMPLE_FILE",
+                   help="leave out every drawing that this earlier sample used")
     p.add_argument("--force", action="store_true", help="replace an existing sample file")
     p.add_argument("--final", action="store_true", help="allow the test split")
     p.set_defaults(fn=cmd_sample)
@@ -609,8 +619,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--sample", default=None, help="sample file (default: all questions of --split)")
     p.add_argument("--split", default="dev", choices=SPLITS)
     p.add_argument("--source", action="append", help="limit to a source (repeatable)")
-    p.add_argument("--fallback-run", default=None, metavar="RUN_ID",
-                   help="router only: for questions no engine covers, replay this model run's answers")
+    p.add_argument("--fallback-run", action="append", metavar="RUN_ID",
+                   help="router only: for questions no engine covers, replay this model run's answers "
+                        "(repeatable: the first run that holds a question answers it)")
     p.add_argument("--workers", type=int, default=4)
     p.add_argument("--final", action="store_true", help="allow the test split")
     p.add_argument("--notes", default="")

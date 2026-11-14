@@ -90,6 +90,20 @@ def test_model_fallback_answers_are_never_verified(tiny, tmp_path):
     assert router.make(_thresholds())(q, tiny).answer is None
 
 
+def test_of_several_replayed_runs_the_first_that_holds_the_question_answers(tiny, tmp_path):
+    import json
+
+    scans = [q for q in tiny.questions if q.source == "cubicasa5k"][:2]
+    marked, plain = tmp_path / "marked.jsonl", tmp_path / "plain.jsonl"
+    marked.write_text(json.dumps({"qid": scans[0].qid, "pred": 5, "confidence": 0.9, "method": "vlm-pointing:x"}) + "\n")
+    plain.write_text("".join(json.dumps({"qid": q.qid, "pred": 3, "confidence": 0.9, "method": "vlm-image-only:x"}) + "\n"
+                             for q in scans))
+    route = router.make(_thresholds(), fallback=router.replay(marked, plain))
+    first, second = route(scans[0], tiny), route(scans[1], tiny)
+    assert (first.answer, first.method) == (5, "vlm-pointing:x")        # held by the first run listed
+    assert (second.answer, second.method) == (3, "vlm-image-only:x")    # only the second run has it
+
+
 def test_router_picks_the_engine_by_what_the_drawing_comes_with(tiny):
     by_path = {q.path: q for q in tiny.questions}
     assert router.route(by_path["data/ifc_models/col-duplex_duplex-a.ifc"], tiny) == "ifc"

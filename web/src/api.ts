@@ -242,6 +242,12 @@ export const api = {
   },
 };
 
+/** The newest logged run of a kind on the fixed 200-question development sample. */
+export function headlineRun(runs: Run[], kind: "alone" | "system"): Run | undefined {
+  const prefix = kind === "alone" ? "vlm-image-only" : "router:v1+fallback";
+  return [...runs].reverse().find((r) => r.method.startsWith(prefix) && r.sample === "dev_baseline_200");
+}
+
 export const SOURCE_NAMES: Record<string, string> = {
   swiss_dwellings: "Swiss floors",
   cubicasa5k: "Finnish scans",

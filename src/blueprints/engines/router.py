@@ -72,20 +72,23 @@ def make(thresholds: dict | None, fallback=None):
     return answer
 
 
-def replay(predictions_file):
-    """A fallback that replays the logged answers of an earlier run instead of calling the model.
+def replay(*predictions_files):
+    """A fallback that replays the logged answers of earlier runs instead of calling the model.
 
     Lets "engines first, vision model for the rest" be measured on questions the model
-    has already answered, at the cost that was really paid for those answers.
+    has already answered, at the cost that was really paid for those answers. With several
+    runs, the first one that holds a question answers it (for example: the run that marks
+    items on scans first, then the plain image-only run for everything else).
     """
     import json
 
     rows = {}
-    with open(predictions_file, encoding="utf-8") as f:
-        for line in f:
-            if line.strip():
-                row = json.loads(line)
-                rows[row["qid"]] = row
+    for predictions_file in reversed(predictions_files):  # so that the first run listed wins
+        with open(predictions_file, encoding="utf-8") as f:
+            for line in f:
+                if line.strip():
+                    row = json.loads(line)
+                    rows[row["qid"]] = row
 
     def answer(q: Question, dataset: Dataset) -> Answer:
         row = rows.get(q.qid)
@@ -95,6 +98,7 @@ def replay(predictions_file):
                       confidence=row.get("confidence"), meta={"replayed": True})
         if row.get("pred") is None:
             return Answer.decline(row.get("decline_reason") or "the model gave no answer", **common)
-        return Answer(answer=row["pred"], explanation=row.get("explanation", ""), **common)
+        return Answer(answer=row["pred"], unit=row.get("pred_unit"), evidence=row.get("evidence") or [],
+                      explanation=row.get("explanation", ""), **common)
 
     return answer

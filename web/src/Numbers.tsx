@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, type Run, SOURCE_NAMES, type StatRow, type Stats } from "./api";
+import { api, headlineRun, type Run, SOURCE_NAMES, type StatRow, type Stats } from "./api";
 
 // Every figure on this page is read from results/leaderboard.csv through /api/stats.
 
@@ -102,7 +102,7 @@ function Routing({ mix, labels, onTip }: { mix: Stats["full_set_mix"]; labels: S
     { name: "DXF geometry", note: "Swiss floors · €0", colour: "var(--series-1)", n: sum((m) => m.source === "swiss_dwellings"), ink: "#fff" },
     { name: "IFC model query", note: "building models · €0", colour: "var(--series-2)", n: sum((m) => m.source === "ifc_models"), ink: "#fff" },
     { name: "Printed labels, local OCR", note: "room counts on scans where two printed sources agree · €0", colour: "var(--series-3)", n: read, ink: "#0b0b0b" },
-    { name: "Vision model, pointing", note: "the other scans and schedules · paid", colour: "var(--series-4)", n: scans - read + sum((m) => m.source === "opening_design"), ink: "#0b0b0b" },
+    { name: "Vision model, each item marked", note: "the other scans and schedules · paid", colour: "var(--series-4)", n: scans - read + sum((m) => m.source === "opening_design"), ink: "#0b0b0b" },
     { name: "No engine yet", note: "free-text model questions", colour: "var(--series-other)", n: sum((m) => m.source === "ifc_bench"), ink: "#0b0b0b" },
   ];
   const total = parts.reduce((s, p) => s + p.n, 0) || 1;
@@ -184,11 +184,21 @@ export function Numbers() {
   if (!stats) return <main className="numbers"><p className="n-wait">Reading the run log…</p></main>;
 
   const runs = stats.runs;
-  const baseline = runs.find((r) => r.method.startsWith("vlm-image-only") && r.sample === "dev_baseline_200");
-  const ours = runs.find((r) => r.method.startsWith("router:v1+fallback") && r.sample === "dev_baseline_200");
+  const baseline = headlineRun(runs, "alone");
+  const ours = headlineRun(runs, "system");
   const enginesDev = [...runs].reverse().find((r) => r.method === "router:v1" && r.split === "dev" && r.dataset === "junction-dataset")
     ?? [...runs].reverse().find((r) => r.method === "router:v1" && r.split === "dev");
   const b = overall(baseline), o = overall(ours), e = overall(enginesDev);
+  // Scans measured again on fresh development drawings (the prompt for scans was tuned on the 200's scans).
+  const fresh = (prefix: string) => overall([...runs].reverse().find((r) => r.method.startsWith(prefix) && r.sample === "dev_scans_fresh_100"));
+  const freshScans = fresh("router:v1+fallback"), freshAlone = fresh("vlm-pointing");
+  const scanShare = (() => {
+    const all = stats.full_set_mix.reduce((sum, m) => sum + m.questions, 0) || 1;
+    return stats.full_set_mix.filter((m) => m.source === "cubicasa5k").reduce((sum, m) => sum + m.questions, 0) / all;
+  })();
+  const scansHere = ours?.rows.find((r) => r.scope === "family" && r.source === "cubicasa5k");
+  const reweighted = freshScans?.accuracy != null && scansHere?.accuracy != null && weighted(ours)?.accuracy != null
+    ? weighted(ours)!.accuracy! - scanShare * (scansHere.accuracy - freshScans.accuracy) : null;
   const model = baseline?.method.split(":")[1] ?? "vision model";
   const worstBound = Math.max(0, ...Object.values(stats.thresholds.families).filter((f) => f.threshold != null).map((f) => f.upper_bound ?? 0));
 
@@ -234,6 +244,14 @@ export function Numbers() {
             <b>{pct(weighted(baseline)?.accuracy)}</b> for the vision model alone.
           </p>
           <Dumbbell before={families(baseline)} after={families(ours)} mix={stats.full_set_mix} onTip={setTip} />
+          {freshScans && (
+            <p className="n-aside">
+              The scan prompt was tuned on this sample's scans, so they were measured again on {int(freshScans.n)} scan
+              questions from drawings no sample had used: <b>{pct(freshScans.accuracy)}</b> correct
+              {freshAlone ? <> ({pct(freshAlone.accuracy)} for the model marking items on its own)</> : null}. With that
+              figure for scans the re-weighted total is near <b>{pct(reweighted)}</b>.
+            </p>
+          )}
         </section>
 
         <div className="n-two">

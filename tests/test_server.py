@@ -148,7 +148,9 @@ def test_demo_tour_returns_the_states_it_promises(client):
             assert any(e["kind"] != "formula" for e in answer["evidence"]), (drawing, question)
         if "cubicasa" in drawing:  # scans: read locally, or shown from the run log. The demo costs nothing.
             if answer["method"].startswith("vlm"):
-                assert answer["replayed_from"]
+                assert answer["replayed_from"] and "-router-" not in answer["replayed_from"]
+                marks = [e for e in answer["evidence"] if e["kind"] in ("point", "box")]
+                assert len(marks) == answer["answer"]  # the number is the count of the marked items
             else:
                 assert answer["cost_eur"] == 0 and any(e["kind"] == "box" for e in answer["evidence"])
 

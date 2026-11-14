@@ -174,6 +174,7 @@ class GeminiVLM:
     """Gemini via the Interactions API with a JSON-schema constrained reply."""
 
     provider = "gemini"
+    native_boxes = True  # locates things as [ymin, xmin, ymax, xmax] on a 0-1000 grid (pointing.py)
     # Gemini spends a fixed token budget per image whatever its pixel size:
     # 1,120 tokens at "high", 2,240 at "ultra_high". We send the same render as for
     # other models and let the API downsample.

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, type Run, type Stats } from "./api";
+import { api, headlineRun, type Run, type Stats } from "./api";
 import { type Stop, TOUR } from "./tour";
 
 interface Props {
@@ -18,8 +18,8 @@ export function Home({ onOpen, onBrowse, onNumbers, onBring }: Props) {
   const [stats, setStats] = useState<Stats | null>(null);
   useEffect(() => { api.stats().then(setStats).catch(() => undefined); }, []);
   const runs = stats?.runs ?? [];
-  const alone = overall(runs.find((r) => r.method.startsWith("vlm-image-only") && r.sample === "dev_baseline_200"));
-  const ours = overall(runs.find((r) => r.method.startsWith("router:v1+fallback") && r.sample === "dev_baseline_200"));
+  const alone = overall(headlineRun(runs, "alone"));
+  const ours = overall(headlineRun(runs, "system"));
   const engines = overall([...runs].reverse().find((r) => r.method === "router:v1" && r.split === "dev" && r.dataset === "junction-dataset")
     ?? [...runs].reverse().find((r) => r.method === "router:v1" && r.split === "dev"));
   const shown = TOUR.filter((stop) => stop.card);
