@@ -19,8 +19,11 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY pyproject.toml README.md ./
+# The dependencies first, against an empty package: this layer is rebuilt only when pyproject.toml
+# changes, not on every change to the code. Generous timeouts: the build may run on a slow network.
+RUN mkdir -p src/blueprints && touch src/blueprints/__init__.py \
+    && pip install --no-cache-dir --default-timeout=180 --retries 10 -e .
 COPY src ./src
-RUN pip install --no-cache-dir -e .
 # Fetch the OCR models now: the label engine reads scans with them, and the app may run without network.
 # One real read is needed: the detector model is only downloaded when it is first used.
 RUN python -c "from pathlib import Path; from PIL import Image, ImageDraw; from blueprints.engines import ocr_index; \
