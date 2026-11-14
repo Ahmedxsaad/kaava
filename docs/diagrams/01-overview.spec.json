@@ -1,0 +1,186 @@
+{
+  "title": "Blueprints Talk: from a question to an answer you can check",
+  "subtitle": "Numbers are computed by code from the drawing, never written by a model · 95.8% right on 200 held-out questions (vision model alone: 62.5%)",
+  "destination": "slide",
+  "theme": "clean",
+  "zones": [
+    {
+      "id": "ask",
+      "label": "Ask",
+      "color": "client"
+    },
+    {
+      "id": "exact",
+      "label": "Exact engines · free",
+      "color": "data"
+    },
+    {
+      "id": "vision",
+      "label": "Vision model points · code counts",
+      "color": "ai"
+    },
+    {
+      "id": "decide",
+      "label": "Decide",
+      "color": "service"
+    },
+    {
+      "id": "answer",
+      "label": "Answer, drawn on the sheet",
+      "color": "output"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "user",
+      "label": "Project engineer",
+      "sub": "question + drawing",
+      "zone": "ask",
+      "shape": "ellipse"
+    },
+    {
+      "id": "router",
+      "label": "Router",
+      "sub": "IFC > DXF > PDF > pixels",
+      "zone": "ask",
+      "highlight": true
+    },
+    {
+      "id": "ifc",
+      "label": "IFC query",
+      "sub": "IfcOpenShell",
+      "zone": "exact"
+    },
+    {
+      "id": "dxf",
+      "label": "DXF geometry",
+      "sub": "ezdxf + shapely",
+      "zone": "exact"
+    },
+    {
+      "id": "labels",
+      "label": "Printed labels",
+      "sub": "local OCR (PP-OCR)",
+      "zone": "exact"
+    },
+    {
+      "id": "boxes",
+      "label": "Boxes on a scan",
+      "sub": "each symbol boxed",
+      "zone": "vision",
+      "icon": "brands:Google Gemini"
+    },
+    {
+      "id": "sheet",
+      "label": "Working shown",
+      "sub": "figures + formula only",
+      "zone": "vision",
+      "icon": "brands:Google Gemini"
+    },
+    {
+      "id": "verify",
+      "label": "Checks",
+      "sub": "2nd method + thresholds",
+      "zone": "decide",
+      "highlight": true
+    },
+    {
+      "id": "ok",
+      "label": "Verified",
+      "sub": "no need to double-check",
+      "zone": "answer",
+      "color": "output"
+    },
+    {
+      "id": "check",
+      "label": "Check this",
+      "sub": "evidence highlighted",
+      "zone": "answer",
+      "color": "highlight"
+    },
+    {
+      "id": "no",
+      "label": "Can't answer",
+      "sub": "the reason, in words",
+      "zone": "answer",
+      "color": "risk"
+    }
+  ],
+  "edges": [
+    {
+      "from": "user",
+      "to": "router",
+      "step": 1,
+      "label": "Engineer asks about one drawing"
+    },
+    {
+      "from": "router",
+      "to": "ifc"
+    },
+    {
+      "from": "router",
+      "to": "dxf",
+      "step": 2,
+      "label": "Router picks the cheapest exact method"
+    },
+    {
+      "from": "router",
+      "to": "labels"
+    },
+    {
+      "from": "router",
+      "to": "boxes",
+      "style": "dotted"
+    },
+    {
+      "from": "router",
+      "to": "sheet",
+      "style": "dotted"
+    },
+    {
+      "from": "ifc",
+      "to": "verify"
+    },
+    {
+      "from": "dxf",
+      "to": "verify",
+      "step": 3,
+      "label": "Code counts and measures the geometry"
+    },
+    {
+      "from": "labels",
+      "to": "verify"
+    },
+    {
+      "from": "boxes",
+      "to": "verify"
+    },
+    {
+      "from": "sheet",
+      "to": "verify"
+    },
+    {
+      "from": "verify",
+      "to": "ok",
+      "step": 4,
+      "label": "A second method agrees: Verified"
+    },
+    {
+      "from": "verify",
+      "to": "check",
+      "step": 5,
+      "label": "A model took part: Check this"
+    },
+    {
+      "from": "verify",
+      "to": "no",
+      "step": 6,
+      "label": "Methods disagree: no number"
+    }
+  ],
+  "legend": {
+    "highlight": "where reliability is decided",
+    "dotted": "only when no exact data exists (paid)",
+    "risk": "no number, with the reason"
+  }
+}

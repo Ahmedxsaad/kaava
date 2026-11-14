@@ -12,6 +12,8 @@ Numbers are computed from the drawing's geometry and objects, never written by a
 
 ## How it works
 
+![From a question to an answer you can check: the router, the exact engines, the vision model that only points, the checks, and the three states](docs/diagrams/01-overview.png)
+
 A router sends each question to the cheapest method that can answer it exactly.
 
 | Drawing | Method | Cost per question |
@@ -38,7 +40,25 @@ Where a model is used, it never gives the number: its reply format has no field 
 | A closer look | what counts as one item, and where to search | Cuts the sheet into tiles, has each symbol boxed at full size, merges, counts |
 | A ruler | which room, and a rough box | Reads the scale bar, moves the box onto the walls, measures area, perimeter or baseboard |
 
+![The model never writes the number: on a real sheet it names two figures and a formula, the program re-reads the figures and computes](docs/diagrams/02-no-number.png)
+
 It says no rather than guess. An answer on a sheet ends without a number when the sheet does not print what the question needs, when the program reads a figure differently from the model, when a room cannot be measured honestly (no scale bar, not a rectangle), or when **two independent workings of the same question disagree**: every question on a sheet is worked out twice, and only two workings with the same result give a number. The app's "How it works" page shows all of this with the hard cases one click away.
+
+### A question in your own words
+
+The exact engines read a fixed set of phrasings. Anything else ("the windows in Stanza", "the area of the Essen and the Reduit together") is read by the language model as a query over the drawing's own list of rooms, storeys and items: which rooms, and what to count or measure. The question is read twice, independently; two readings that differ give no number. The engine runs the query on the geometry, draws the rooms it searched, then the items it counted, and marks what it looked at and left out. A door or window belongs to a room when at least half of its length runs along one of the room's walls. These answers are never Verified.
+
+![A question in your own words: read twice as a query, run on the geometry, 13 windows kept and 1 left out](docs/diagrams/04-own-words.png)
+
+### More diagrams
+
+| | |
+| --- | --- |
+| [How "Verified" is earned](docs/diagrams/03-verified.png) | the checks, the bar set on held-out drawings, and the rule that a model's answer is never Verified |
+| [What it answers](docs/diagrams/05-what-it-answers.png) | the kinds of question by kind of drawing, and when it says no |
+| [How it is built](docs/diagrams/06-system.png) | browser, app, engines, the one outside model, what is kept on disk |
+
+Each diagram is in `docs/diagrams/` as a spec, an editable Excalidraw scene, PNG, SVG and an animated SVG that reveals it step by step.
 
 ## Stoa's harder sheets
 

@@ -1,0 +1,102 @@
+{
+  "type": "sequence",
+  "title": "A question in your own words",
+  "subtitle": "\"What is the number of windows in Stanza?\" on a Swiss floor plan with 30 rooms and 18 windows",
+  "theme": "clean",
+  "numbered": true,
+  "participants": [
+    {
+      "id": "eng",
+      "label": "Engineer",
+      "icon": "people:Guy",
+      "color": "client"
+    },
+    {
+      "id": "rules",
+      "label": "Rules + guard",
+      "sub": "fixed phrasings",
+      "color": "service"
+    },
+    {
+      "id": "llm",
+      "label": "Gemini 4 Carbon",
+      "sub": "reads, never counts",
+      "icon": "brands:Google Gemini",
+      "color": "ai"
+    },
+    {
+      "id": "geo",
+      "label": "Plan query",
+      "sub": "shapely on the DXF",
+      "color": "data",
+      "highlight": true
+    }
+  ],
+  "messages": [
+    {
+      "from": "eng",
+      "to": "rules",
+      "label": "windows in Stanza?"
+    },
+    {
+      "from": "rules",
+      "to": "rules",
+      "label": "names a room: not a whole-floor count",
+      "note": "the rule that stopped a wrong Verified 14"
+    },
+    {
+      "from": "rules",
+      "to": "llm",
+      "label": "question + the plan's 30 rooms, asked twice"
+    },
+    {
+      "from": "llm",
+      "to": "rules",
+      "label": "two queries: windows of 13 rooms",
+      "reply": true,
+      "note": "a query names rooms; it has no field for a number"
+    },
+    {
+      "from": "rules",
+      "to": "rules",
+      "label": "both readings the same?"
+    },
+    {
+      "from": "rules",
+      "to": "geo",
+      "label": "run the query on the geometry"
+    },
+    {
+      "from": "geo",
+      "to": "geo",
+      "label": "does each window run along a wall?",
+      "note": "half its length, not a touch at a corner"
+    },
+    {
+      "from": "geo",
+      "to": "rules",
+      "label": "13 kept, 1 left out, 4 elsewhere",
+      "reply": true
+    },
+    {
+      "from": "rules",
+      "to": "eng",
+      "label": "Check this: 13, rooms and windows drawn",
+      "reply": true
+    }
+  ],
+  "groups": [
+    {
+      "kind": "alt",
+      "label": "readings differ: no number, both readings shown",
+      "from": 4,
+      "to": 5
+    }
+  ],
+  "legend": {
+    "client": "person",
+    "service": "our code: rules",
+    "ai": "language model: reads, never counts",
+    "data": "our code: geometry"
+  }
+}

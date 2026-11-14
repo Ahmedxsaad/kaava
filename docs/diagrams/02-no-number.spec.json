@@ -1,0 +1,121 @@
+{
+  "type": "sequence",
+  "title": "The model never writes the number",
+  "subtitle": "A real question on one of Stoa's sample sheets: the area of the 150 mm slab-on-grade",
+  "theme": "clean",
+  "numbered": true,
+  "participants": [
+    {
+      "id": "eng",
+      "label": "Engineer",
+      "icon": "people:Guy",
+      "color": "client"
+    },
+    {
+      "id": "app",
+      "label": "Program",
+      "sub": "plain code",
+      "color": "service",
+      "highlight": true
+    },
+    {
+      "id": "ocr",
+      "label": "Sheet reader",
+      "sub": "PDF text or local OCR",
+      "icon": "it:Document",
+      "color": "data"
+    },
+    {
+      "id": "llm",
+      "label": "Gemini 4 Carbon",
+      "sub": "vision model",
+      "icon": "brands:Google Gemini",
+      "color": "ai"
+    },
+    {
+      "id": "calc",
+      "label": "Calculator",
+      "sub": "also: counter, ruler, tiles",
+      "color": "output"
+    }
+  ],
+  "messages": [
+    {
+      "from": "eng",
+      "to": "app",
+      "label": "Area of the 150 mm slab, in m2?"
+    },
+    {
+      "from": "app",
+      "to": "ocr",
+      "label": "read every text at full size"
+    },
+    {
+      "from": "ocr",
+      "to": "app",
+      "label": "259 texts, each with its box",
+      "reply": true
+    },
+    {
+      "from": "app",
+      "to": "llm",
+      "label": "sheet image + the 259 texts"
+    },
+    {
+      "from": "llm",
+      "to": "app",
+      "label": "a = 6200, b = 9950, formula: a * b",
+      "reply": true,
+      "note": "the reply format has no field for the answer"
+    },
+    {
+      "from": "app",
+      "to": "ocr",
+      "label": "re-read a and b where it pointed",
+      "note": "a figure that reads differently: no number"
+    },
+    {
+      "from": "app",
+      "to": "calc",
+      "label": "6200 * 9950, mm2 to m2"
+    },
+    {
+      "from": "calc",
+      "to": "app",
+      "label": "61.69 m2",
+      "reply": true
+    },
+    {
+      "from": "app",
+      "to": "llm",
+      "label": "work it out again, independently"
+    },
+    {
+      "from": "llm",
+      "to": "app",
+      "label": "second working: also 61.69 m2",
+      "reply": true
+    },
+    {
+      "from": "app",
+      "to": "eng",
+      "label": "Check this: 61.69 m2, both figures boxed",
+      "reply": true
+    }
+  ],
+  "groups": [
+    {
+      "kind": "alt",
+      "label": "workings differ: no number, both shown",
+      "from": 9,
+      "to": 10
+    }
+  ],
+  "legend": {
+    "client": "person",
+    "service": "our code",
+    "data": "our code: reads the sheet",
+    "ai": "language model: points, never computes",
+    "output": "our code: does the arithmetic"
+  }
+}

@@ -1,0 +1,158 @@
+{
+  "title": "Blueprints Talk: how it is built",
+  "subtitle": "One FastAPI app in a container: exact engines first, one vision model behind them, every paid answer kept",
+  "destination": "slide",
+  "theme": "clean",
+  "zones": [
+    {
+      "id": "front",
+      "label": "In the browser",
+      "color": "client"
+    },
+    {
+      "id": "app",
+      "label": "The app · Docker",
+      "color": "service"
+    },
+    {
+      "id": "engines",
+      "label": "Engines · plain code, on CPU",
+      "color": "data"
+    },
+    {
+      "id": "outside",
+      "label": "Outside · paid",
+      "color": "ai"
+    },
+    {
+      "id": "kept",
+      "label": "Kept on disk",
+      "color": "infra"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "user",
+      "label": "Engineer",
+      "zone": "front",
+      "shape": "ellipse"
+    },
+    {
+      "id": "web",
+      "label": "Verification UI",
+      "sub": "React · SVG · three.js",
+      "zone": "front",
+      "icon": "logos:React"
+    },
+    {
+      "id": "api",
+      "label": "Router + verifier",
+      "sub": "FastAPI · Python 3.12",
+      "zone": "app",
+      "icon": "logos:Python",
+      "highlight": true
+    },
+    {
+      "id": "ifc",
+      "label": "IFC engine",
+      "sub": "IfcOpenShell",
+      "zone": "engines"
+    },
+    {
+      "id": "dxf",
+      "label": "DXF engine",
+      "sub": "ezdxf + shapely",
+      "zone": "engines"
+    },
+    {
+      "id": "ocr",
+      "label": "Label reader",
+      "sub": "RapidOCR (PP-OCR)",
+      "zone": "engines"
+    },
+    {
+      "id": "tools",
+      "label": "Sheet tools",
+      "sub": "calculator · ruler · tiles",
+      "zone": "engines"
+    },
+    {
+      "id": "gemini",
+      "label": "Gemini 4 Carbon",
+      "sub": "boxes, workings, queries",
+      "zone": "outside",
+      "icon": "brands:Google Gemini"
+    },
+    {
+      "id": "cache",
+      "label": "Cache",
+      "sub": "indexes · meshes · readings",
+      "zone": "kept"
+    },
+    {
+      "id": "log",
+      "label": "Run log",
+      "sub": "accuracy and cost per run",
+      "zone": "kept"
+    }
+  ],
+  "edges": [
+    {
+      "from": "user",
+      "to": "web",
+      "step": 1,
+      "label": "Engineer asks, sees the evidence"
+    },
+    {
+      "from": "web",
+      "to": "api",
+      "step": 2,
+      "label": "Question goes to the app",
+      "both": true
+    },
+    {
+      "from": "api",
+      "to": "ifc"
+    },
+    {
+      "from": "api",
+      "to": "dxf",
+      "step": 3,
+      "label": "Engine computes from the file"
+    },
+    {
+      "from": "api",
+      "to": "ocr"
+    },
+    {
+      "from": "api",
+      "to": "tools",
+      "step": 4,
+      "label": "No exact data: the sheet tools"
+    },
+    {
+      "from": "tools",
+      "to": "gemini",
+      "step": 5,
+      "label": "Model points; code computes",
+      "style": "dotted"
+    },
+    {
+      "from": "api",
+      "to": "cache",
+      "style": "dashed",
+      "label": "kept"
+    },
+    {
+      "from": "api",
+      "to": "log",
+      "style": "dashed",
+      "label": "logged"
+    }
+  ],
+  "legend": {
+    "highlight": "decides the method and the state",
+    "dotted": "paid call, only when needed",
+    "dashed": "written to disk"
+  }
+}

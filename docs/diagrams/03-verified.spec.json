@@ -1,0 +1,138 @@
+{
+  "title": "How \"Verified\" is earned",
+  "subtitle": "A wrong Verified answer is the worst outcome, so the bar is set on drawings the system never tuned on",
+  "destination": "slide",
+  "theme": "clean",
+  "zones": [
+    {
+      "id": "compute",
+      "label": "Compute, per answer",
+      "color": "data"
+    },
+    {
+      "id": "calib",
+      "label": "Calibrate, once",
+      "color": "infra"
+    },
+    {
+      "id": "state",
+      "label": "The answer's state",
+      "color": "output"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "engine",
+      "label": "Exact engine",
+      "sub": "IFC query, DXF geometry",
+      "zone": "compute"
+    },
+    {
+      "id": "checks",
+      "label": "Independent checks",
+      "sub": "printed area vs polygon",
+      "zone": "compute"
+    },
+    {
+      "id": "split",
+      "label": "Split by drawing",
+      "sub": "dev / calibration / test",
+      "zone": "calib"
+    },
+    {
+      "id": "thr",
+      "label": "Bar per family",
+      "sub": "area 0.85 · count 0.90",
+      "zone": "calib"
+    },
+    {
+      "id": "gate",
+      "label": "Score meets the bar?",
+      "sub": "under 1% wrong, 95% sure",
+      "highlight": true
+    },
+    {
+      "id": "model",
+      "label": "A model took part",
+      "sub": "vision or reading",
+      "color": "ai"
+    },
+    {
+      "id": "ok",
+      "label": "Verified",
+      "sub": "16,982 on dev · 0 wrong",
+      "zone": "state",
+      "color": "output"
+    },
+    {
+      "id": "check",
+      "label": "Check this",
+      "sub": "evidence highlighted",
+      "zone": "state",
+      "color": "highlight"
+    },
+    {
+      "id": "no",
+      "label": "Can't answer",
+      "sub": "the reason, in words",
+      "zone": "state",
+      "color": "risk"
+    }
+  ],
+  "edges": [
+    {
+      "from": "engine",
+      "to": "checks",
+      "step": 1,
+      "label": "Code computes the number"
+    },
+    {
+      "from": "checks",
+      "to": "gate",
+      "step": 2,
+      "label": "A second method agrees: a score"
+    },
+    {
+      "from": "split",
+      "to": "thr",
+      "step": 3,
+      "label": "Bar set on held-out drawings"
+    },
+    {
+      "from": "thr",
+      "to": "gate",
+      "step": 4,
+      "label": "Bar: under 1% wrong, 95% sure"
+    },
+    {
+      "from": "gate",
+      "to": "ok",
+      "step": 5,
+      "label": "At or above the bar: Verified"
+    },
+    {
+      "from": "gate",
+      "to": "check",
+      "label": "below"
+    },
+    {
+      "from": "model",
+      "to": "check",
+      "style": "dashed",
+      "label": "always"
+    },
+    {
+      "from": "checks",
+      "to": "no",
+      "style": "dotted",
+      "label": "disagree"
+    }
+  ],
+  "legend": {
+    "highlight": "the only way to Verified",
+    "dashed": "a model's answer is never Verified",
+    "dotted": "methods disagree: no number",
+    "ai": "a language model took part",
+    "risk": "no number, with the reason"
+  }
+}
