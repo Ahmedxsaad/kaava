@@ -37,7 +37,7 @@ All figures come from the run log in `results/` and are shown live on the app's 
 - Verified answers on held-out drawings: 8 wrong in 6,354 counts and 6 wrong in 2,612 areas, so the error rate is below 0.25% and 0.53% with 95% confidence.
 - Development split, exact engines only, no model: 33,452 of 63,592 questions answered at €0, 94.3% of them right; 18,198 Verified answers, none wrong.
 - Scans: where the printed labels and the type line agree, the label engine answers on its own. That is 12.7% of the scan questions on the development split (96.0% right) and about 94% right on held-out plans. It is never Verified: no score level stays under 1% wrong.
-- Not solved yet: symbol counts on scans (doors, windows, toilets, sinks, showers; about 40% of the dataset's questions) are answered by the vision model at roughly 80% and are never Verified; IFC answers are not Verified yet because too few were held out to prove 1%; free-text questions about IFC models and the US door schedules have no engine.
+- Not solved yet: symbol counts on scans (doors, windows, toilets, sinks, showers; about a third of the dataset's questions) and the number of floors a scan shows (7%) are answered by the vision model at roughly 80% and are never Verified; IFC answers are not Verified yet because too few were held out to prove 1%; free-text questions about IFC models and the US door schedules have no engine.
 
 The vision model in these runs is Claude Sonnet 5.5, image only, high effort.
 
