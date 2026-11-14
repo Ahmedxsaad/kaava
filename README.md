@@ -67,6 +67,18 @@ Other commands:
 cd web && npm run dev                              # front end with hot reload (API on port 8000)
 ```
 
+### Docker
+
+The image holds the app, the API and the OCR models, but no drawings: mount the dataset and a cache folder.
+
+```bash
+docker build -t blueprints-talk .
+docker run --rm -p 8000:8000 --user "$(id -u):$(id -g)" \
+  -v "$PWD/data:/app/data:ro" -v "$PWD/cache:/app/cache" --env-file .env blueprints-talk
+```
+
+Leave out `--env-file .env` to run without a vision model. The first time a large IFC model is opened its 3D mesh is built, which can take minutes; it is cached after that.
+
 ## Layout
 
 | Path | What |

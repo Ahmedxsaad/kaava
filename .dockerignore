@@ -1,0 +1,14 @@
+.git
+.venv
+.env
+.env.*
+data
+cache
+web/node_modules
+web/dist
+**/__pycache__
+.pytest_cache
+01-challenge
+02-dataset
+03-strategy
+04-research
