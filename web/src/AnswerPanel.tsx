@@ -29,7 +29,7 @@ interface Props {
 const STATE = {
   verified: { label: "Verified", line: "No need to double-check." },
   check: { label: "Check this", line: "The evidence is marked on the drawing." },
-  declined: { label: "Can't answer reliably", line: "No answer is better than a wrong one." },
+  declined: { label: "No number from this drawing", line: "It does not guess." },
 } as const;
 
 const pct = (value: number) => `${(100 * value).toFixed(value < 0.01 ? 2 : 1)}%`;
@@ -109,6 +109,13 @@ function why(result: AskResult): { title: string; text: React.ReactNode } {
     };
   }
   return { title: "Why there is no answer", text: result.reason || "The drawing does not support a reliable answer." };
+}
+
+// Why there is no number, as a sentence a person would say: it leads the card in place of a figure.
+function because(result: AskResult): string {
+  const text = (result.reason || "This drawing does not support a reliable answer to that.").trim();
+  const sentence = text.charAt(0).toUpperCase() + text.slice(1);
+  return /[.!?]$/.test(sentence) ? sentence : `${sentence}.`;
 }
 
 // One counted item, cut out of the drawing itself: a reviewer checks the whole count at a glance.
@@ -394,7 +401,7 @@ export function AnswerPanel(props: Props) {
       </div>
 
       <div className="figure" aria-live="polite">
-        {result.answer === null ? <span className="none">No number</span> : (
+        {result.answer === null ? <span className="because">{because(result)}</span> : (
           <>
             <span className={settled ? "settled" : ""}>{formatValue(shown, result.unit)}</span>
             {unit && <em>{unit}</em>}
@@ -416,10 +423,21 @@ export function AnswerPanel(props: Props) {
       )}
       </div>
 
-      {settled && (
+      {result.answer === null && !asking && props.starters.length > 0 && (
+        // No number is not a dead end: what this drawing can answer is one click away.
+        <section className="instead">
+          <h3>What this drawing can answer</h3>
+          <ul className="starters">
+            {props.starters.slice(0, 4).map((text) => (
+              <li key={text}><button onClick={() => props.onAsk(text)}><span>{text}</span><i>→</i></button></li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {settled && (result.answer !== null || result.can_use_model) && (
         <section className="proof">
-          <h3>{reason.title}</h3>
-          <p>{reason.text}</p>
+          {result.answer !== null && <><h3>{reason.title}</h3><p>{reason.text}</p></>}
           {result.can_use_model && (
             <div className="fallback">
               {result.can_confirm ? (

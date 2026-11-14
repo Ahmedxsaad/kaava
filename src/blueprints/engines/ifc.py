@@ -20,12 +20,14 @@ agreement between independent sources is already computed and stored in `checks`
 
 from __future__ import annotations
 
+import re
 import threading
 from pathlib import Path
 
 from ..answer import Answer
 from ..data import Dataset, Question
-from ..questions import asks_about_whole_model, kinds_in, measure_of, norm, quoted_strings
+from ..questions import (asks_about_whole_model, kinds_in, measure_of, norm, quoted_strings, strip_quoted,
+                         without_kinds)
 from ..scoring import CHECK
 from . import ifc_index
 
@@ -80,6 +82,16 @@ def _space_labels(space: dict) -> set[str]:
     name, long_name = space["name"], space["long_name"]
     labels = {name, long_name, f"{long_name} ({name})", f"{name} {long_name}", f"{name} - {long_name}"}
     return {norm(label) for label in labels if label.strip()}
+
+
+def room_named(question: str, index: dict) -> str | None:
+    """A room of the model that the question names outside quotes, if it names one."""
+    text = without_kinds(norm(strip_quoted(question)))
+    for space in index["spaces"]:
+        name = norm(space.get("long_name") or "")
+        if len(name) >= 4 and re.search(rf"(?<!\w){re.escape(name)}(?!\w)", text):
+            return space["long_name"]
+    return None
 
 
 def _element(item: dict, **extra) -> dict:
@@ -232,6 +244,13 @@ def answer(q: Question, dataset: Dataset) -> Answer:
         found = ", ".join(kinds) if kinds else "none"
         return decline(f"could not tell which element kind to {measure} (recognised: {found})")
     kind = kinds[0]
+    if kind != "space":
+        # The rules count by storey or over the whole model. A question that names a room ("the doors of
+        # the corridor") read that way would be answered with the whole storey, and wrongly.
+        room = room_named(q.question, index)
+        if room is not None:
+            return Answer.decline(f"the question asks about part of the model (the room '{room}'); the rules count by storey",
+                                  meta={"part": room}, **common)
     if storey is not None:
         scope, in_scope = f"on storey '{storey_name}'", lambda e: e["storey"] == storey
     elif asks_about_whole_model(q.question):

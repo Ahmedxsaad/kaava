@@ -623,7 +623,12 @@ h1, h2 { font-family: var(--serif); font-weight: 650; letter-spacing: -0.028em; 
   box-shadow: 0 1px 0 rgb(255 255 255 / 0.16) inset, 0 18px 40px -18px var(--card-glow); animation: rise 0.4s 0.05s ease-out both; position: relative; }
 .result-card.verified { --card-bg: linear-gradient(150deg, #14702a 0%, #0b4a1a 70%); --card-ink: #fff; --card-soft: rgb(255 255 255 / 0.78); --card-glow: rgb(11 74 26 / 0.55); --pill-bg: #fff; --pill-ink: #0f5a20; }
 .result-card.check { --card-bg: linear-gradient(150deg, #ffd35c 0%, #f6b62e 75%); --card-ink: #2b1d00; --card-soft: rgb(43 29 0 / 0.72); --card-glow: rgb(214 148 16 / 0.5); --pill-bg: #2b1d00; --pill-ink: #ffd35c; }
-.result-card.declined { --card-bg: linear-gradient(150deg, #d5524f 0%, #a93535 75%); --card-ink: #fff; --card-soft: rgb(255 255 255 / 0.8); --card-glow: rgb(169 53 53 / 0.5); --pill-bg: #fff; --pill-ink: #a93535; }
+/* No number is said calmly: a slate card that leads with the reason, not an alarm. */
+.result-card.declined { --card-bg: linear-gradient(150deg, #3a4654 0%, #232c36 75%); --card-ink: #fff; --card-soft: rgb(255 255 255 / 0.78); --card-glow: rgb(35 44 54 / 0.45); --pill-bg: #fff; --pill-ink: #2b3542; }
+.result-card .figure .because { display: block; font: 560 23px/1.32 var(--serif); letter-spacing: -0.012em; color: var(--card-ink); text-wrap: pretty; }
+.instead { margin-top: 18px; }
+.instead h3 { font-size: 13.5px; font-weight: 600; margin-bottom: 2px; color: var(--ink-2); }
+.instead .starters { margin-top: 8px; }
 .result-card .verdict { margin-top: 0; animation: none; }
 .result-card .pill { background: var(--pill-bg); color: var(--pill-ink); position: relative; font-size: 14px; padding: 6px 14px 6px 12px; }
 .result-card .verdict .line { color: var(--card-soft); }

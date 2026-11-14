@@ -22,14 +22,15 @@ State is "check" for everything until thresholds are calibrated (see verify.py).
 
 from __future__ import annotations
 
+import re
 import threading
 from pathlib import Path, PurePosixPath
 
 from .. import config
 from ..answer import Answer
 from ..data import Dataset, Question
-from ..questions import (apartment_in, asks_about_numbered_rooms, kinds_in, measure_of, norm,
-                         quoted_strings, room_ref_in)
+from ..questions import (apartment_in, asks_about_numbered_rooms, kinds_in, measure_of, norm, quoted_strings,
+                         room_ref_in, strip_quoted, without_kinds)
 from ..scoring import CHECK
 from . import dxf_index, pdf_labels
 
@@ -80,6 +81,33 @@ def _room_evidence(room: dict) -> dict:
 
 def _box_evidence(item: dict, label: str) -> dict:
     return {"kind": "box", "space": "dxf_m", "bbox": item["bbox"], "label": label}
+
+
+def part_named(question: str, index: dict) -> str | None:
+    """The room or apartment a question names, if it names one: such a question is about part of the plan.
+
+    The rules count doors, windows and fixtures over the whole floor. "The windows in Stanza" read that
+    way would be answered with every window of the floor, and wrongly. So a question that names a room
+    of this plan (its name, a word of its name, its number) or an apartment is not counted by the rules.
+    """
+    apartment = apartment_in(question)
+    if apartment is not None:
+        return f"apartment {apartment.upper()}"
+    text = without_kinds(norm(strip_quoted(question)))
+    quoted = {norm(name) for name in quoted_strings(question)}
+    for room in index["rooms"]:
+        if room.get("shaft"):
+            continue
+        name = norm(room["name"]) if room.get("name") else ""
+        if name and (name in quoted or (len(name) >= 3 and re.search(rf"(?<!\w){re.escape(name)}(?!\w)", text))):
+            return f"'{room['name']}'"
+        for word in re.split(r"[\s/+&,.-]+", name):  # "Wohnen/Essen" asked for as "the Essen"
+            if len(word) >= 4 and re.search(rf"(?<!\w){re.escape(word)}(?!\w)", text):
+                return f"'{room['name']}'"
+        number = room.get("number")
+        if number and re.search(rf"(?<![\w.]){re.escape(number)}(?![\w.])", text):
+            return f"room {number}"
+    return None
 
 
 def _sum_answer(rooms: list[dict], what: str, pdf: dict | None, common: dict, *,
@@ -243,6 +271,12 @@ def answer(q: Question, dataset: Dataset) -> Answer:
                         f"({', '.join(sorted(u['tags'][0] for u in tagged))}).",
             meta={"interpreted": "count of unit outlines that carry an apartment tag", "checks": checks},
             **common)
+
+    if kind in ("door", "window") or kind in FIXTURE_KINDS:
+        part = part_named(q.question, index)
+        if part is not None:  # a count over the whole floor would not answer a question about part of it
+            return Answer.decline(f"the question asks about part of the plan ({part}); the rules count the whole floor",
+                                  meta={"part": part}, **common)
 
     if kind in ("door", "window"):
         items = index["doors"] if kind == "door" else index["windows"]

@@ -242,7 +242,9 @@ export const api = {
       const res = await fetch("/api/ask", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ drawing, question, use_model: useModel }),
+        // auto: where no exact engine and no printed label answers, the vision model is asked without
+        // a second click. Its cost shows on the answer, and the server's spending cap still holds.
+        body: JSON.stringify({ drawing, question, use_model: useModel, auto: true }),
       });
       if (res.status === 202) {
         await new Promise((wait) => window.setTimeout(wait, 1500));

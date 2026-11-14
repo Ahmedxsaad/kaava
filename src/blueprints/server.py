@@ -29,7 +29,7 @@ from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import cloud, config, interpret, mesh, overlay, progress, sheet, verify
+from . import cloud, config, interpret, mesh, model_query, overlay, plan_query, progress, sheet, verify
 from .answer import Answer
 from .data import Dataset, Question, drawing_of, question_id, source_of
 from .engines import dxf, dxf_index, ifc, ifc_index, raster_labels, router
@@ -149,7 +149,8 @@ class StillWorking(Exception):
 class AskRequest(BaseModel):
     drawing: str
     question: str
-    use_model: bool = False
+    use_model: bool = False  # ask the vision model as well, even where another reading already answers
+    auto: bool = False       # ask the vision model when nothing else can answer (what the app does)
 
 
 MAX_SPOKEN_CHARS = 400
@@ -817,6 +818,84 @@ class Service:
         ans.cost_usd = (ans.cost_usd or 0.0) + restated.cost_usd
         return ans, note
 
+    def _query_plan(self, asked: Question, drawing: str) -> tuple[Answer | None, dict | None]:
+        """A question no phrasing of the engine fits, read as a query over the plan's own rooms (plan_query.py).
+
+        The language model selects rooms from the plan's inventory and says what to measure; the engine
+        measures them on the geometry. Returns the answer (never Verified) and a note for the UI.
+        """
+        key = (drawing, "query: " + asked.question)
+        if self.spent_eur >= self.budget_eur and key not in self._restated:
+            return None, None
+        try:
+            llm = self._text_model()
+            index = dxf_index.load_index(self.ds.abspath(self.files_of(drawing)[".dxf"]))
+            fresh = key not in self._restated
+            if llm is None and fresh:
+                return None, None
+            if fresh:
+                self._restated[key] = plan_query.ask(asked.question, index, llm, dxf.is_outdoor)
+            query = self._restated[key]
+        except (FatalEngineError, KeyError):
+            return None, None
+        cost = query.cost_usd if fresh else 0.0
+        if fresh:
+            self.spent_eur += config.usd_to_eur(cost)
+        note = {"question": None, "reason": query.reading, "model": query.model,
+                "cost_eur": round(config.usd_to_eur(cost), 6), "latency_ms": round(query.latency_ms if fresh else 0.0, 1)}
+        if query.error or query.cannot:
+            return None, note
+        if query.measure == "count_items" and not query.rooms and query.item in plan_query.ITEM_QUESTIONS:
+            again = Question(qid=question_id(asked.path, plan_query.ITEM_QUESTIONS[query.item]), path=asked.path,
+                             question=plan_query.ITEM_QUESTIONS[query.item], answer=None, unit=None, type="",
+                             source=asked.source, drawing=asked.drawing, group=asked.group)
+            ans = dxf.answer(again, self.ds)
+        else:
+            ans = plan_query.run(query, index, dxf, dict(method=dxf.METHOD, cost_usd=0.0))
+        if ans.answer is None:
+            note["reason"] = f"{query.reading} But: {ans.reason}"
+            return None, note
+        note["question"] = plan_query.in_words(query, index)
+        ans.cost_usd = (ans.cost_usd or 0.0) + cost
+        return ans, note
+
+    def _query_model(self, asked: Question, drawing: str) -> tuple[Answer | None, dict | None]:
+        """A question no phrasing of the IFC engine fits, read as a query over the model's contents (model_query.py).
+
+        The language model selects storeys, element kinds or rooms from the model's inventory; the engine
+        counts and measures them. Returns the answer (never Verified) and a note for the UI.
+        """
+        key = (drawing, "query: " + asked.question)
+        if self.spent_eur >= self.budget_eur and key not in self._restated:
+            return None, None
+        try:
+            llm = self._text_model()
+            model_file = self.model_of(drawing)
+            index = ifc_index.load_index(self.ds.abspath(model_file))
+            fresh = key not in self._restated
+            if llm is None and fresh:
+                return None, None
+            if fresh:
+                self._restated[key] = model_query.ask(asked.question, index, PurePosixPath(drawing).name, llm)
+            query = self._restated[key]
+        except (FatalEngineError, KeyError, TypeError):
+            return None, None
+        cost = query.cost_usd if fresh else 0.0
+        if fresh:
+            self.spent_eur += config.usd_to_eur(cost)
+        note = {"question": None, "reason": query.reading, "model": query.model,
+                "cost_eur": round(config.usd_to_eur(cost), 6), "latency_ms": round(query.latency_ms if fresh else 0.0, 1)}
+        if query.error or query.cannot:
+            return None, note
+        ans = model_query.run(query, index, ifc._element, dict(method=ifc.METHOD, cost_usd=0.0))
+        if ans.answer is None:
+            note["reason"] = f"{query.reading} But: {ans.reason}"
+            return None, note
+        ans.meta = {**ans.meta, "ifc": model_file}
+        note["question"] = model_query.in_words(query, index)
+        ans.cost_usd = (ans.cost_usd or 0.0) + cost
+        return ans, note
+
     def ask(self, req: AskRequest) -> dict:
         drawing, text = req.drawing, " ".join(req.question.split())
         if not text:
@@ -828,8 +907,16 @@ class Service:
         engine = router.route(asked, self.ds)
         exact = engine in ("ifc", "dxf")
         restated = None
-        if exact and ans.answer is None:  # the rules could not read it: let a language model restate it
-            again, restated = self._restate(asked, drawing, engine)
+        if exact and ans.answer is None:
+            # The rules could not read it. A language model reads the question as a query over the plan's
+            # rooms, or over the model's storeys, elements and rooms; the engine runs the query. (Restating
+            # the question in one of the engine's own phrasings came first until a restatement was seen to
+            # drop the room a question named: "the windows in Stanza" became the windows of the floor.)
+            again, restated = (self._query_plan if engine == "dxf" else self._query_model)(asked, drawing)
+            if again is None and restated is None:  # no language model to hand: the older restating step
+                again, restated = self._restate(asked, drawing, engine)
+            elif again is None and restated.get("reason"):  # why the drawing cannot answer it, in plain words
+                ans.reason = restated["reason"]
             if again is not None:
                 ans = again
                 known = next((q for q in self.questions.get(drawing, []) if q.question == restated["question"]), known)
@@ -845,7 +932,7 @@ class Service:
                 replayed = logged["run_id"]
             elif kept is not None:  # asked in the app before: shown again, free
                 ans, replayed = kept, "kept from when it was first asked"
-            elif req.use_model:
+            elif req.use_model or req.auto:
                 if self.spent_eur >= self.budget_eur:
                     raise HTTPException(402, f"the demo's model budget of EUR {self.budget_eur:.2f} is used up")
                 if progress.get(asked.qid) is None:
@@ -997,6 +1084,13 @@ class Service:
                     if item.get("holes"):  # what was cut out of the room, so that it is drawn cut out
                         entry["holes"] = [[view.px(x, y) for x, y in ring] for ring in item["holes"]]
                 out.append(entry)
+            elif space == "dxf_m" and kind == "box" and item.get("role"):
+                # Shown, not counted: a door opening left out of a wall length.
+                if view.kind == "plan":
+                    x0, y0, x1, y1 = item["bbox"]
+                    (ax, ay), (bx, by) = view.px(x0, y1), view.px(x1, y0)
+                    out.append({"kind": "context", "role": item["role"], "label": item.get("label", ""),
+                                "bbox": [min(ax, bx), min(ay, by), max(ax, bx), max(ay, by)]})
             elif space == "dxf_m" and kind == "box":
                 n += 1
                 entry = {"kind": "box", "n": n, "ref": _box_ref(index, item["bbox"]), "label": item.get("label", "")}

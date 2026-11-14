@@ -94,6 +94,17 @@ _KINDS = {kind: re.compile(rf"(?<!\w)(?:{words})(?!\w)") for kind, words in _KIN
 _MODEL_SCOPE = re.compile(r"(?<!\w)(model|mudel|modell|modèle|modelo|modello|malli)\w*")
 
 
+def without_kinds(text: str) -> str:
+    """`text` (already normalised) with the words for countable kinds taken out.
+
+    "vasche da bagno" is the kind bathtub, not the room Bagno: what is left is what the question says
+    beyond the thing it counts, such as the room or apartment it asks about.
+    """
+    for pattern in _KINDS.values():
+        text = pattern.sub(" ", text)
+    return text
+
+
 def kinds_in(question: str) -> list[str]:
     """Every countable kind the question mentions (outside quoted names)."""
     text = norm(strip_quoted(question))
