@@ -821,3 +821,8 @@ html[data-on-stage] .app.page-home .top .ghost { color: rgb(255 255 255 / 0.8); 
 @media (max-height: 700px) {
   .hero .lede { display: none; }
 }
+
+/* The harder sheets on the home page: a line of what they are, then their cards */
+.try-note { max-width: 780px; margin: -14px 0 28px; font-size: 16.5px; line-height: 1.55; color: var(--ink-2); }
+.examples.hard { margin-bottom: 84px; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+@media (max-width: 1180px) { .examples.hard { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

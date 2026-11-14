@@ -530,7 +530,7 @@ export function App() {
                     <>
                       <strong>{detail.title}</strong>
                       <span>
-                        {SOURCE_NAMES[detail.source] ?? detail.source} · {detail.formats.join(", ").toUpperCase()}{detail.paper_scale ? ` · 1:${detail.paper_scale}` : ""}
+                        {detail.example ? "Stoa's sample sheet" : SOURCE_NAMES[detail.source] ?? detail.source} · {detail.formats.join(", ").toUpperCase()}{detail.paper_scale ? ` · 1:${detail.paper_scale}` : ""}
                       </span>
                     </>
                   )}

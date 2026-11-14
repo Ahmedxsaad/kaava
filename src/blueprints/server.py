@@ -54,6 +54,8 @@ CREDITS = {
     "uploads": "Brought by you. Not part of the dataset.",
 }
 UPLOADS_DIR = config.REPO_ROOT / "uploads"
+# Sheets that come with the app as examples: taken in at start like a drawing someone brings.
+EXAMPLES_DIR = config.REPO_ROOT / "examples"
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024
 # What to offer on a drawing nobody wrote questions for.
 GENERIC_QUESTIONS = (
@@ -198,6 +200,29 @@ class Service:
         self._restated: dict[tuple[str, str], interpret.Restated] = {}  # a question is only restated once
         self._enhanced: dict[str, dict] = {}  # drawing -> its enlarged view on Cloudinary
         self.logged = self._load_logged_runs()
+        self.examples = self._take_in_examples()
+
+    def _take_in_examples(self) -> list[str]:
+        """The example sheets (examples/*/sheets.json), each taken in once; returns their drawing ids."""
+        out = []
+        for listing in sorted(EXAMPLES_DIR.glob("*/sheets.json")):
+            for sheet in json.loads(listing.read_text(encoding="utf-8")):
+                file = listing.parent / sheet["file"]
+                if not file.is_file():
+                    continue
+                data = file.read_bytes()
+                drawing = drawing_of(f"uploads/{hashlib.sha1(data).hexdigest()[:12]}.png")
+                extra = {"title": sheet["title"], "credit": sheet.get("credit", ""),
+                         "questions": sheet.get("questions", []), "example": True}
+                if drawing not in self.ds.notes:
+                    self.upload(sheet["file"], data)
+                note_file = UPLOADS_DIR / f"{PurePosixPath(drawing).name}.json"
+                note = {**self.ds.notes[drawing], **extra}
+                if note != self.ds.notes[drawing]:
+                    self.ds.notes[drawing] = note
+                    note_file.write_text(json.dumps(note, ensure_ascii=False), encoding="utf-8")
+                out.append(drawing)
+        return out
 
     # ---- which drawings may be shown
 
@@ -247,7 +272,7 @@ class Service:
         for run in sorted(runs.iterdir()):
             # A router run that replayed a model run carries the model's name too; it is not a model run.
             kind = (None if "-router-" in run.name else "baseline" if "-vlm-image-only-" in run.name
-                    else "pointing" if "-vlm-pointing-" in run.name else None)
+                    else "pointing" if "-vlm-pointing-" in run.name or "-sheet-working-" in run.name else None)
             summary, preds = run / "summary.json", run / "predictions.jsonl"
             if kind is None or not summary.is_file() or not preds.is_file():
                 continue
@@ -481,6 +506,7 @@ class Service:
             "questions": len({q.question for q in qs}),
             "engine": engine,
             "has_3d": engine is not None,
+            "example": bool(self.ds.notes.get(drawing, {}).get("example")),
         }
 
     def rooms_layer(self, drawing: str, view: View) -> list[dict]:
@@ -522,7 +548,7 @@ class Service:
         model = self.model_of(drawing)
         return {
             **self.summary(drawing),
-            "credit": CREDITS.get(source_of(drawing), ""),
+            "credit": self.ds.notes.get(drawing, {}).get("credit") or CREDITS.get(source_of(drawing), ""),
             "view": {"kind": view.kind, "width": view.width, "height": view.height, "page": view.page,
                      "pages": view.pages, "aligned": view.aligned, "note": view.note,
                      "px_per_m": self.px_per_metre(drawing, view),
@@ -532,8 +558,9 @@ class Service:
             "mesh_kind": "ifc" if model else "plan" if self.engine_of(drawing) == "dxf" else None,
             "model_file": PurePosixPath(model).name if model else None,
             "suggested": list(seen.values()) or (
-                [{"question": q, "type": "count", "unit": "count"} for q in GENERIC_QUESTIONS]
-                if view.kind == "image" else []),
+                [{"question": q, "type": "", "unit": None} for q in self.ds.notes.get(drawing, {}).get("questions", [])]
+                or ([{"question": q, "type": "count", "unit": "count"} for q in GENERIC_QUESTIONS]
+                    if view.kind == "image" else [])),
             "can_enhance": self.can_enhance(view),
             "paper_scale": (round(view.transform["paper_scale"]) if view.transform else None),
         }
@@ -561,7 +588,7 @@ class Service:
         """A vision model for drawings no exact engine covers. Costs money per question."""
         from dotenv import load_dotenv
 
-        from . import pointing
+        from . import model_path
         from .vlm import make_vlm
 
         load_dotenv(config.REPO_ROOT / ".env")
@@ -573,7 +600,24 @@ class Service:
             vlm = make_vlm("anthropic", "claude-sonnet-5-5")
         else:
             raise HTTPException(503, "no vision-model key is configured on the server")
-        return pointing.make_engine(vlm)
+        engine = model_path.make(vlm)
+
+        def remembered(q: Question, dataset) -> Answer:
+            """A model answer is paid for once: the same question about the same drawing is shown again from disk."""
+            kept = _kept_answer(q)
+            if kept is not None:
+                return kept
+            ans = engine(q, dataset)
+            if ans.error is None and ans.answer is not None:  # an answer is kept; a failure is tried again
+                store = _kept_file(q)
+                store.parent.mkdir(parents=True, exist_ok=True)
+                store.write_text(json.dumps({"answer": ans.answer, "unit": ans.unit, "state": ans.state,
+                                             "confidence": ans.confidence, "method": ans.method, "evidence": ans.evidence,
+                                             "explanation": ans.explanation, "reason": ans.reason,
+                                             "latency_ms": ans.latency_ms, "meta": ans.meta}), encoding="utf-8")
+            return ans
+
+        return remembered
 
     def upload(self, name: str, data: bytes) -> dict:
         """Take in a drawing someone brings: an image or a PDF. Returns its summary."""
@@ -587,9 +631,11 @@ class Service:
         image_path = UPLOADS_DIR / f"{ident}.png"
         try:
             if data[:5] == b"%PDF-":
+                # The PDF is kept beside its picture: its own text layer is exact (sheet_text.py).
+                (UPLOADS_DIR / f"{ident}.pdf").write_bytes(data)
                 with pymupdf.open(stream=data, filetype="pdf") as doc:
                     page = doc[0]
-                    zoom = min(3000 / max(page.rect.width, page.rect.height), 6.0)
+                    zoom = min(5000 / max(page.rect.width, page.rect.height), 6.0)
                     picture = Image.open(io.BytesIO(page.get_pixmap(matrix=pymupdf.Matrix(zoom, zoom), alpha=False).tobytes("png")))
             else:
                 picture = Image.open(io.BytesIO(data))
@@ -747,9 +793,12 @@ class Service:
         if not exact and (ans.answer is None or router.is_weak(ans)):
             labels = ans if ans.method == raster_labels.METHOD and ans.answer is not None else None
             logged = self.logged["pointing"].get(asked.qid)
+            kept = None if logged else _kept_answer(asked)
             if logged and logged.get("pred") is not None:  # already paid for: show it again, free
                 ans = _answer_from_row(logged)
                 replayed = logged["run_id"]
+            elif kept is not None:  # asked in the app before: shown again, free
+                ans, replayed = kept, "kept from when it was first asked"
             elif req.use_model:
                 if self.spent_eur >= self.budget_eur:
                     raise HTTPException(402, f"the demo's model budget of EUR {self.budget_eur:.2f} is used up")
@@ -796,6 +845,7 @@ class Service:
             "latency_ms": round(latency, 1),
             "replayed_from": replayed,
             "interpreted": ans.meta.get("interpreted"),
+            "basis": ans.meta.get("basis"),
             "restated": restated,
             "checks": _checks(ans),
             "verified_because": ans.meta.get("verified_because"),
@@ -867,6 +917,8 @@ class Service:
         if view.dxf_file and any(e.get("space") == "dxf_m" for e in ans.evidence):
             index = dxf_index.load_index(self.ds.abspath(view.dxf_file))
         out, n = [], 0
+        # Evidence on a file is in that file's own units: pixels of an image, points of a PDF page.
+        unit = view.zoom if view.kind == "page" else 1.0
         first_at: dict[str, int] = {}  # the first item at each place: an outline can be in the file twice
         for item in ans.evidence:
             kind, space = item.get("kind"), item.get("space")
@@ -903,14 +955,14 @@ class Service:
                 out.append(entry)
             elif space == "image_px" and kind == "point":
                 n += 1
-                out.append({"kind": "point", "n": n, "x": item["x"], "y": item["y"], "label": item.get("label", "")})
+                out.append({"kind": "point", "n": n, "x": item["x"] * unit, "y": item["y"] * unit, "label": item.get("label", "")})
             elif space == "image_px" and kind == "box" and item.get("role"):
                 # Read on the plan and used as a check, not a counted item (the apartment's type line).
-                out.append({"kind": "context", "role": item["role"], "bbox": item["bbox"],
+                out.append({"kind": "context", "role": item["role"], "bbox": [v * unit for v in item["bbox"]],
                             "label": item.get("label", "")})
             elif space == "image_px" and kind == "box":
                 n += 1
-                out.append({"kind": "box", "n": n, "bbox": item["bbox"], "label": item.get("label", ""),
+                out.append({"kind": "box", "n": n, "bbox": [v * unit for v in item["bbox"]], "label": item.get("label", ""),
                             "score": item.get("score")})
         for item in ans.meta.get("doubtful") or []:  # labels the engine looked at and did not count
             out.append({"kind": "context", "role": "not counted", "bbox": item["bbox"],
@@ -1071,10 +1123,30 @@ def _coinciding(ans: Answer) -> dict | None:
             "extra": twice["outlines"] - twice["distinct"], "counted": twice["counted"]}
 
 
+def _kept_file(q: Question) -> Path:
+    """Where a model's answer to this question is kept. A brought-in drawing's path is a hash of its content."""
+    digest = hashlib.sha1(f"{q.path}\x1f{q.question}".encode("utf-8")).hexdigest()[:20]
+    return config.REPO_ROOT / "cache" / "answers" / f"{digest}.json"
+
+
+def _kept_answer(q: Question) -> Answer | None:
+    """A model answer already paid for: from the answers that come with the example sheets, or from the cache."""
+    store = _kept_file(q)
+    for kept_file in (EXAMPLES_DIR / "answers" / store.name, store):
+        if kept_file.is_file():
+            kept = json.loads(kept_file.read_text(encoding="utf-8"))
+            return Answer(**{**kept, "cost_usd": 0.0, "meta": {**kept.get("meta", {}), "shown_again": True}})
+    return None
+
+
 def _engine_label(method: str) -> str:
     """What answered, in a few words for the reader."""
     if method in ENGINE_LABELS:
         return ENGINE_LABELS[method]
+    if method.startswith("sheet-working"):
+        return "Boxed tile by tile, counted" if method.endswith(":tiles") else "Printed figures and rows, computed"
+    if method.startswith("scan-index"):
+        return "Scan read once, items boxed"
     if "pointing" in method:
         return "Gemini, each item boxed" if "gemini" in method and ":boxes" in method else "Vision model, pointing"
     return "Vision model" if method.startswith("vlm") else method

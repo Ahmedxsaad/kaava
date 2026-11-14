@@ -203,7 +203,7 @@ def test_stats_come_from_the_run_log(client):
 def test_archive_drawings_with_dots_in_their_names_open(client):
     """Archive scans have no questions and names like 'hka.1398.jpg': they still open and show their image."""
     sources = {s["source"]: s for s in client.get("/api/sources").json()}
-    archive = next((name for name, s in sources.items() if s["archive"] and s["drawings"]), None)
+    archive = next((name for name, s in sources.items() if s["archive"] and s["drawings"] and name != "uploads"), None)
     if archive is None:
         pytest.skip("this dataset has no archive drawings")
     items = client.get("/api/drawings", params={"source": archive, "limit": 30}).json()["items"]
@@ -214,6 +214,30 @@ def test_archive_drawings_with_dots_in_their_names_open(client):
     assert client.get(detail["view"]["url"]).status_code == 200
     # Nobody wrote questions for it: a few general ones are offered, none with an answer on file.
     assert all(s["type"] == "count" for s in detail["suggested"])
+
+
+@needs_data
+def test_the_sample_sheets_come_with_their_questions_and_their_answers_cost_nothing_to_show(client):
+    """The sheets Stoa posted are taken in at start. What their questions answered is kept with the app."""
+    items = client.get("/api/drawings", params={"source": "uploads", "limit": 30}).json()["items"]
+    slab = next(i for i in items if i["title"] == "Foundation and slab plan S-100F")
+    detail = client.get("/api/drawing", params={"drawing": slab["id"]}).json()
+    assert detail["example"] and "Stoa" in detail["credit"] and detail["view"]["kind"] == "image"
+    questions = [s["question"] for s in detail["suggested"]]
+    assert "What is the area of the 150 mm slab-on-grade in m²?" in questions
+    answer = ask(client, slab["id"], "What is the area of the 150 mm slab-on-grade in m²?")
+    assert answer["state"] == "check" and answer["cost_eur"] == 0 and answer["replayed_from"]
+    assert answer["answer"] == 61.69 and answer["unit"] == "m2" and answer["method"].startswith("sheet-working")
+    boxes = [e for e in answer["evidence"] if e["kind"] == "box"]
+    formula = next(e["text"] for e in answer["evidence"] if e["kind"] == "formula")
+    assert len(boxes) == 2 and formula == "6200 × 9950 = 61,690,000 mm² = 61.69 m²"   # each figure is a box on the sheet
+    for e in boxes:
+        x0, y0, x1, y1 = e["bbox"]
+        assert 0 <= x0 < x1 <= detail["view"]["width"] and 0 <= y0 < y1 <= detail["view"]["height"]
+    assert all(c["value"] == "the program reads the same figure here" for c in answer["checks"])
+    # A question nobody has asked yet is not answered without the model being asked for.
+    fresh = ask(client, slab["id"], "How thick is the slab under the genset?")
+    assert fresh["state"] == "declined" and fresh["cost_eur"] == 0 and fresh["can_use_model"]
 
 
 def test_labels_are_shown_beside_a_model_answer_as_a_second_method():

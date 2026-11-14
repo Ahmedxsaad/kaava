@@ -1,0 +1,21 @@
+{
+ "name": "dev_us_sheets_pilot6",
+ "split": "dev",
+ "seed": "pilot",
+ "created": "2026-11-14T15:55:09+00:00",
+ "n": 6,
+ "families": {
+  "opening_design/area": 2,
+  "opening_design/count": 2,
+  "opening_design/text": 2
+ },
+ "drawings": 1,
+ "qids": [
+  "91d9ca5b8e36",
+  "5ddcc2a6e5e1",
+  "5a49eb3aff30",
+  "437f7cef5308",
+  "c1e611b93930",
+  "f5ed0591d2af"
+ ]
+}

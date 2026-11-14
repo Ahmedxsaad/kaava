@@ -1,7 +1,8 @@
 // Worked examples for the demo: one click opens the drawing and asks the question.
-// Every one is a drawing of the development split. `state` is what the system returned
-// when the list was written; tests/test_server.py asks each one again and fails if a
-// stop no longer returns that state.
+// Every one is a drawing of the development split, or one of the sample sheets Stoa posted
+// (examples/stoa, taken in by the server at start; their answers are kept in examples/answers).
+// `state` is what the system returned when the list was written; tests/test_server.py asks
+// each one again and fails if a stop no longer returns that state.
 
 export interface Stop {
   label: string;
@@ -11,6 +12,7 @@ export interface Stop {
   question: string;
   view?: "plan" | "3d" | "both";
   card?: boolean;  // shown as a card on the home page
+  hard?: boolean;  // one of the harder sheets Stoa posted as examples of what they may ask
 }
 
 export const TOUR: Stop[] = [
@@ -37,6 +39,46 @@ export const TOUR: Stop[] = [
     state: "verified",
     drawing: "data/swiss_dwellings/site3764_bldg5789_floor24598",
     question: "What is the net floor area of apartment B in m², summing all its rooms except balconies, loggias, terraces and other outdoor spaces?",
+  },
+  {
+    label: "Slab area by type, from the printed dimensions",
+    card: true,
+    hard: true,
+    note: "6200 × 9950 mm · both figures boxed and read again by the program",
+    state: "check",
+    drawing: "uploads/10dd368cb9f8",
+    question: "What is the area of the 150 mm slab-on-grade in m²?",
+    view: "plan",
+  },
+  {
+    label: "Circulation area, added up from the sheet's table",
+    card: true,
+    hard: true,
+    note: "914 + 913 + 1,403 + 1,240 SF · four table entries boxed",
+    state: "check",
+    drawing: "uploads/780f0c0b245d",
+    question: "What is the total circulation area on the second floor, in square feet?",
+    view: "plan",
+  },
+  {
+    label: "Pumps on a piping plan, found by their tags",
+    card: true,
+    hard: true,
+    note: "FP-1 to FP-5 · each tag boxed on the sheet",
+    state: "check",
+    drawing: "uploads/9266efe87dc9",
+    question: "How many fueling pumps (FP) are shown on this piping plan?",
+    view: "plan",
+  },
+  {
+    label: "Every door of a school, boxed tile by tile",
+    card: true,
+    hard: true,
+    note: "124 doors on 8 tiles at full size · click one to leave it out",
+    state: "check",
+    drawing: "uploads/072d5e992c68",
+    question: "How many doors are shown on this floor plan?",
+    view: "plan",
   },
   {
     label: "Asked in German, shown in 3D",

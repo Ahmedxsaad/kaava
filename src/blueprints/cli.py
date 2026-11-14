@@ -264,7 +264,7 @@ def cmd_floor(args: argparse.Namespace) -> int:
     return 0
 
 
-ENGINE_NAMES = ("ifc", "dxf", "router", "pointing", "raster")
+ENGINE_NAMES = ("ifc", "dxf", "router", "pointing", "scanindex", "sheet", "raster")
 
 
 def _engines(args: argparse.Namespace | None = None) -> dict:
@@ -290,6 +290,27 @@ def _engines(args: argparse.Namespace | None = None) -> dict:
         load_dotenv(config.REPO_ROOT / ".env")
         vlm = make_vlm(args.provider, args.model, args.effort)
         engines["pointing"] = (pointing.method_name(vlm), pointing.make_engine(vlm), ("cubicasa5k",))
+    if args is not None and getattr(args, "engine", None) == "scanindex":
+        from dotenv import load_dotenv
+
+        from . import scan_index
+        from .vlm import make_vlm
+
+        load_dotenv(config.REPO_ROOT / ".env")
+        vlm = make_vlm(args.provider, args.model, args.effort)
+        # A scan is read once; every counting question about it is answered from that reading.
+        engines["scanindex"] = (scan_index.method_name(vlm, args.grouping),
+                                scan_index.make_engine(vlm, args.grouping), ("cubicasa5k",))
+    if args is not None and getattr(args, "engine", None) == "sheet":
+        from dotenv import load_dotenv
+
+        from . import sheet_reading
+        from .vlm import make_vlm
+
+        load_dotenv(config.REPO_ROOT / ".env")
+        vlm = make_vlm(args.provider, args.model, args.effort)
+        # Working shown: the model names the printed figures and rows, the code counts and computes.
+        engines["sheet"] = (sheet_reading.method_name(vlm), sheet_reading.make_engine(vlm), ("opening_design",))
     return engines
 
 
@@ -385,7 +406,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         raise SystemExit("no questions selected")
     _check_split(questions, split, split_name, args.final, f"run {method} on {sample_name}")
 
-    paid = args.engine == "pointing"
+    paid = args.engine in ("pointing", "scanindex", "sheet")
     if paid and not args.sample:
         raise SystemExit("a model engine costs money per question: give it a --sample")
     offline = paid and args.provider == "mock"  # a pipeline check, never a result
@@ -641,6 +662,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--confirm-labels", action="store_true",
                    help="router only: put the replayed model's count next to a strong label answer on a scan; "
                         "the two agreeing is its own kind of answer (labels+model:v1)")
+    p.add_argument("--grouping", default="one", choices=["one", "three", "four"],
+                   help="scanindex only: how many model calls read one drawing (see scan_index.GROUPINGS)")
     p.add_argument("--workers", type=int, default=4)
     p.add_argument("--final", action="store_true", help="allow the test split")
     p.add_argument("--notes", default="")

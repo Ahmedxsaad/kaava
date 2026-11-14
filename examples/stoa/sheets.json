@@ -1,0 +1,42 @@
+[
+  {
+    "file": "us_aw_078-24-33_p056.png",
+    "title": "Foundation and slab plan S-100F",
+    "credit": "Sample sheet posted by Stoa for this challenge. US Army Corps of Engineers, DoD standard design AW 078-24-33.",
+    "questions": [
+      "What is the area of the 150 mm slab-on-grade in m²?",
+      "What is the area of the 300 mm slab-on-grade reinforced with D16 bars, in m²?",
+      "What is the overall length of the building in metres?"
+    ]
+  },
+  {
+    "file": "us_daf_dorm_sd_drawings_april_2026_p003.png",
+    "title": "Dormitory, second floor plan A-2",
+    "credit": "Sample sheet posted by Stoa for this challenge. US Air Force Civil Engineer Center, permanent party enlisted dormitory standard design.",
+    "questions": [
+      "What is the total circulation area on the second floor, in square feet?",
+      "What is the total square footage of the second floor?",
+      "How many dorm rooms does the building have in total?"
+    ]
+  },
+  {
+    "file": "us_aw_078-24-28_march_2020_p096.png",
+    "title": "Piping plan M-101A",
+    "credit": "Sample sheet posted by Stoa for this challenge. US Army Corps of Engineers, DoD standard design AW 078-24-28, pressurized hydrant fueling system.",
+    "questions": [
+      "How many fueling pumps (FP) are shown on this piping plan?",
+      "What is the size of the suction header?",
+      "How many filter separators (FSI) are shown on this piping plan?"
+    ]
+  },
+  {
+    "file": "uk_dfe_sen-dfe-xx-00-d-x-0201-special_school_plan_level_00-a-c01_p001.png",
+    "title": "Special school plan, level 00",
+    "credit": "Sample sheet posted by Stoa for this challenge. UK Department for Education, sample design SEN-DFE-XX-00-D-X-0201.",
+    "questions": [
+      "How many rooms on this plan are named Group Room?",
+      "How many doors are shown on this floor plan?",
+      "What is the scale of this drawing?"
+    ]
+  }
+]

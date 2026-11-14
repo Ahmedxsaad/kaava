@@ -17,6 +17,7 @@ export interface DrawingSummary {
   questions: number;
   engine: "ifc" | "dxf" | null;
   has_3d: boolean;
+  example?: boolean;  // a sample sheet that comes with the app
 }
 
 export interface Room {
@@ -108,6 +109,7 @@ export interface AskResult {
   latency_ms: number;
   replayed_from: string | null;
   interpreted: string | null;
+  basis?: string | null;  // what the vision model said about how it got there
   restated: { question: string | null; reason: string; model: string; cost_eur: number; latency_ms: number } | null;
   checks: { name: string; value: number | string }[];
   verified_because: {
@@ -288,12 +290,16 @@ export const SOURCE_NAMES: Record<string, string> = {
 export function formatValue(value: number | string | null, unit: string | null): string {
   if (value === null || value === undefined) return "—";
   if (typeof value !== "number") return String(value);
-  if (unit === "count") return value.toLocaleString("en");
+  if (unit === "count" || (unit === null && Number.isInteger(value))) return value.toLocaleString("en");
+  // A whole number in a unit printed whole (16 in, 26,562 ft²) is not given decimals it does not have.
+  if (Number.isInteger(value) && unit !== "m2" && unit !== "m3" && unit !== "m") return value.toLocaleString("en");
   return value.toLocaleString("en", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+const UNIT_LABELS: Record<string, string> = { m2: "m²", m3: "m³", m: "m", mm: "mm", cm: "cm", ft: "ft", in: "in", ft2: "ft²", mm2: "mm²", cm2: "cm²", in2: "in²", ft3: "ft³" };
+
 export function unitLabel(unit: string | null): string {
-  return unit === "m2" ? "m²" : unit === "m3" ? "m³" : unit === "m" ? "m" : "";
+  return UNIT_LABELS[unit ?? ""] ?? "";
 }
 
 export function euro(value: number): string {
