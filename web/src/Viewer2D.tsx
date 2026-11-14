@@ -242,7 +242,7 @@ export function Viewer2D(props: Props) {
               strokeWidth={1.5 * u}
               strokeDasharray={`${5 * u} ${4 * u}`}
               onPointerMove={(e) => {
-                if (drag.current?.moved) return;
+                if (drag.current?.moved || tool !== "move") return;
                 const rect = frame.current!.getBoundingClientRect();
                 setTip({ x: e.clientX - rect.left, y: e.clientY - rect.top, room });
               }}
@@ -407,7 +407,7 @@ export function Viewer2D(props: Props) {
           </button>
         )}
         {measures.length > 0 && <button className="wide" onClick={() => setMeasures([])}>Clear</button>}
-        <button className={`wide${tool === "loupe" ? " on" : ""}`} onClick={() => { setTool(tool === "loupe" ? "move" : "loupe"); setLens(null); }} title="A loupe on the original drawing">
+        <button className={`wide${tool === "loupe" ? " on" : ""}`} onClick={() => { setTool(tool === "loupe" ? "move" : "loupe"); setLens(null); setTip(null); }} title="A loupe on the original drawing">
           Loupe
         </button>
         <button onClick={() => zoomBy(1.5)} aria-label="Zoom in">+</button>
