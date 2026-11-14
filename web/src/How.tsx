@@ -7,11 +7,11 @@ import { type Stop, TOUR } from "./tour";
 // and the hard cases, each one click away.
 
 const ENGINES: { name: string; when: string; how: string; cost: string; state: string }[] = [
-  { name: "IFC query", when: "a building model, or a plan rendered from one", how: "IfcOpenShell: elements enumerated, geometry and the model's own quantities", cost: "€0", state: "can be Verified" },
+  { name: "IFC query", when: "a building model, or a plan rendered from one", how: "IfcOpenShell: elements enumerated, geometry and the model's own quantities", cost: "€0", state: "Check this, until enough held-out answers prove the bar" },
   { name: "DXF geometry", when: "a floor plan that comes with a DXF", how: "room outlines (holes cut out), door, window and fixture entities; checked against the areas printed on the plan", cost: "€0", state: "can be Verified" },
   { name: "Printed labels", when: "a scan, asked to count rooms", how: "local OCR reads the room labels; the code counts them and checks the apartment's type line", cost: "€0", state: "Check this" },
-  { name: "Boxes on a scan", when: "a scan, asked to count symbols", how: "the vision model boxes each item; the code counts the boxes", cost: "about €0.006", state: "Check this" },
-  { name: "Working shown", when: "a sheet with no model or DXF: a schedule, a slab plan, a piping plan", how: "the model names printed figures, rows or rooms; the code computes, counts and measures", cost: "€0.02 to €0.15", state: "Check this" },
+  { name: "Boxes on a scan", when: "a scan, asked to count symbols", how: "the vision model boxes each item; the code counts the boxes, and stands them in a 3D view raised from the scan's own walls", cost: "about €0.006", state: "Check this" },
+  { name: "Working shown", when: "a sheet with no model or DXF: a schedule, a slab plan, a piping plan", how: "the model names printed figures, rows or rooms; the code computes, counts and measures; examiners look inside what was measured", cost: "€0.02 to €0.15", state: "Check this" },
 ];
 
 const TOOLS: { tool: string; gives: string; does: string }[] = [
@@ -26,15 +26,15 @@ const REFUSALS: { when: string; says: string }[] = [
   { when: "The sheet does not print what the question needs", says: "the sheet does not print what this needs: no dimension of this room is printed" },
   { when: "The program reads a figure differently from the model", says: "A figure could not be confirmed: the program reads 6,200 here, the model 6,800. No number is given." },
   { when: "Two independent workings of the same question disagree", says: "Two independent workings gave different results: 217.11 m² and 218.64 m². No number is given." },
-  { when: "A room cannot be measured honestly", says: "no graphic scale bar was found · the room is not a plain rectangle · no wall found along the left side" },
+  { when: "A room cannot be measured honestly", says: "the sheet has nothing to take its scale from · the room is open to the space next to it · at this scale the doors come out 2.10 m wide: the scale is in doubt" },
   { when: "An exact engine's own checks do not hold", says: "the area printed in the room is 15.20 m²: they differ → Check this, not Verified" },
 ];
 
 const HARD: { label: string; why: string }[] = [
   { label: "A room with a hole in it", why: "The outline encloses 17.23 m². A lift stands inside it; its 3.24 m² are cut out, and the hole is drawn." },
   { label: "Doors, and a door drawn twice", why: "The file lists 32 door outlines; 9 lie exactly on another. The answer is 23, and it says why." },
-  { label: "Baseboards of a hall, measured on the sheet", why: "Nothing is printed. Walls from pixels, scale from the bar, 8 door openings left out of the length." },
-  { label: "Slab area by type, from the printed dimensions", why: "Two dimension figures, each boxed and read again by OCR; the calculator multiplies." },
+  { label: "Baseboards of a hall, measured on the sheet", why: "Nothing is printed. Walls from pixels, scale from the bar (checked against the width of the doors), 8 door openings left out of the length." },
+  { label: "Slab area by type, from the printed dimensions", why: "6200 × 9950 mm from two printed figures. Two trenches are cut into the slab: the examiners find them, the program measures them on the drawing and takes them out. 59.28 m²." },
   { label: "Every door of a school, boxed tile by tile", why: "Over a hundred small symbols on a sheet 14,000 pixels wide: eight tiles at full size, looked at twice. Counted where both passes agree." },
   { label: "A question the plan cannot answer", why: "No number, and the reason. A wrong confident answer is the worst outcome." },
 ];
