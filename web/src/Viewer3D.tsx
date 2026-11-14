@@ -37,6 +37,7 @@ interface Props {
   bare?: boolean;  // no captions or tools, no zoom: the stage alone, as a backdrop
   shift?: number;  // move the model sideways by this share of the width (text stands beside it)
   direct?: Direction;
+  tags?: boolean;  // false hides the number tags (when the model is small on screen they only crowd it)
   onReady?(): void;
 }
 
@@ -217,7 +218,7 @@ interface Stage {
   spin(on: boolean): void;
 }
 
-export function Viewer3D({ meshUrl, groundUrl, imageUrl, highlights, visible, hover, focus, excluded, focusKey, theme = "paper", bare, shift = 0, direct, onReady }: Props) {
+export function Viewer3D({ meshUrl, groundUrl, imageUrl, highlights, visible, hover, focus, excluded, focusKey, theme = "paper", bare, shift = 0, direct, tags = true, onReady }: Props) {
   const directed = useRef(direct);
   directed.current = direct;
   const host = useRef<HTMLDivElement>(null);
@@ -867,8 +868,10 @@ export function Viewer3D({ meshUrl, groundUrl, imageUrl, highlights, visible, ho
     s.fly(box.expandByScalar(Math.max(3.6, box.getSize(new THREE.Vector3()).length() * 1.5)), { low: true, ms: 800 });
   }, [focus]);
 
+  // Many items on one model: smaller tags, so that each still shows.
+  const crowded = highlights.length > 18;
   return (
-    <div className={`viewer3d${theme === "night" ? " night" : ""}`}>
+    <div className={`viewer3d${theme === "night" ? " night" : ""}${crowded ? " crowded" : ""}${tags ? "" : " untagged"}`}>
       <div ref={host} className="stage3d" />
       {status === "loading" && !bare && <div className="viewer-wait">Building the model…</div>}
       {status !== "loading" && status !== "ready" && !bare && <div className="viewer-wait">{status}</div>}

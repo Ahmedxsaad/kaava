@@ -293,6 +293,7 @@ export function Story({ stats, onOpen, onAsk, onBrowse, onBring, onTalk, canTalk
               theme="night"
               bare
               direct={direction}
+              tags={!opening}
               onReady={() => { const t = performance.now(); setBuilt(t); setNow(t); }}
             />
           )}

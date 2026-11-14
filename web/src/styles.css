@@ -763,3 +763,7 @@ html[data-on-stage] .app.page-home .top .ghost { color: rgb(255 255 255 / 0.8); 
 /* The model's number tags stay inside the stage: the opening's card and the chapters stand above them. */
 .story-stage { isolation: isolate; }
 .hero, .hero-foot, .story-copy, .story-rail { z-index: 3; }
+
+/* Number tags on the model: smaller when there are many, hidden when the model is only a backdrop */
+.viewer3d.crowded .tag3d { min-width: 15px; height: 15px; padding: 0 3px; border-radius: 8px; font-size: 8.5px; line-height: 15px; transform: translateY(-11px); }
+.viewer3d.untagged .labels3d { display: none; }
