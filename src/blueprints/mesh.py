@@ -1,0 +1,295 @@
+"""Triangle meshes for the 3D evidence view.
+
+Two sources, one small binary format the browser loads in one request:
+
+- an IFC model, tessellated by the geometry kernel, one mesh range per element so an
+  answer's elements (by GlobalId) can be lit up;
+- a Swiss floor plan, raised from its DXF: wall outlines extruded to storey height,
+  doors and windows as blocks, room outlines as floor plates.
+
+Format ("BPM1"): magic, uint32 header length, header JSON padded to 4 bytes,
+float32 positions (x, y, z in metres, z up, centred on the model), uint32 triangle indices.
+The header lists the elements with their ranges in both buffers.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import multiprocessing
+import struct
+import threading
+from array import array
+from pathlib import Path
+
+from . import config
+
+MESH_VERSION = 5
+MAX_TRIANGLES = 6_000_000  # a model beyond this is not sent to a browser
+SKIP_CLASSES = ("IfcOpeningElement", "IfcAnnotation", "IfcGrid", "IfcVirtualElement")
+WALL_HEIGHT = 2.6
+
+
+_build_lock = threading.Lock()  # one build at a time: the geometry kernel already uses every core
+_hashes: dict[tuple[str, int, int], str] = {}
+
+
+class MeshTooLarge(Exception):
+    pass
+
+
+def unpack(data: bytes) -> tuple[dict, memoryview, memoryview]:
+    """Header, positions (float32) and triangle indices (uint32) of a packed mesh."""
+    (length,) = struct.unpack_from("<I", data, 4)
+    header = json.loads(data[8:8 + length])
+    start = 8 + length
+    middle = start + 12 * header["vertices"]
+    return (header, memoryview(data)[start:middle].cast("f"),
+            memoryview(data)[middle:middle + 12 * header["triangles"]].cast("I"))
+
+
+def footprint(element: dict, positions, indices) -> list[list[float]]:
+    """Outline of an element seen from above, in the mesh's coordinates (largest part if it has several)."""
+    from shapely.geometry import Polygon
+    from shapely.ops import unary_union
+
+    start, count = element["i"]
+    triangles = []
+    for k in range(start, start + count, 3):
+        a, b, c = indices[k], indices[k + 1], indices[k + 2]
+        tri = Polygon([(positions[3 * a], positions[3 * a + 1]), (positions[3 * b], positions[3 * b + 1]),
+                       (positions[3 * c], positions[3 * c + 1])])
+        if tri.area > 1e-6:
+            triangles.append(tri)
+    if not triangles:
+        return []
+    shape = unary_union(triangles).buffer(0.005).buffer(-0.005)  # close hairline gaps between triangles
+    if shape.geom_type == "MultiPolygon":
+        shape = max(shape.geoms, key=lambda g: g.area)
+    if shape.is_empty or shape.geom_type != "Polygon":
+        return []
+    return [[round(x, 3), round(y, 3)] for x, y in shape.exterior.coords[:-1]]
+
+
+def _cache_file(source: Path, tag: str) -> Path:
+    stat = source.stat()
+    key = (str(source), stat.st_mtime_ns, stat.st_size)
+    if key not in _hashes:
+        h = hashlib.sha1()
+        with open(source, "rb") as f:
+            for block in iter(lambda: f.read(1 << 20), b""):
+                h.update(block)
+        _hashes[key] = h.hexdigest()[:16]
+    return config.REPO_ROOT / "cache" / "mesh" / f"{_hashes[key]}-{tag}-v{MESH_VERSION}.bpm"
+
+
+def _pack(header: dict, positions: array, indices: array) -> bytes:
+    head = json.dumps(header, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    head += b" " * (-len(head) % 4)
+    return b"BPM1" + struct.pack("<I", len(head)) + head + positions.tobytes() + indices.tobytes()
+
+
+def _centre(positions: array, elements: list[dict]) -> tuple[list[float], list[float]]:
+    """Move the model to its own centre (georeferenced models sit kilometres from zero).
+
+    Also gives every element `c`, the centre of its bounding box in the moved coordinates.
+    """
+    if not positions:
+        return [0.0, 0.0, 0.0], [0.0] * 6
+    lo = [min(positions[i::3]) for i in range(3)]
+    hi = [max(positions[i::3]) for i in range(3)]
+    mid = [(a + b) / 2 for a, b in zip(lo, hi)]
+    mid[2] = lo[2]  # keep the ground at z = 0
+    for axis in range(3):
+        if mid[axis]:
+            positions[axis::3] = array("f", (v - mid[axis] for v in positions[axis::3]))
+    for element in elements:
+        start, count = element["v"]
+        centre = []
+        for axis in range(3):
+            values = positions[start * 3 + axis:(start + count) * 3:3]
+            centre.append(round((min(values) + max(values)) / 2, 3))
+        element["c"] = centre
+    return mid, [lo[i] - mid[i] for i in range(3)] + [hi[i] - mid[i] for i in range(3)]
+
+
+# ----------------------------------------------------------------- IFC
+
+
+def ifc_mesh(ifc_path: Path) -> bytes:
+    """The whole model as one binary mesh, from cache when possible."""
+    cache = _cache_file(ifc_path, "ifc")
+    with _build_lock:
+        if cache.is_file():
+            return cache.read_bytes()
+        data = _build_ifc_mesh(ifc_path)
+        cache.parent.mkdir(parents=True, exist_ok=True)
+        cache.write_bytes(data)
+        return data
+
+
+def _build_ifc_mesh(ifc_path: Path) -> bytes:
+    import ifcopenshell
+    import ifcopenshell.geom
+
+    from .engines.ifc_index import _storey_of
+
+    model = ifcopenshell.open(str(ifc_path))
+    settings = ifcopenshell.geom.settings()
+    settings.set("use-world-coords", True)
+    products = [p for p in model.by_type("IfcProduct")
+                if p.Representation and not any(p.is_a(c) for c in SKIP_CLASSES)]
+    import ifcopenshell.util.placement as up
+    import ifcopenshell.util.unit as uu
+
+    try:
+        length_scale = float(uu.calculate_unit_scale(model, "LENGTHUNIT"))
+    except Exception:
+        length_scale = 1.0
+    storeys = {s.id(): i for i, s in enumerate(model.by_type("IfcBuildingStorey"))}
+    storey_list = []
+    for s in model.by_type("IfcBuildingStorey"):
+        try:
+            z = float(up.get_local_placement(s.ObjectPlacement)[2][3]) * length_scale
+        except Exception:
+            z = None
+        storey_list.append({"name": s.Name or "", "z": z})
+
+    positions, indices = array("f"), array("I")
+    elements = []
+    if products:
+        iterator = ifcopenshell.geom.iterator(
+            settings, model, max(1, multiprocessing.cpu_count() - 1), include=products)
+        if iterator.initialize():
+            while True:
+                shape = iterator.get()
+                verts, faces = shape.geometry.verts, shape.geometry.faces
+                if verts and faces:
+                    base = len(positions) // 3
+                    element = model.by_guid(shape.guid)
+                    storey = _storey_of(element)
+                    elements.append({
+                        "id": shape.guid, "cls": element.is_a(), "name": element.Name or "",
+                        "storey": storeys.get(storey.id()) if storey is not None else None,
+                        "v": [base, len(verts) // 3], "i": [len(indices), len(faces)],
+                    })
+                    positions.extend(verts)
+                    indices.extend(f + base for f in faces)
+                    if len(indices) // 3 > MAX_TRIANGLES:
+                        raise MeshTooLarge(f"more than {MAX_TRIANGLES:,} triangles")
+                if not iterator.next():
+                    break
+    offset, bbox = _centre(positions, elements)
+    for storey in storey_list:  # heights in the moved coordinates, like the vertices
+        if storey["z"] is not None:
+            storey["z"] = round(storey["z"] - offset[2], 3)
+    header = {"version": MESH_VERSION, "kind": "ifc", "elements": elements, "storeys": storey_list,
+              "vertices": len(positions) // 3, "triangles": len(indices) // 3,
+              "offset": offset, "bbox": bbox}
+    return _pack(header, positions, indices)
+
+
+# ----------------------------------------------------------------- DXF plan raised to 3D
+
+
+def _prism(positions: array, indices: array, ring: list[tuple[float, float]], z0: float, z1: float,
+           triangles: list[tuple[int, int, int]] | None) -> None:
+    """A vertical prism over a closed ring; `triangles` index into `ring` for the caps."""
+    n = len(ring)
+    base = len(positions) // 3
+    for z in (z0, z1):
+        for x, y in ring:
+            positions.extend((x, y, z))
+    for a in range(n):  # side faces
+        b = (a + 1) % n
+        indices.extend((base + a, base + b, base + n + b, base + a, base + n + b, base + n + a))
+    for a, b, c in triangles or ():
+        indices.extend((base + n + a, base + n + b, base + n + c))  # top
+        indices.extend((base + c, base + b, base + a))  # bottom
+
+
+def _triangulate(ring: list[tuple[float, float]]) -> list[tuple[int, int, int]]:
+    """Triangles of a simple polygon as indices into `ring` (ear clipping via mapbox_earcut-like fallback)."""
+    from shapely.geometry import Polygon
+    from shapely.ops import triangulate
+
+    polygon = Polygon(ring)
+    if not polygon.is_valid or polygon.area <= 0:
+        return []
+    lookup = {(round(x, 6), round(y, 6)): i for i, (x, y) in enumerate(ring)}
+    out = []
+    for tri in triangulate(polygon):  # Delaunay over the ring's own vertices
+        if not polygon.contains(tri.representative_point()):
+            continue
+        corners = [lookup.get((round(x, 6), round(y, 6))) for x, y in list(tri.exterior.coords)[:3]]
+        if None not in corners:
+            out.append(tuple(corners))
+    return out
+
+
+def _clean_ring(points) -> list[tuple[float, float]]:
+    ring = [(float(x), float(y)) for x, y, *_ in points]
+    if len(ring) > 1 and ring[0] == ring[-1]:
+        ring.pop()
+    return ring
+
+
+def plan_mesh(dxf_path: Path) -> bytes:
+    """A Swiss floor plan raised to 3D from its DXF, from cache when possible."""
+    cache = _cache_file(dxf_path, "plan")
+    with _build_lock:
+        if cache.is_file():
+            return cache.read_bytes()
+        data = _build_plan_mesh(dxf_path)
+        cache.parent.mkdir(parents=True, exist_ok=True)
+        cache.write_bytes(data)
+        return data
+
+
+def _build_plan_mesh(dxf_path: Path) -> bytes:
+    import ezdxf
+
+    from .engines import dxf_index
+
+    index = dxf_index.load_index(dxf_path)
+    scale = index.get("metres_per_unit", 1.0)
+    doc = ezdxf.readfile(str(dxf_path))
+    positions, indices = array("f"), array("I")
+    elements = []
+
+    def add(kind: str, ident: str, ring: list[tuple[float, float]], z0: float, z1: float, **extra) -> None:
+        if len(ring) < 3:
+            return
+        v0, i0 = len(positions) // 3, len(indices)
+        _prism(positions, indices, ring, z0, z1, _triangulate(ring))
+        elements.append({"id": ident, "cls": kind, "name": extra.pop("name", ""), "storey": 0,
+                         "v": [v0, len(positions) // 3 - v0], "i": [i0, len(indices) - i0], **extra})
+
+    walls = 0
+    for entity in doc.modelspace().query('LWPOLYLINE[layer=="WALL"]'):
+        if not entity.closed and len(entity) < 4:
+            continue
+        ring = _clean_ring((x * scale, y * scale) for x, y, *_ in entity.get_points())
+        add("wall", f"wall-{walls}", ring, 0.0, WALL_HEIGHT)
+        walls += 1
+    # Identifiers match the evidence the engine returns: its bounding box, so a counted
+    # door or window can be found again without the two modules sharing a numbering.
+    for kind, z0, z1 in (("door", 0.0, 2.05), ("window", 0.9, 2.2)):
+        for n, item in enumerate(index[f"{kind}s"]):
+            add(kind, f"{kind}-{n}", _clean_ring(item["polygon"]), z0, z1, bbox=item["bbox"])
+    for n, fixture in enumerate(index["fixtures"]):
+        x0, y0, x1, y1 = fixture["bbox"]
+        add(fixture["kind"], f"fixture-{n}", [(x0, y0), (x1, y0), (x1, y1), (x0, y1)], 0.0, 0.45,
+            bbox=fixture["bbox"])
+    for n, room in enumerate(index["rooms"]):
+        if room.get("shaft"):
+            continue
+        add("room", f"room-{n}", _clean_ring(room["polygon"]), -0.05, 0.0,
+            name=" ".join(x for x in (room["name"], room["number"]) if x), number=room["number"],
+            area=round(room["area"], 2))
+    offset, bbox = _centre(positions, elements)
+    header = {"version": MESH_VERSION, "kind": "plan", "elements": elements,
+              "storeys": [{"name": "plan", "z": 0.0}],
+              "vertices": len(positions) // 3, "triangles": len(indices) // 3,
+              "offset": offset, "bbox": bbox, "wall_height": WALL_HEIGHT}
+    return _pack(header, positions, indices)

@@ -515,6 +515,14 @@ def cmd_score(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_serve(args: argparse.Namespace) -> int:
+    """Serve the API (and the built web app, when web/dist exists)."""
+    from .server import serve
+
+    serve(args.host, args.port, args.dataset)
+    return 0
+
+
 def cmd_errors(args: argparse.Namespace) -> int:
     ds = Dataset(args.dataset)
     path = config.RESULTS_DIR / "runs" / args.run_id / "predictions.jsonl"
@@ -639,6 +647,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--family", default=None, help="e.g. cubicasa5k/count")
     p.add_argument("-n", type=int, default=20)
     p.set_defaults(fn=cmd_errors)
+
+    p = sub.add_parser("serve", help="run the verification UI and its API")
+    p.add_argument("--host", default="127.0.0.1")
+    p.add_argument("--port", type=int, default=8000)
+    p.set_defaults(fn=cmd_serve)
     return parser
 
 
