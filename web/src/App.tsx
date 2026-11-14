@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnswerPanel } from "./AnswerPanel";
-import { api, type AskResult, type DrawingDetail, type Evidence, type Source, SOURCE_NAMES } from "./api";
+import { api, type AskResult, type DrawingDetail, type Evidence, euro, formatValue, type Source, SOURCE_NAMES } from "./api";
 import { Numbers } from "./Numbers";
 import { Picker } from "./Picker";
 import { TOUR } from "./tour";
@@ -64,7 +64,12 @@ export function App() {
   const [suggesting, setSuggesting] = useState(false);
   const [focusKey, setFocusKey] = useState("");
   const [listening, setListening] = useState(false);
+  const [speaking, setSpeaking] = useState(false);
+  // What this session's answers cost, and what the vision model alone costs for the same questions.
+  const [meter, setMeter] = useState({ answers: 0, spent: 0, alone: 0 });
+  const [aloneAverage, setAloneAverage] = useState<number | null>(null);
   const asked = useRef(0);
+  const aloneRef = useRef<number | null>(null);
   const pending = useRef<string | null>(route.question || null);
   const wanted = useRef<Mode | null>(route.view ?? null);  // a view asked for in the link wins once
 
@@ -84,6 +89,11 @@ export function App() {
       setHover(null);
       setRevealed(0);
       setResult(answer);
+      setMeter((m) => ({
+        answers: m.answers + 1,
+        spent: m.spent + (answer.replayed_from ? 0 : answer.cost_eur),
+        alone: m.alone + (answer.baseline?.cost_eur ?? aloneRef.current ?? 0),
+      }));
       setFocusKey(`${drawing.id}|${clean}|${ticket}`);
       const has2d = drawing.view.kind !== "none";
       const onPlan = answer.evidence.some((e) => e.bbox || e.points || e.x !== undefined);
@@ -123,6 +133,12 @@ export function App() {
   }, [ask]);
 
   useEffect(() => {
+    api.stats().then((stats) => {
+      const run = stats.runs.find((r) => r.method.startsWith("vlm-image-only") && r.sample === "dev_baseline_200");
+      const average = run?.rows.find((r) => r.scope === "overall")?.eur_per_question ?? null;
+      aloneRef.current = average;
+      setAloneAverage(average);
+    }).catch(() => undefined);
     api.sources().then(async (list) => {
       setSources(list);
       const first = route.drawing ?? TOUR[0]?.drawing;
@@ -148,6 +164,18 @@ export function App() {
   }, [result, units.length]);
 
   const settled = !result || revealed >= units.length;
+  // "Make blueprints talk", literally: read the verdict and the number aloud once the evidence has landed.
+  useEffect(() => {
+    if (!speaking || !result || !settled || !("speechSynthesis" in window)) return;
+    const verdict = result.state === "verified" ? "Verified." : result.state === "check" ? "Check this." : "I can't answer that reliably.";
+    const unit = result.unit === "m2" ? "square metres" : result.unit === "m3" ? "cubic metres" : result.unit === "m" ? "metres" : "";
+    const value = result.answer === null ? result.reason : `${formatValue(result.answer, result.unit)} ${unit}`;
+    const utterance = new SpeechSynthesisUtterance(`${verdict} ${value}`);
+    utterance.lang = "en-GB";
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(utterance);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [result, settled, speaking]);
   const tracksCount = !!result && result.unit === "count" && typeof result.answer === "number" && units.length === result.answer;
   const parts = units.map(measureOf);
   const tracksSum = !!result && typeof result.answer === "number" && result.unit !== "count" && units.length > 0 &&
@@ -190,6 +218,23 @@ export function App() {
     const units = new Set(detail.rooms.filter((r) => used.has(r.ref)).map((r) => r.unit));
     return detail.rooms.filter((r) => r.outdoor && !used.has(r.ref) && units.has(r.unit));
   }, [detail, result]);
+
+  // Presenting: the left and right arrow keys step through the examples.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (page !== "ask" || picking || e.altKey || e.ctrlKey || e.metaKey) return;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) return;
+      if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+      const at = TOUR.findIndex((stop) => stop.drawing === detail?.id && stop.question === question);
+      const next = TOUR[(at + (e.key === "ArrowRight" ? 1 : -1) + TOUR.length) % TOUR.length];
+      if (at === -1 && e.key === "ArrowLeft") return;
+      e.preventDefault();
+      void open(next.drawing, next.question, next.view);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [page, picking, detail, question, open]);
 
   const has2d = !!detail && detail.view.kind !== "none";
   const has3d = !!detail?.mesh;
@@ -235,6 +280,13 @@ export function App() {
           <button className={page === "numbers" ? "on" : ""} onClick={() => { setPage("numbers"); writeRoute({ drawing: detail?.id ?? null, question, page: "numbers" }); }}>Numbers</button>
         </nav>
         <div className="spacer" />
+        {page === "ask" && meter.answers > 0 && (
+          <div className="meter" title={aloneAverage != null ? `Where the vision model was not logged for a question, its measured average of ${euro(aloneAverage)} is used` : undefined}>
+            <span><b>{meter.answers}</b> answer{meter.answers === 1 ? "" : "s"}</span>
+            <span>cost <b>{euro(meter.spent)}</b></span>
+            {meter.alone > 0 && <span>vision model alone <b>{euro(meter.alone)}</b></span>}
+          </div>
+        )}
         {page === "ask" && (
           <>
             <div className="tour">
@@ -287,6 +339,11 @@ export function App() {
                 {canListen && (
                   <button type="button" className={`mic${listening ? " on" : ""}`} onClick={listen} aria-label="Ask by voice">
                     <svg viewBox="0 0 24 24" aria-hidden><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" fill="none" strokeWidth="2" strokeLinecap="round" /></svg>
+                  </button>
+                )}
+                {"speechSynthesis" in window && (
+                  <button type="button" className={`mic speak${speaking ? " on" : ""}`} onClick={() => { setSpeaking(!speaking); window.speechSynthesis.cancel(); }} aria-label="Read answers aloud" aria-pressed={speaking} title="Read answers aloud">
+                    <svg viewBox="0 0 24 24" aria-hidden><path d="M4 9.5h3.5L12 6v12l-4.5-3.5H4z" /><path d="M15.5 9a4.2 4.2 0 0 1 0 6M18 6.5a7.6 7.6 0 0 1 0 11" fill="none" strokeWidth="2" strokeLinecap="round" /></svg>
                   </button>
                 )}
                 <button type="submit" className="go" disabled={!detail || asking || !question.trim()}>

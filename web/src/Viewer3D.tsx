@@ -350,16 +350,20 @@ export function Viewer3D({ meshUrl, highlights, revealed, hover, excluded, focus
       const centre = extent.getCenter(new THREE.Vector3());
       geometry.translate(-centre.x, -centre.y, -centre.z);  // so it can swell around its own centre
       const colour = h.tone === "area" ? AREA_COLOUR : COUNT_COLOUR;
+      // Drawn after the faded building, so the answer is never dimmed by a wall in front of it.
       const material = new THREE.MeshStandardMaterial({
         color: colour, emissive: colour, emissiveIntensity: 0.35, roughness: 0.6, flatShading: true,
-        side: THREE.DoubleSide, transparent: h.tone === "area", opacity: h.tone === "area" ? 0.62 : 1,
+        side: THREE.DoubleSide, transparent: true, opacity: h.tone === "area" ? 0.72 : 1,
         depthWrite: h.tone !== "area",
       });
       const mesh = new THREE.Mesh(geometry, material);
+      mesh.renderOrder = 2;
       mesh.position.copy(centre);
       mesh.visible = false;
-      mesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(geometry, 28),
-        new THREE.LineBasicMaterial({ color: h.tone === "area" ? 0x173a8c : 0x8f1d06 })));
+      const outline = new THREE.LineSegments(new THREE.EdgesGeometry(geometry, 28),
+        new THREE.LineBasicMaterial({ color: h.tone === "area" ? 0x173a8c : 0x8f1d06, transparent: true }));
+      outline.renderOrder = 3;
+      mesh.add(outline);
       let label: CSS2DObject | undefined;
       if (withLabels) {
         const tag = document.createElement("div");
