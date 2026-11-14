@@ -880,7 +880,7 @@ export function Viewer3D({ meshUrl, groundUrl, imageUrl, highlights, visible, ho
   return (
     <div className={`viewer3d${theme === "night" ? " night" : ""}${crowded ? " crowded" : ""}${tags ? "" : " untagged"}`}>
       <div ref={host} className="stage3d" />
-      {status === "loading" && !bare && <div className="viewer-wait">Building the model…</div>}
+      {status === "loading" && !bare && <div className="viewer-wait">Building the model… <small>the first time, a large model takes a minute or two</small></div>}
       {status !== "loading" && status !== "ready" && !bare && <div className="viewer-wait">{status}</div>}
       {status === "ready" && !bare && <div className="viewer-info">{info} · drag to orbit, scroll to zoom</div>}
       {status === "ready" && !bare && storeys > 1 && (

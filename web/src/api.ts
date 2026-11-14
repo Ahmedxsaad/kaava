@@ -112,7 +112,8 @@ export interface AskResult {
   interpreted: string | null;
   basis?: string | null;  // what the vision model said about how it got there
   trace?: { title: string; body: string }[];  // what the program and the model each did, in order
-  restated: { question: string | null; reason: string; model: string; cost_eur: number; latency_ms: number } | null;
+  // `twice`: the question was read as a query two times, independently, and the readings had to match.
+  restated: { question: string | null; reason: string; model: string; cost_eur: number; latency_ms: number; twice?: boolean } | null;
   checks: { name: string; value: number | string }[];
   verified_because: {
     family: string;
@@ -272,9 +273,18 @@ export const api = {
   enhanced: (drawing: string) => get<{ url: string }>(`/api/enhanced?drawing=${encodeURIComponent(drawing)}`),
   partners: () => get<{ gemini: boolean; claude: boolean; cloudinary: boolean; elevenlabs: boolean }>("/api/partners"),
   async mesh(url: string): Promise<ArrayBuffer> {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(await message(res));
-    return res.arrayBuffer();
+    // A large model's mesh is built by the server the first time it is asked for, which can take
+    // minutes. Until it is there the server answers "still building" (202) and the page asks again.
+    for (let tries = 0; tries < 120; tries++) {
+      const res = await fetch(url);
+      if (res.status === 202) {
+        await new Promise((wait) => window.setTimeout(wait, 2500));
+        continue;
+      }
+      if (!res.ok) throw new Error(await message(res));
+      return res.arrayBuffer();
+    }
+    throw new Error("the model took too long to build; open the drawing again to pick it up");
   },
 };
 

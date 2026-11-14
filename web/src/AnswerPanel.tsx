@@ -87,7 +87,9 @@ function why(result: AskResult): { title: string; text: React.ReactNode } {
     if (result.restated?.question) {
       return {
         title: "Why it needs a look",
-        text: `The question was restated by a language model (${result.restated.model}) before the engine could read it. The number is computed from the drawing as usual, but an answer that rests on a model's reading of the question is never marked Verified.`,
+        text: result.restated.twice
+          ? `A language model (${result.restated.model}) read the question twice, independently, and both readings asked for the same thing. The number is computed from the drawing as usual, but an answer that rests on a model's reading of the question is never marked Verified.`
+          : `The question was restated by a language model (${result.restated.model}) before the engine could read it. The number is computed from the drawing as usual, but an answer that rests on a model's reading of the question is never marked Verified.`,
       };
     }
     return {
@@ -153,8 +155,12 @@ function Steps({ result, marked }: { result: AskResult; marked: number }) {
   const steps: { title: string; body?: React.ReactNode }[] = [
     {
       title: "Read the question",
-      body: result.restated?.question
+      body: result.restated?.question && result.restated.twice
+        ? <>Read by {result.restated.model} twice, independently, as: “{result.restated.question}”. Both readings matched, so the engine ran it.</>
+        : result.restated?.question
         ? <>Restated by {result.restated.model} as “{result.restated.question}”{result.interpreted ? <>, then read as: {result.interpreted}</> : null}</>
+        : result.restated?.twice
+          ? <>{result.restated.reason}</>
         : result.restated
           ? <>The rules could not read it, and {result.restated.model} found no engine question for it: {result.restated.reason}</>
           : result.interpreted ?? (method.startsWith("vlm") ? "Passed on as written, with the counting rules it states." : "Taken as written."),

@@ -116,18 +116,32 @@ def _centre(positions: array, elements: list[dict]) -> tuple[list[float], list[f
 # ----------------------------------------------------------------- IFC
 
 
+def _too_large_note(ifc_path: Path) -> Path:
+    """Where it is noted that a model is too large to show: found out once, not on every visit."""
+    return _cache_file(ifc_path, "ifc").with_suffix(".toolarge")
+
+
 def is_built(ifc_path: Path) -> bool:
-    """Whether a model's mesh is already in the cache (building one can take minutes)."""
-    return _cache_file(ifc_path, "ifc").is_file()
+    """Whether a model's mesh is settled: in the cache, or known to be too large (building one can take minutes)."""
+    return _cache_file(ifc_path, "ifc").is_file() or _too_large_note(ifc_path).is_file()
 
 
 def ifc_mesh(ifc_path: Path) -> bytes:
     """The whole model as one binary mesh, from cache when possible."""
-    cache = _cache_file(ifc_path, "ifc")
+    cache, note = _cache_file(ifc_path, "ifc"), _too_large_note(ifc_path)
+    if cache.is_file():  # no need to wait behind another model that is being built
+        return cache.read_bytes()
+    if note.is_file():
+        raise MeshTooLarge(note.read_text(encoding="utf-8"))
     with _build_lock:
         if cache.is_file():
             return cache.read_bytes()
-        data = _build_ifc_mesh(ifc_path)
+        try:
+            data = _build_ifc_mesh(ifc_path)
+        except MeshTooLarge as exc:
+            note.parent.mkdir(parents=True, exist_ok=True)
+            note.write_text(str(exc), encoding="utf-8")
+            raise
         cache.parent.mkdir(parents=True, exist_ok=True)
         cache.write_bytes(data)
         return data

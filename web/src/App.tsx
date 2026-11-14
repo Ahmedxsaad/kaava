@@ -224,8 +224,9 @@ export function App() {
       return;
     }
     // By the clock, not by counting frames: a busy page must not slow the reading down.
-    const duration = Math.min(2000, Math.max(800, units.length * 60));
-    const began = performance.now() + 350;
+    const duration = Math.min(4200, Math.max(1300, units.length * 120));
+    const looking = result.evidence.some((e) => e.kind === "context" && e.points) ? 1500 : 450;  // the searched rooms first
+    const began = performance.now() + looking;
     setProgress(0);
     const timer = window.setInterval(() => {
       const p = Math.min(1, Math.max(0, (performance.now() - began) / duration));
@@ -249,6 +250,18 @@ export function App() {
   const visible = useMemo(() => new Set(sequence.order.slice(0, revealed).map((p) => p.n)), [sequence, revealed]);
   const settled = !result || progress >= 1;
   const sweepAt = settled ? null : reading.at;
+  // What is happening on the drawing right now, in words: the search, then the count, then what it came to.
+  const caption = useMemo(() => {
+    if (!result || result.answer === null) return null;
+    const total = units.length;
+    if (!total) return null;
+    const area = units.some((e) => e.points);
+    const what = area ? `room${total === 1 ? "" : "s"}` : `item${total === 1 ? "" : "s"}`;
+    if (settled) return area ? `${total} ${what} measured and drawn. Click one to leave it out.` : `${total} ${what} marked and counted. Click one to leave it out.`;
+    const looked = result.evidence.filter((e) => e.kind === "context" && e.points).length;  // rooms that were searched
+    if (progress <= 0) return looked ? `Searching the ${looked} room${looked === 1 ? "" : "s"} the question names…` : "Reading the drawing…";
+    return area ? `Measuring: ${revealed} of ${total} ${what}` : `Counting: ${revealed} of ${total}`;
+  }, [result, units, settled, progress, revealed]);
 
   // "Make blueprints talk", literally: the drawing answers aloud, in the first person, once the evidence is in.
   useEffect(() => {
@@ -299,7 +312,9 @@ export function App() {
 
   // One mark per place: an outline that is in the file twice is drawn once, and says so.
   const drawable = useMemo(() => (result ? places(result.evidence.filter((e) => e.kind !== "context" && (e.bbox || e.points || e.x !== undefined))) : []), [result]);
-  const context = useMemo(() => (result ? result.evidence.filter((e) => e.kind === "context" && e.bbox) : []), [result]);
+  const context = useMemo(() => (result ? result.evidence.filter((e) => e.kind === "context" && (e.bbox || e.points)) : []), [result]);
+  // The rooms an answer searched are shown from the first moment: the search is seen before the count.
+  const searched = useMemo(() => context.filter((e) => e.points), [context]);
   const highlights: Highlight[] = useMemo(() => {
     if (!result) return [];
     return places(units).flatMap((e) => {
@@ -560,11 +575,12 @@ export function App() {
               )}
             </header>
             <div className={`stage mode-${effective}`}>
+              {result && caption && <p className={`doing${settled ? " done" : ""}`} key={`${focusKey}|${settled}`}><i />{caption}</p>}
               {detail && has2d && effective !== "3d" && (
                 <Viewer2D
                   detail={detail}
                   evidence={drawable}
-                  context={settled ? context : []}
+                  context={settled ? context : searched}
                   visible={visible}
                   sweepAt={sweepAt}
                   excluded={excluded}

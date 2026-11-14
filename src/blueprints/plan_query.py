@@ -63,6 +63,29 @@ ITEM_QUESTIONS = {
     "apartment": "How many apartments (residential units) are shown on this floor plan?",
 }
 NEAR_M = 0.3  # a door this close to a room's outline opens into that room
+ON_ROOM = 0.5  # ...when at least this share of its length runs along the room
+
+
+def lies_on(item: dict, shape) -> bool:
+    """Whether a door or a window sits in a wall of this room.
+
+    Being near the room is not enough: a window in the next wall along touches the room's corner
+    with its end. So the test is on the item's length: the line along its middle, end to end, must
+    run beside the room for at least half of it.
+    """
+    from shapely.geometry import LineString, Polygon, box
+
+    outline = item.get("polygon") or []
+    body = Polygon(outline) if len(outline) >= 3 else box(*item["bbox"])
+    frame = body.minimum_rotated_rectangle
+    if frame.geom_type != "Polygon":
+        return shape.exterior.distance(body) < NEAR_M
+    a, b, c, d = list(frame.exterior.coords)[:4]
+    mid = lambda p, q: ((p[0] + q[0]) / 2, (p[1] + q[1]) / 2)  # noqa: E731
+    axis = max(LineString([mid(a, b), mid(c, d)]), LineString([mid(b, c), mid(d, a)]), key=lambda line: line.length)
+    if axis.length == 0:
+        return shape.exterior.distance(body) < NEAR_M
+    return axis.intersection(shape.buffer(NEAR_M)).length >= ON_ROOM * axis.length
 
 
 @dataclass
@@ -120,6 +143,28 @@ def ask(question: str, index: dict, llm, is_outdoor) -> Query:
                  cannot=bool(data.get("cannot")) or measure == "none", reading=str(data.get("reading") or ""), **common)
 
 
+def same_reading(a: Query, b: Query) -> bool:
+    """Whether two readings of a question ask the engine for the same thing."""
+    if a.cannot or b.cannot:
+        return a.cannot and b.cannot
+    if a.measure != b.measure or sorted(a.rooms) != sorted(b.rooms):
+        return False
+    if a.measure == "count_items":
+        return a.item == b.item
+    return a.measure == "count_rooms" or a.combine == b.combine
+
+
+def ask_twice(question: str, index: dict, llm, is_outdoor) -> tuple[Query, Query]:
+    """Two independent readings of the question, side by side. Only readings that agree are run."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first, second = pool.map(lambda _: ask(question, index, llm, is_outdoor), range(2))
+    first.cost_usd += second.cost_usd
+    first.latency_ms = max(first.latency_ms, second.latency_ms)
+    return first, second
+
+
 def in_words(query: Query, index: dict) -> str:
     """The query as a sentence: what was actually answered."""
     rooms = rooms_of(index)
@@ -136,14 +181,26 @@ def in_words(query: Query, index: dict) -> str:
 
 def run(query: Query, index: dict, dxf, common: dict) -> Answer:
     """Run a query over rooms on the plan's geometry. `dxf` is the DXF engine module (its room evidence and sums)."""
-    from shapely.geometry import Polygon, box
-
     rooms = [rooms_of(index)[i] for i in query.rooms]
     words = in_words(query, index)
     if not rooms:
         return Answer.decline("the question names no room that is on this plan", **common)
+    answer = _run(query, rooms, index, dxf, words, common)
+    if answer.answer is not None:
+        # What was done, in order, for whoever wants to follow it.
+        names = sorted({r.get("name") or "(no name)" for r in rooms})
+        searched = [f"Looked through the plan's {len(rooms_of(index))} rooms",
+                    f"{len(rooms)} match: {', '.join(names[:8])}" + (" …" if len(names) > 8 else "")]
+        answer.meta = {**answer.meta, "trace": [["Read the question as a query, twice", f"{words}. Both readings ask for the same thing."],
+                                                searched, *answer.meta.get("trace", [])]}
+    return answer
+
+
+def _run(query: Query, rooms: list[dict], index: dict, dxf, words: str, common: dict) -> Answer:
+    from shapely.geometry import Polygon, box
+
     if query.measure == "count_items":
-        return _items_of(query, rooms, index, words, common)
+        return _items_of(query, rooms, index, dxf, words, common)
     if query.measure == "count_rooms":
         return Answer(answer=len(rooms), unit="count", state=CHECK, confidence=0.6,
                       evidence=[dxf._room_evidence(r) for r in rooms],
@@ -161,7 +218,7 @@ def run(query: Query, index: dict, dxf, common: dict) -> Answer:
             if key in seen:  # an outline the file holds twice is one door
                 continue
             seen.add(key)
-            if shape.exterior.distance(box(*door["bbox"])) < NEAR_M:
+            if lies_on(door, shape):
                 x0, y0, x1, y1 = door["bbox"]
                 doors.append({"bbox": door["bbox"], "width": max(x1 - x0, y1 - y0)})
         return total, doors
@@ -204,7 +261,7 @@ def run(query: Query, index: dict, dxf, common: dict) -> Answer:
         if query.combine == "sum":
             working = (f"{walls:.2f} m of wall − {gone:.2f} m of {len(openings)} door opening"
                        f"{'' if len(openings) == 1 else 's'} = {total:.2f} m")
-        note = " The wall length is each room's outline (and the rings of any holes in it); a door opens into a room when its outline lies on the room's."
+        note = " The wall length is each room's outline (and the rings of any holes in it); a door opens into a room when it sits in one of the room's walls."
     elif query.measure == "perimeter":
         note = " The length of each room's outline, with the rings of any holes in it."
     evidence.append({"kind": "formula", "text": working})
@@ -213,10 +270,10 @@ def run(query: Query, index: dict, dxf, common: dict) -> Answer:
                   meta={"interpreted": words, "checks": {"rooms measured": len(rooms)}}, **common)
 
 
-def _items_of(query: Query, rooms: list[dict], index: dict, words: str, common: dict) -> Answer:
+def _items_of(query: Query, rooms: list[dict], index: dict, dxf, words: str, common: dict) -> Answer:
     """The doors, windows or fixtures that belong to certain rooms.
 
-    A door or a window belongs to a room when its outline lies on the room's outline (a door between two
+    A door or a window belongs to a room when it sits in one of the room's walls (a door between two
     rooms belongs to both, and is counted once). A fixture belongs to the room it stands in.
     """
     from shapely.geometry import Point, Polygon, box
@@ -226,19 +283,21 @@ def _items_of(query: Query, rooms: list[dict], index: dict, words: str, common: 
         f" and {len(rooms) - 8} more" if len(rooms) > 8 else "")
     if query.item in ("door", "window"):
         source = index.get("doors" if query.item == "door" else "windows", [])
-        found, seen = [], set()
+        found, aside, seen = [], [], set()
         for item in source:
             key = tuple(item["bbox"])
             if key in seen:  # an outline the file holds twice is one item
                 continue
-            if any(shape.exterior.distance(box(*item["bbox"])) < NEAR_M for shape in shapes):
-                seen.add(key)
+            seen.add(key)
+            if any(lies_on(item, shape) for shape in shapes):
                 found.append(item)
-        how = f"whose outline lies on the outline of {'that room' if len(rooms) == 1 else 'one of those rooms'}"
+            elif any(shape.exterior.distance(box(*item["bbox"])) < NEAR_M for shape in shapes):
+                aside.append(item)  # it ends at a corner of one of the rooms, and sits in another room's wall
+        how = f"that sit in a wall of {'that room' if len(rooms) == 1 else 'one of those rooms'}"
     elif query.item == "apartment":
         return Answer.decline("apartments are counted for the whole plan, not for certain rooms", **common)
     else:
-        found = []
+        found, aside = [], []
         for item in index.get("fixtures", []):
             if item["kind"] != query.item:
                 continue
@@ -247,9 +306,30 @@ def _items_of(query: Query, rooms: list[dict], index: dict, words: str, common: 
                 found.append(item)
         how = f"standing in {'that room' if len(rooms) == 1 else 'those rooms'}"
     evidence = [{"kind": "box", "space": "dxf_m", "bbox": item["bbox"], "label": query.item} for item in found]
+    # The rooms that were searched are drawn too, so the search can be seen and not only its result.
+    searched = [{**dxf._room_evidence(room), "role": "searched"} for room in rooms]
+    whole = (len({tuple(i["bbox"]) for i in index.get("doors" if query.item == "door" else "windows", [])})
+             if query.item in ("door", "window") else sum(1 for f in index.get("fixtures", []) if f["kind"] == query.item))
+    trace = [[f"Went through the plan's {whole} {query.item}s", f"kept the ones {how}: {len(found)}"]]
+    left = ""
+    if aside:
+        # Shown on the drawing as well: what was looked at and left out is part of the working.
+        left = (f" {len(aside)} more only touch{'es' if len(aside) == 1 else ''} a corner of "
+                f"{'that room' if len(rooms) == 1 else 'those rooms'} and sit{'s' if len(aside) == 1 else ''} "
+                f"in another room's wall: left out.")
+        trace.append([f"Left out {len(aside)} that only touch{'es' if len(aside) == 1 else ''} a corner",
+                      f"a {query.item} belongs to a room when at least half of its length runs along one of the room's walls; "
+                      f"{'this one does' if len(aside) == 1 else 'these do'} not"])
+        searched += [{"kind": "box", "space": "dxf_m", "bbox": item["bbox"], "role": "left out: only touches a corner"}
+                     for item in aside]
+    trace.append(["Counted what was kept", f"{len(found)} {query.item}{'' if len(found) == 1 else 's'}"])
+    checks = {"rooms asked about": len(rooms), f"{query.item}s on the whole floor": whole,
+              f"{query.item}s that belong to the rooms asked about": len(found)}
+    if aside:
+        checks[f"{query.item}s that only touch a corner, left out"] = len(aside)
     return Answer(answer=len(found), unit="count", state=CHECK, confidence=0.6,
-                  evidence=evidence or [{"kind": "formula", "text": f"no {query.item} belongs to {names}"}],
-                  explanation=f"{len(found)} {query.item}{'' if len(found) == 1 else 's'} {how}: {names}. "
-                              f"The plan holds {len({tuple(i['bbox']) for i in index.get('doors' if query.item == 'door' else 'windows', [])}) if query.item in ('door', 'window') else sum(1 for f in index.get('fixtures', []) if f['kind'] == query.item)} on the whole floor.",
-                  meta={"interpreted": words, "checks": {"rooms asked about": len(rooms), f"{query.item}s that belong to them": len(found)}},
+                  evidence=(evidence or [{"kind": "formula", "text": f"no {query.item} belongs to {names}"}]) + searched,
+                  explanation=f"{len(found)} {query.item}{'' if len(found) == 1 else 's'} {how}: {names}.{left} "
+                              f"The plan holds {whole} on the whole floor.",
+                  meta={"interpreted": words, "trace": trace, "checks": checks},
                   **common)

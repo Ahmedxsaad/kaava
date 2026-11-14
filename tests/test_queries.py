@@ -85,6 +85,18 @@ def test_the_windows_doors_and_fixtures_of_named_rooms_are_the_ones_that_belong_
     assert none.state == DECLINED
 
 
+def test_a_window_that_only_touches_a_rooms_corner_belongs_to_the_room_whose_wall_it_is_in():
+    # A window in the Bagno's wall that starts 5 cm from the corner it shares with the second Stanza.
+    plan = {**PLAN, "windows": PLAN["windows"] + [{"bbox": [8.05, -0.1, 9.55, 0.1]}]}
+    stanze = plan_query.run(plan_query.Query(measure="count_items", item="window", rooms=[0, 1]), plan, dxf, dict(COMMON))
+    assert stanze.answer == 2 and "1 more only touches a corner" in stanze.explanation
+    left_out = [e for e in stanze.evidence if e.get("role") == "left out: only touches a corner"]
+    assert [e["bbox"] for e in left_out] == [[8.05, -0.1, 9.55, 0.1]]   # looked at, drawn, and not counted
+    assert any(step[0].startswith("Left out 1") for step in stanze.meta["trace"])
+    bagno = plan_query.run(plan_query.Query(measure="count_items", item="window", rooms=[2]), plan, dxf, dict(COMMON))
+    assert bagno.answer == 2 and "touch" not in bagno.explanation
+
+
 MODEL = {
     "storeys": [{"name": "Ground"}, {"name": "First"}],
     "kinds": {"door": [{"id": "d1", "cls": "IfcDoor", "name": "D", "storey": 0}, {"id": "d2", "cls": "IfcDoor", "name": "D", "storey": 1},
@@ -114,3 +126,18 @@ def test_a_model_question_is_run_on_the_models_storeys_elements_and_rooms():
 def test_a_model_question_that_names_a_room_is_not_a_count_over_the_storey():
     assert ifc.room_named("how many doors does the corridor have on 'Ground'", MODEL) == "CORRIDOR"
     assert ifc.room_named("How many doors are shown on the floor plan of 'Ground'?", MODEL) is None
+
+
+def test_two_readings_already_paid_for_are_kept_and_a_changed_list_of_rooms_reads_the_question_again(tmp_path, monkeypatch):
+    from blueprints import config, server
+
+    monkeypatch.setattr(config, "REPO_ROOT", tmp_path)
+    pair = (plan_query.Query(measure="count_items", item="window", rooms=[0, 1], reading="windows of the Stanza rooms", cost_usd=0.004),
+            plan_query.Query(measure="count_items", item="window", rooms=[1, 0], reading="the same"))
+    assert server._kept_readings(plan_query, "plans/a", "windows in stanza", "rooms: 0, 1, 2") is None
+    server._keep_readings(plan_query, "plans/a", "windows in stanza", "rooms: 0, 1, 2", pair)
+    first, second = server._kept_readings(plan_query, "plans/a", "windows in stanza", "rooms: 0, 1, 2")
+    assert first == pair[0] and second == pair[1] and plan_query.same_reading(first, second)
+    # room ids are places in the list the model was shown: another list, another reading
+    assert server._kept_readings(plan_query, "plans/a", "windows in stanza", "rooms: 0, 1") is None
+    assert server._kept_readings(plan_query, "plans/a", "doors in stanza", "rooms: 0, 1, 2") is None

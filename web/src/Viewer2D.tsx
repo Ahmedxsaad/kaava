@@ -348,8 +348,14 @@ export function Viewer2D(props: Props) {
             );
           })()}
 
+          {/* The rooms that were searched for what the answer counts: outlined first, before any item is marked. */}
+          {context.filter((item) => item.points).map((item, i) => (
+            <polygon key={`searched-${i}`} className="searched" points={pointList(item.points!)} strokeWidth={1.4 * u}
+              strokeDasharray={`${5 * u} ${3.5 * u}`} style={{ animationDelay: `${Math.min(i * 45, 700)}ms` }} />
+          ))}
+
           {/* Text the engine read and did not count: the type line it checked against, labels it doubted. */}
-          {context.map((item, i) => {
+          {context.filter((item) => item.bbox).map((item, i) => {
             const [x0, y0, x1, y1] = item.bbox!;
             const doubt = item.role === "not counted";
             const second = item.role === "marked by the vision model";  // the same thing, counted a second way
@@ -358,6 +364,8 @@ export function Viewer2D(props: Props) {
             const measured = opening || item.role === "scale bar";
             // Boxed in one of two passes over the tiles: doubtful, drawn dashed, not counted.
             const once = item.role === "boxed in one pass only";
+            // Looked at and not counted: a window that sits in the next room's wall.
+            const leftOut = (item.role ?? "").startsWith("left out");
             const pad = opening ? 1.5 * u : 4 * u;
             if (once) {
               return (
@@ -369,11 +377,12 @@ export function Viewer2D(props: Props) {
               );
             }
             return (
-              <g key={`ctx-${i}`} className={`aside${doubt ? " doubt" : ""}${second ? " second" : ""}${opening ? " opening" : ""}${measured && !opening ? " ruler" : ""}`}>
+              <g key={`ctx-${i}`} className={`aside${doubt ? " doubt" : ""}${second ? " second" : ""}${opening ? " opening" : ""}${measured && !opening ? " ruler" : ""}${leftOut ? " leftout" : ""}`}>
+                {leftOut && <title>{item.role}</title>}
                 <rect x={x0 - pad} y={y0 - pad} width={x1 - x0 + 2 * pad} height={y1 - y0 + 2 * pad} rx={opening ? u : 3 * u}
                   strokeWidth={1.2 * u} strokeDasharray={measured ? undefined : `${4 * u} ${3 * u}`} />
                 <g transform={`translate(${(x0 + x1) / 2},${y1 + 18 * u}) scale(${u})`}>
-                  <Plate text={doubt ? "not counted" : second ? "vision model" : measured ? item.label || item.role! : item.role ?? ""} className="quiet" />
+                  <Plate text={doubt ? "not counted" : leftOut ? "left out" : second ? "vision model" : measured ? item.label || item.role! : item.role ?? ""} className="quiet" />
                 </g>
               </g>
             );

@@ -126,6 +126,30 @@ def ask(question: str, index: dict, drawing_name: str, llm) -> Query:
                  cannot=bool(data.get("cannot")) or measure == "none", reading=str(data.get("reading") or ""), **common)
 
 
+def same_reading(a: Query, b: Query) -> bool:
+    """Whether two readings of a question ask the engine for the same thing."""
+    if a.cannot or b.cannot:
+        return a.cannot and b.cannot
+    if a.measure != b.measure:
+        return False
+    if a.measure == "count_storeys":
+        return True
+    if a.measure == "count_elements":
+        return a.kind == b.kind and sorted(a.storeys) == sorted(b.storeys)
+    return sorted(a.rooms) == sorted(b.rooms) and (a.measure == "count_rooms" or a.combine == b.combine)
+
+
+def ask_twice(question: str, index: dict, drawing_name: str, llm) -> tuple[Query, Query]:
+    """Two independent readings of the question, side by side. Only readings that agree are run."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first, second = pool.map(lambda _: ask(question, index, drawing_name, llm), range(2))
+    first.cost_usd += second.cost_usd
+    first.latency_ms = max(first.latency_ms, second.latency_ms)
+    return first, second
+
+
 def in_words(query: Query, index: dict) -> str:
     """The query as a sentence: what was actually answered."""
     storeys = index.get("storeys", [])
@@ -147,6 +171,24 @@ def in_words(query: Query, index: dict) -> str:
 
 def run(query: Query, index: dict, element, common: dict) -> Answer:
     """Run a query on the model's index. `element` makes an evidence entry from an indexed item (ifc._element)."""
+    answer = _run(query, index, element, common)
+    if answer.answer is not None:
+        # What was done, in order, for whoever wants to follow it.
+        words = in_words(query, index)
+        if query.measure == "count_elements":
+            held = len(index.get("kinds", {}).get(query.kind, []))
+            steps = [[f"Went through the model's {held} {query.kind} elements", f"kept the ones the query asks for: {answer.answer}"],
+                     ["Counted what was kept", f"{answer.answer} {query.kind} elements"]]
+        elif query.measure == "count_storeys":
+            steps = [["Listed the model's storeys", answer.evidence[0].get("text", "")]]
+        else:
+            steps = [[f"Looked through the model's {len(index.get('spaces', []))} rooms", f"{len(query.rooms)} selected"],
+                     ["Read each selected room's floor area from its geometry", answer.explanation]]
+        answer.meta = {**answer.meta, "trace": [["Read the question as a query, twice", f"{words}. Both readings ask for the same thing."], *steps]}
+    return answer
+
+
+def _run(query: Query, index: dict, element, common: dict) -> Answer:
     storeys = index.get("storeys", [])
     words = in_words(query, index)
     cut = " The model has more rooms than could be listed to the language model." if query.cut else ""

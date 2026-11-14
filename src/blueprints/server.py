@@ -767,6 +767,18 @@ class Service:
             return make_vlm("anthropic", "claude-sonnet-5-5", "low")
         return None
 
+    def _reader_model(self):
+        """The language model that reads a free-form question as a query: the stronger one, since a wrong
+        reading gives a wrong answer however exact the engine is. Gemini 4 Carbon when its key is set."""
+        from dotenv import load_dotenv
+
+        from .vlm import make_vlm
+
+        load_dotenv(config.REPO_ROOT / ".env")
+        if os.environ.get("GEMINI_API_KEY"):
+            return make_vlm("gemini", "gemini-4-carbon", "low")
+        return self._text_model()
+
     def _restate(self, asked: Question, drawing: str, engine: str) -> tuple[Answer | None, dict | None]:
         """Have a language model restate a question the engine could not read, then ask the engine again.
 
@@ -818,30 +830,57 @@ class Service:
         ans.cost_usd = (ans.cost_usd or 0.0) + restated.cost_usd
         return ans, note
 
+    def _two_readings(self, module, drawing: str, question: str, listing: str, ask) -> tuple | None:
+        """Both readings of a free-form question, and whether they were paid for just now.
+
+        A pair of readings already paid for is kept on disk (keyed by the question, the instructions and
+        the list of contents the model was shown), so asking it again costs nothing and takes no time,
+        after a restart too. Only the reading is kept: the count or the measurement is redone each time.
+        """
+        key = (drawing, "query: " + question)
+        if key not in self._restated:
+            kept = _kept_readings(module, drawing, question, listing)
+            if kept is not None:
+                self._restated[key] = kept
+        if key in self._restated:
+            return (*self._restated[key], False)
+        if self.spent_eur >= self.budget_eur:
+            return None
+        llm = self._reader_model()
+        if llm is None:
+            return None
+        pair = ask(llm)
+        if not pair[0].error and not pair[1].error:  # a reading that failed is asked again next time
+            self._restated[key] = pair
+            _keep_readings(module, drawing, question, listing, pair)
+        return (*pair, True)
+
     def _query_plan(self, asked: Question, drawing: str) -> tuple[Answer | None, dict | None]:
         """A question no phrasing of the engine fits, read as a query over the plan's own rooms (plan_query.py).
 
         The language model selects rooms from the plan's inventory and says what to measure; the engine
         measures them on the geometry. Returns the answer (never Verified) and a note for the UI.
         """
-        key = (drawing, "query: " + asked.question)
-        if self.spent_eur >= self.budget_eur and key not in self._restated:
-            return None, None
         try:
-            llm = self._text_model()
             index = dxf_index.load_index(self.ds.abspath(self.files_of(drawing)[".dxf"]))
-            fresh = key not in self._restated
-            if llm is None and fresh:
-                return None, None
-            if fresh:
-                self._restated[key] = plan_query.ask(asked.question, index, llm, dxf.is_outdoor)
-            query = self._restated[key]
+            read = self._two_readings(plan_query, drawing, asked.question, plan_query.inventory(index, dxf.is_outdoor),
+                                      lambda llm: plan_query.ask_twice(asked.question, index, llm, dxf.is_outdoor))
         except (FatalEngineError, KeyError):
             return None, None
+        if read is None:
+            return None, None
+        query, second, fresh = read
+        if not query.error and not second.error and not plan_query.same_reading(query, second):
+            # Two readings of the question that differ: no number, and both readings are said.
+            one = plan_query.in_words(query, index) if not query.cannot else f"it cannot be answered ({query.reading})"
+            two = plan_query.in_words(second, index) if not second.cannot else f"it cannot be answered ({second.reading})"
+            query = plan_query.Query(cannot=True, model=query.model, cost_usd=query.cost_usd, latency_ms=query.latency_ms,
+                                     reading=f"The question can be read two ways: (1) {one}; (2) {two}. "
+                                             f"Say which rooms you mean, by name or number.")
         cost = query.cost_usd if fresh else 0.0
         if fresh:
             self.spent_eur += config.usd_to_eur(cost)
-        note = {"question": None, "reason": query.reading, "model": query.model,
+        note = {"question": None, "reason": query.reading, "model": query.model, "twice": True,
                 "cost_eur": round(config.usd_to_eur(cost), 6), "latency_ms": round(query.latency_ms if fresh else 0.0, 1)}
         if query.error or query.cannot:
             return None, note
@@ -865,25 +904,27 @@ class Service:
         The language model selects storeys, element kinds or rooms from the model's inventory; the engine
         counts and measures them. Returns the answer (never Verified) and a note for the UI.
         """
-        key = (drawing, "query: " + asked.question)
-        if self.spent_eur >= self.budget_eur and key not in self._restated:
-            return None, None
         try:
-            llm = self._text_model()
             model_file = self.model_of(drawing)
             index = ifc_index.load_index(self.ds.abspath(model_file))
-            fresh = key not in self._restated
-            if llm is None and fresh:
-                return None, None
-            if fresh:
-                self._restated[key] = model_query.ask(asked.question, index, PurePosixPath(drawing).name, llm)
-            query = self._restated[key]
+            name = PurePosixPath(drawing).name
+            read = self._two_readings(model_query, drawing, asked.question, model_query.inventory(index, name)[0],
+                                      lambda llm: model_query.ask_twice(asked.question, index, name, llm))
         except (FatalEngineError, KeyError, TypeError):
             return None, None
+        if read is None:
+            return None, None
+        query, second, fresh = read
+        if not query.error and not second.error and not model_query.same_reading(query, second):
+            one = model_query.in_words(query, index) if not query.cannot else f"it cannot be answered ({query.reading})"
+            two = model_query.in_words(second, index) if not second.cannot else f"it cannot be answered ({second.reading})"
+            query = model_query.Query(cannot=True, model=query.model, cost_usd=query.cost_usd, latency_ms=query.latency_ms,
+                                      reading=f"The question can be read two ways: (1) {one}; (2) {two}. "
+                                              f"Name the storey or the rooms you mean.")
         cost = query.cost_usd if fresh else 0.0
         if fresh:
             self.spent_eur += config.usd_to_eur(cost)
-        note = {"question": None, "reason": query.reading, "model": query.model,
+        note = {"question": None, "reason": query.reading, "model": query.model, "twice": True,
                 "cost_eur": round(config.usd_to_eur(cost), 6), "latency_ms": round(query.latency_ms if fresh else 0.0, 1)}
         if query.error or query.cannot:
             return None, note
@@ -1074,6 +1115,11 @@ class Service:
                             "label": item.get("name") or item.get("label") or item.get("class", ""),
                             **{k: item[k] for k in ("area_m2", "volume_m3", "length_m", "storey") if k in item},
                             **self._on_plan(drawing, view, item["id"])})
+            elif space == "dxf_m" and kind == "polygon" and item.get("role"):
+                # Shown, not counted: a room that was searched for the items the answer counts.
+                if view.kind == "plan":
+                    out.append({"kind": "context", "role": item["role"], "label": item.get("label", ""),
+                                "points": [view.px(x, y) for x, y in item["points"]]})
             elif space == "dxf_m" and kind == "polygon":
                 n += 1
                 ref = _room_ref(index, item["points"])
@@ -1287,6 +1333,33 @@ def _sheets_bench() -> dict:
     return out
 
 
+def _readings_file(module, drawing: str, question: str, listing: str) -> Path:
+    """Where the two readings of a free-form question are kept. New instructions, or a drawing whose
+    contents list differently, give a new file: a reading names rooms by their place in that list."""
+    stamp = hashlib.sha1(f"{module.__name__}\x1f{module.SYSTEM}\x1f{listing}".encode("utf-8")).hexdigest()[:10]
+    digest = hashlib.sha1(f"{drawing}\x1f{question}".encode("utf-8")).hexdigest()[:20]
+    return config.REPO_ROOT / "cache" / "readings" / f"{digest}-{stamp}.json"
+
+
+def _kept_readings(module, drawing: str, question: str, listing: str):
+    store = _readings_file(module, drawing, question, listing)
+    if not store.is_file():
+        return None
+    try:
+        first, second = json.loads(store.read_text(encoding="utf-8"))
+        return module.Query(**first), module.Query(**second)
+    except (ValueError, TypeError):
+        return None  # written by an older version: read the question again
+
+
+def _keep_readings(module, drawing: str, question: str, listing: str, pair) -> None:
+    from dataclasses import asdict
+
+    store = _readings_file(module, drawing, question, listing)
+    store.parent.mkdir(parents=True, exist_ok=True)
+    store.write_text(json.dumps([asdict(pair[0]), asdict(pair[1])], ensure_ascii=False), encoding="utf-8")
+
+
 def _kept_file(q: Question) -> Path:
     """Where a model's answer to this question is kept. A brought-in drawing's path is a hash of its content."""
     digest = hashlib.sha1(f"{q.path}\x1f{q.question}".encode("utf-8")).hexdigest()[:20]
@@ -1408,12 +1481,38 @@ def create_app(dataset_root: Path | str | None = None) -> FastAPI:
         return FileResponse(path, media_type="image/png", headers={"Cache-Control": "max-age=86400"})
 
     @app.get("/api/mesh")
-    def mesh_of(drawing: str):
+    def mesh_of(drawing: str, response: Response):
         need(drawing)
         model = service.model_of(drawing)
         try:
             if model:
-                data = mesh.ifc_mesh(service.ds.abspath(model))
+                path = service.ds.abspath(model)
+                if not mesh.is_built(path):
+                    # Building a large model's mesh takes minutes the first time: longer than a proxy
+                    # lets one request live. It is built on its own; the page asks again until it is there.
+                    with service.lock:
+                        job = service._flights.get(f"mesh:{path}")
+                        if job is None:
+                            job = service._flights[f"mesh:{path}"] = {"done": threading.Event(), "failed": None}
+
+                            def build(job=job, path=path):
+                                try:
+                                    mesh.ifc_mesh(path)
+                                except Exception as exc:
+                                    job["failed"] = exc
+                                finally:
+                                    job["finished"] = time.time()
+                                    job["done"].set()
+
+                            threading.Thread(target=build, daemon=True).start()
+                    if not job["done"].wait(min(WAIT_FOR_MODEL_S, 40)):
+                        response.status_code = 202
+                        return {"pending": True}
+                    if job["failed"] is not None:
+                        with service.lock:
+                            service._flights.pop(f"mesh:{path}", None)
+                        raise job["failed"]
+                data = mesh.ifc_mesh(path)
             elif ".dxf" in service.files_of(drawing):
                 data = mesh.plan_mesh(service.ds.abspath(service.files_of(drawing)[".dxf"]))
             else:

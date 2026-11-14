@@ -98,6 +98,25 @@ export function How({ onOpen }: { onOpen(stop: Stop): void }) {
   cannot_tell:  true | false                              // "this sheet does not let me answer"
   basis:        "one or two sentences"
 }                                                         // there is no field for the answer`}</pre>
+          <h3 className="how-sub">A question in your own words, on a plan or a model</h3>
+          <p>
+            The exact engines read a fixed set of phrasings. Anything else ("the windows in Stanza", "the area of the
+            Essen and the Reduit together") goes to the language model with the drawing's own list of rooms, storeys and
+            items. It gives back a query: which rooms, and what to count or measure. The engine runs the query on the
+            geometry and draws the rooms it searched before the items it counted.
+          </p>
+          <pre className="how-schema">{`query = {
+  measure:  area | perimeter | baseboard | count_rooms | count_items
+  rooms:    [ ids from the drawing's own list ]            // "Stanza" -> the 13 rooms with that name
+  item:     door | window | toilet | ...
+  combine:  sum | largest | smallest | average
+  cannot:   true | false                                   // "this drawing does not hold that"
+}                                                          // again, no field for the answer`}</pre>
+          <p className="how-after">
+            The question is read twice, independently. Two readings that differ give no number, and both readings are
+            shown. A door or a window belongs to a room when at least half of its length runs along one of the room's
+            walls; one that only touches a corner is drawn as left out. These answers are never marked Verified.
+          </p>
         </section>
 
         <section className="n-card">
