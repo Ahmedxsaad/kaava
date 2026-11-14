@@ -1,13 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
-import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
-import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
-import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 import { CSS2DObject, CSS2DRenderer } from "three/examples/jsm/renderers/CSS2DRenderer.js";
 import { api } from "./api";
-import type { Theme } from "./Viewer2D";
 
 export interface Highlight {
   id: string;
@@ -19,7 +14,6 @@ interface Props {
   meshUrl: string;
   groundUrl: string | null;  // where the plan image lies under the model, if it is lined up
   imageUrl: string | null;
-  theme: Theme;
   highlights: Highlight[];
   visible: Set<number>;
   hover: number | null;
@@ -87,18 +81,17 @@ function styleOf(cls: string): Style {
   return { kind: "other", paper: 0x86aaa3 };
 }
 
+// A white architectural model: soft shading, fine dark edges, one warm accent for the answer.
 const LOOK = {
-  blueprint: {
-    background: 0x0b2a63, face: 0x8fbcff, faceOpacity: 0.13, edge: 0xdcebff, edgeOpacity: 0.78, grid: 0x6fa0ea,
-    count: new THREE.Color(0xff5a2e), area: new THREE.Color(0x38d6ff), off: new THREE.Color(0x7f93b8),
-    countEdge: 0xffd0bd, areaEdge: 0xd6f7ff, glow: 2.3, sheet: "#12408f",
-  },
-  paper: {
-    background: 0xe9e5db, face: 0xffffff, faceOpacity: 1, edge: 0x1f242b, edgeOpacity: 0.42, grid: 0xb9b3a4,
-    count: new THREE.Color(0xff5a36), area: new THREE.Color(0x2f6fe4), off: new THREE.Color(0x9a968c),
-    countEdge: 0x8f1d06, areaEdge: 0x173a8c, glow: 1, sheet: "#ffffff",
-  },
-} as const;
+  background: 0xfafbfb, edge: 0x2a302b, edgeOpacity: 0.26, grid: 0xdfe2e0,
+  count: new THREE.Color(0xc46103), area: new THREE.Color(0xe8843a), off: new THREE.Color(0xa9b0a9),
+  countEdge: 0x7a3a00, areaEdge: 0xa65100, sheet: "#ffffff",
+};
+// Face colours: nearly white, with glass and floors only a shade apart.
+const FACE: Record<string, number> = {
+  wall: 0xffffff, slab: 0xf3f4f3, floor: 0xf6f7f6, glass: 0xe6eef2, door: 0xefebe3, furniture: 0xededec,
+  stair: 0xeaecea, frame: 0xe6e8e6, fixture: 0xe9eef1, proxy: 0xededec, other: 0xe7ebe8, space: 0xe8843a, site: 0xededec,
+};
 
 const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 const easeOutBack = (t: number) => 1 + 2.2 * Math.pow(t - 1, 3) + 1.2 * Math.pow(t - 1, 2);
@@ -137,22 +130,21 @@ interface Stage {
   spin(on: boolean): void;
 }
 
-export function Viewer3D({ meshUrl, groundUrl, imageUrl, theme, highlights, visible, hover, focus, excluded, focusKey }: Props) {
+export function Viewer3D({ meshUrl, groundUrl, imageUrl, highlights, visible, hover, focus, excluded, focusKey }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const stage = useRef<Stage | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | string>("loading");
   const [info, setInfo] = useState("");
   const [exploded, setExploded] = useState<boolean | null>(null);  // null: decided by the answer
   const [storeys, setStoreys] = useState(0);
-  const look = LOOK[theme];
+  const look = LOOK;
 
-  // ---- scene, once per mesh and theme
+  // ---- scene, once per mesh
   useEffect(() => {
     const el = host.current;
     if (!el) return;
     let disposed = false;
     setStatus("loading");
-    const blueprint = theme === "blueprint";
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -171,17 +163,13 @@ export function Viewer3D({ meshUrl, groundUrl, imageUrl, theme, highlights, visi
     controls.dampingFactor = 0.08;
     controls.maxPolarAngle = Math.PI * 0.495;
     controls.autoRotateSpeed = 0.55;
-    scene.add(new THREE.HemisphereLight(0xffffff, 0xb9b2a2, 1.15));
-    const sun = new THREE.DirectionalLight(0xffffff, 1.5);
-    sun.position.set(0.6, 1, 0.45);
+    scene.add(new THREE.HemisphereLight(0xffffff, 0xe6e8e6, 1.5));
+    const sun = new THREE.DirectionalLight(0xffffff, 1.15);
+    sun.position.set(0.55, 1, 0.4);
     scene.add(sun);
-
-    // The counted elements glow: only colours brighter than white reach the bloom pass.
-    const composer = new EffectComposer(renderer);
-    composer.addPass(new RenderPass(scene, camera));
-    const bloom = new UnrealBloomPass(new THREE.Vector2(el.clientWidth, el.clientHeight), blueprint ? 0.85 : 0, 0.55, 1.0);
-    if (blueprint) composer.addPass(bloom);
-    composer.addPass(new OutputPass());
+    const fill = new THREE.DirectionalLight(0xffffff, 0.35);
+    fill.position.set(-0.6, 0.5, -0.7);
+    scene.add(fill);
 
     let flight: { t0: number; ms: number; p0: THREE.Vector3; p1: THREE.Vector3; q0: THREE.Vector3; q1: THREE.Vector3; then?: () => void } | null = null;
     let rise: { t0: number; ms: number } | null = null;
@@ -245,7 +233,7 @@ export function Viewer3D({ meshUrl, groundUrl, imageUrl, theme, highlights, visi
       controls.update();
       if (!dirty) return;
       dirty = false;
-      composer.render();
+      renderer.render(scene, camera);
       labels.render(scene, camera);
     };
     frame = requestAnimationFrame(tick);
@@ -253,7 +241,6 @@ export function Viewer3D({ meshUrl, groundUrl, imageUrl, theme, highlights, visi
     const observer = new ResizeObserver(() => {
       const w = el.clientWidth, h = Math.max(el.clientHeight, 1);
       renderer.setSize(w, h);
-      composer.setSize(w, h);
       labels.setSize(w, h);
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
@@ -295,17 +282,11 @@ export function Viewer3D({ meshUrl, groundUrl, imageUrl, theme, highlights, visi
         const geometry = new THREE.BufferGeometry();
         geometry.setAttribute("position", shared);
         geometry.setIndex(new THREE.BufferAttribute(index, 1));
-        // On the blueprint the building is drawn in line: faint faces, bright edges.
-        const material = blueprint
-          ? new THREE.MeshBasicMaterial({
-              color: look.face, transparent: true, opacity: withEdges ? look.faceOpacity : 0.3, depthWrite: false,
-              side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1,
-            })
-          : new THREE.MeshStandardMaterial({
-              color: group.style.paper, roughness: 0.92, metalness: 0, flatShading: true, side: THREE.DoubleSide,
-              transparent: !!group.style.glass, opacity: group.style.glass ? 0.35 : 1, depthWrite: !group.style.glass,
-              polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1,
-            });
+        const material = new THREE.MeshStandardMaterial({
+          color: FACE[group.style.kind] ?? FACE.other, roughness: 0.95, metalness: 0, flatShading: true, side: THREE.DoubleSide,
+          transparent: !!group.style.glass, opacity: group.style.glass ? 0.4 : 1, depthWrite: !group.style.glass,
+          polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1,
+        });
         const mesh = new THREE.Mesh(geometry, material);
         mesh.visible = !group.style.hidden;
         root.add(mesh);
@@ -347,7 +328,7 @@ export function Viewer3D({ meshUrl, groundUrl, imageUrl, theme, highlights, visi
       const grid = new THREE.GridHelper(reach, cells, look.grid, look.grid);
       const gridMaterial = grid.material as THREE.LineBasicMaterial;
       gridMaterial.transparent = true;
-      gridMaterial.opacity = blueprint ? 0.2 : 0.35;
+      gridMaterial.opacity = 0.7;
       grid.position.set((modelBox.min.x + modelBox.max.x) / 2, modelBox.min.y - 0.03, (modelBox.min.z + modelBox.max.z) / 2);
       scene.add(grid);
 
@@ -409,10 +390,6 @@ export function Viewer3D({ meshUrl, groundUrl, imageUrl, theme, highlights, visi
             const ctx = canvas.getContext("2d")!;
             ctx.fillStyle = look.sheet;
             ctx.fillRect(0, 0, canvas.width, canvas.height);
-            if (blueprint) {  // white lines on blue, like the sheet in the plan view
-              ctx.globalCompositeOperation = "screen";
-              ctx.filter = "invert(1) grayscale(1) contrast(1.5)";
-            }
             ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
             const texture = new THREE.CanvasTexture(canvas);
             texture.colorSpace = THREE.SRGBColorSpace;
@@ -447,13 +424,12 @@ export function Viewer3D({ meshUrl, groundUrl, imageUrl, theme, highlights, visi
         if (Array.isArray(material)) material.forEach((m) => m.dispose());
         else material?.dispose?.();
       });
-      composer.dispose();
       renderer.dispose();
       el.replaceChildren();
       stage.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [meshUrl, theme, groundUrl, imageUrl]);
+  }, [meshUrl, groundUrl, imageUrl]);
 
   // ---- the answer's elements: built when the answer (or the mesh) changes
   useEffect(() => {
@@ -467,7 +443,6 @@ export function Viewer3D({ meshUrl, groundUrl, imageUrl, theme, highlights, visi
     s.lit.clear();
     s.items.clear();
     for (const child of [...s.tallies.children]) s.tallies.remove(child);
-    const blueprint = theme === "blueprint";
     const isPlan = s.parsed.header.kind === "plan";
     const active = highlights.length > 0;
     // When the whole answer sits on one storey, the storeys above are lifted off and that
@@ -486,20 +461,14 @@ export function Viewer3D({ meshUrl, groundUrl, imageUrl, theme, highlights, visi
       const same = active && only != null && entry.storey === only;
       const floorUnderSheet = isPlan && s.ground && entry.style.kind === "floor";
       entry.mesh.visible = !entry.style.hidden && !above && !floorUnderSheet;
-      if (blueprint) {
-        const material = entry.mesh.material as THREE.MeshBasicMaterial;
-        material.opacity = !active ? LOOK.blueprint.faceOpacity : same ? 0.1 : 0.035;
-      } else {
-        const material = entry.mesh.material as THREE.MeshStandardMaterial;
-        material.transparent = active || !!entry.style.glass;
-        material.opacity = !active ? (entry.style.glass ? 0.35 : 1) : same ? (entry.style.glass ? 0.22 : 0.5) : 0.07;
-        material.depthWrite = !active && !entry.style.glass;
-        material.needsUpdate = true;
-      }
+      const material = entry.mesh.material as THREE.MeshStandardMaterial;
+      material.transparent = active || !!entry.style.glass;
+      material.opacity = !active ? (entry.style.glass ? 0.4 : 1) : same ? (entry.style.glass ? 0.25 : 0.78) : 0.07;
+      material.depthWrite = !active && !entry.style.glass;
+      material.needsUpdate = true;
       if (entry.edges) {
         entry.edges.visible = entry.mesh.visible;
-        const full = blueprint ? LOOK.blueprint.edgeOpacity : LOOK.paper.edgeOpacity;
-        (entry.edges.material as THREE.LineBasicMaterial).opacity = !active ? full : same ? full * 0.9 : full * 0.28;
+        (entry.edges.material as THREE.LineBasicMaterial).opacity = !active ? LOOK.edgeOpacity : same ? LOOK.edgeOpacity : LOOK.edgeOpacity * 0.28;
       }
     }
 
@@ -520,7 +489,7 @@ export function Viewer3D({ meshUrl, groundUrl, imageUrl, theme, highlights, visi
       return;
     }
 
-    const lookNow = LOOK[theme];
+    const lookNow = LOOK;
     const box = new THREE.Box3();
     const withLabels = highlights.length <= 160;
     for (const h of highlights) {
@@ -537,11 +506,11 @@ export function Viewer3D({ meshUrl, groundUrl, imageUrl, theme, highlights, visi
       const extent = geometry.boundingBox!.clone();  // in model coordinates, before centring
       const centre = extent.getCenter(new THREE.Vector3());
       geometry.translate(-centre.x, -centre.y, -centre.z);  // so it can swell around its own centre
-      const colour = (h.tone === "area" ? lookNow.area : lookNow.count).clone().multiplyScalar(lookNow.glow);
+      const colour = h.tone === "area" ? lookNow.area : lookNow.count;
       // Drawn after the faded building, so the answer is never dimmed by a wall in front of it.
-      const material = new THREE.MeshBasicMaterial({
-        color: colour, side: THREE.DoubleSide, transparent: true, opacity: h.tone === "area" ? 0.6 : 0.96,
-        depthWrite: h.tone !== "area", toneMapped: false,
+      const material = new THREE.MeshStandardMaterial({
+        color: colour, emissive: colour, emissiveIntensity: 0.25, roughness: 0.7, flatShading: true,
+        side: THREE.DoubleSide, transparent: true, opacity: h.tone === "area" ? 0.62 : 1, depthWrite: h.tone !== "area",
       });
       const mesh = new THREE.Mesh(geometry, material);
       mesh.renderOrder = 2;
@@ -581,7 +550,7 @@ export function Viewer3D({ meshUrl, groundUrl, imageUrl, theme, highlights, visi
         tag.append(figure, name);
         const label = new CSS2DObject(tag);
         const rest = (storeyList[storey]?.z ?? 0) + 1.4;
-        label.position.set(s.modelBox.max.x + 1.5, -s.modelBox.min.z + 0.5, rest);
+        label.position.set(s.modelBox.max.x + 4, -s.modelBox.min.z + 2, rest);
         label.userData = { storey, rest };
         s.tallies.add(label);
       }
@@ -594,7 +563,7 @@ export function Viewer3D({ meshUrl, groundUrl, imageUrl, theme, highlights, visi
     }
     s.spin(true);  // a slow turn shows depth; any touch stops it
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focusKey, status, meshUrl, theme, exploded]);
+  }, [focusKey, status, meshUrl, exploded]);
 
   // ---- marked one by one, in step with the plan and the counter
   useEffect(() => {
@@ -608,23 +577,25 @@ export function Viewer3D({ meshUrl, groundUrl, imageUrl, theme, highlights, visi
       if (item.label) item.label.visible = show;
     }
     s.redraw();
-  }, [visible, focusKey, status, theme, exploded]);
+  }, [visible, focusKey, status, exploded]);
 
   useEffect(() => {
     const s = stage.current;
     if (!s) return;
-    const lookNow = LOOK[theme];
+    const lookNow = LOOK;
     for (const [n, item] of s.items) {
-      const material = item.mesh.material as THREE.MeshBasicMaterial;
+      const material = item.mesh.material as THREE.MeshStandardMaterial;
       const off = excluded.has(n);
       const hot = hover === n || focus === n;
       const colour = off ? lookNow.off : item.tone === "area" ? lookNow.area : lookNow.count;
-      material.color.copy(colour).multiplyScalar(off ? 1 : hot ? lookNow.glow * 1.6 : lookNow.glow);
+      material.color.copy(colour);
+      material.emissive.copy(colour);
+      material.emissiveIntensity = off ? 0 : hot ? 0.7 : 0.25;
       item.label?.element.classList.toggle("hot", hot);
       item.label?.element.classList.toggle("off", off);
     }
     s.redraw();
-  }, [hover, focus, excluded, focusKey, status, theme, exploded]);
+  }, [hover, focus, excluded, focusKey, status, exploded]);
 
   // ---- inspecting one item: come down to it
   useEffect(() => {
@@ -639,14 +610,14 @@ export function Viewer3D({ meshUrl, groundUrl, imageUrl, theme, highlights, visi
   }, [focus]);
 
   return (
-    <div className={`viewer3d theme-${theme}`}>
+    <div className="viewer3d">
       <div ref={host} className="stage3d" />
-      {status === "loading" && <div className="viewer-wait">Raising the model…</div>}
+      {status === "loading" && <div className="viewer-wait">Building the model…</div>}
       {status !== "loading" && status !== "ready" && <div className="viewer-wait">{status}</div>}
       {status === "ready" && <div className="viewer-info">{info} · drag to orbit, scroll to zoom</div>}
       {status === "ready" && storeys > 1 && (
-        <div className="viewer-tools upper">
-          <button className={`wide${exploded ? " on" : ""}`} onClick={() => setExploded(!(exploded ?? false))}>
+        <div className="tools upper">
+          <button className={exploded ? "on" : ""} onClick={() => setExploded(!(exploded ?? false))}>
             {exploded ? "Stack storeys" : "Lift storeys apart"}
           </button>
         </div>

@@ -1,12 +1,12 @@
 import { useState } from "react";
 import { type AskResult, type DrawingDetail, type Evidence, euro, formatValue, unitLabel } from "./api";
-import { boxOf, type Theme } from "./Viewer2D";
+import { boxOf } from "./Viewer2D";
 
 interface Props {
   result: AskResult | null;
   asking: boolean;
   error: string | null;
-  shown: number | string | null;  // the value while evidence is still landing
+  shown: number | string | null;  // the value while evidence is still being marked
   settled: boolean;
   adjusted: number | null;  // the value after the reader removed items, if they did
   marked: number;  // how many evidence items have been marked on the sheet so far
@@ -14,7 +14,6 @@ interface Props {
   hover: number | null;
   focus: number | null;
   view: DrawingDetail["view"] | null;
-  theme: Theme;
   starters: string[];  // questions to offer before anything has been asked
   onHover(n: number | null): void;
   onToggle(n: number): void;
@@ -26,17 +25,9 @@ interface Props {
 
 const STATE = {
   verified: { label: "Verified", line: "No need to double-check." },
-  check: { label: "Check this", line: "The evidence is on the drawing." },
+  check: { label: "Check this", line: "The evidence is marked on the drawing." },
   declined: { label: "Can't answer reliably", line: "No answer is better than a wrong one." },
 } as const;
-
-function StateIcon({ state }: { state: keyof typeof STATE }) {
-  if (state === "verified")
-    return <svg viewBox="0 0 24 24" aria-hidden><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" /></svg>;
-  if (state === "check")
-    return <svg viewBox="0 0 24 24" aria-hidden><circle cx="11" cy="11" r="6.2" fill="none" stroke="currentColor" strokeWidth="2.4" /><path d="M16 16l4.5 4.5" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" /></svg>;
-  return <svg viewBox="0 0 24 24" aria-hidden><circle cx="12" cy="12" r="8.2" fill="none" stroke="currentColor" strokeWidth="2.4" /><path d="M6.5 17.5l11-11" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" /></svg>;
-}
 
 const pct = (value: number) => `${(100 * value).toFixed(value < 0.01 ? 2 : 1)}%`;
 const time = (ms: number) => (ms < 1000 ? `${Math.max(1, Math.round(ms))} ms` : `${(ms / 1000).toFixed(1)} s`);
@@ -84,9 +75,26 @@ function why(result: AskResult): { title: string; text: React.ReactNode } {
   return { title: "Why there is no answer", text: result.reason || "The drawing does not support a reliable answer." };
 }
 
-// How the answer was worked out, step by step: the question as read, the method chosen and
-// why, the evidence marked, the checks run, and what the score allows.
-function Trace({ result, marked, settled }: { result: AskResult; marked: number; settled: boolean }) {
+// One counted item, cut out of the drawing itself: a reviewer checks the whole count at a glance.
+function Crop({ item, view }: { item: Evidence; view: DrawingDetail["view"] }) {
+  const box = boxOf(item)!;
+  const side = Math.max(box[2] - box[0], box[3] - box[1]) * 1.9 + Math.max(view.width, view.height) * 0.018 + 16;
+  const cx = (box[0] + box[2]) / 2, cy = (box[1] + box[3]) / 2;
+  const k = 64 / side;
+  return (
+    <i
+      className="crop"
+      style={{
+        backgroundImage: `url(${view.url})`,
+        backgroundSize: `${view.width * k}px ${view.height * k}px`,
+        backgroundPosition: `${-(cx - side / 2) * k}px ${-(cy - side / 2) * k}px`,
+      }}
+    />
+  );
+}
+
+// How the answer was worked out: the question as read, the method and why, the evidence, the checks.
+function Steps({ result, marked }: { result: AskResult; marked: number }) {
   const method = result.method;
   const route = method.startsWith("dxf") ? "This plan comes with a DXF, so its geometry answers the question exactly, at no cost."
     : method.startsWith("ifc") ? "This drawing is a building model, or was rendered from one, so a query on the model answers exactly, at no cost."
@@ -95,15 +103,14 @@ function Trace({ result, marked, settled }: { result: AskResult; marked: number;
     : "No exact engine covers this kind of drawing.";
   const total = result.evidence.filter((e) => e.kind !== "formula" && e.kind !== "context").length;
   const formula = result.evidence.find((e) => e.kind === "formula");
-  const reason = why(result);
-  const steps: { title: string; body?: React.ReactNode; tone?: string }[] = [
-    { title: "Read the question", body: result.interpreted ? <code>{result.interpreted}</code> : method.startsWith("vlm") ? "Passed on as written, with the counting rules it states." : "Taken as written." },
+  const steps: { title: string; body?: React.ReactNode }[] = [
+    { title: "Read the question", body: result.interpreted ?? (method.startsWith("vlm") ? "Passed on as written, with the counting rules it states." : "Taken as written.") },
     { title: `Chose the method: ${result.engine}`, body: route },
   ];
   if (result.answer !== null) {
     steps.push({
       title: total ? `Marked the evidence: ${Math.min(marked, total)} of ${total}` : "Found nothing of this kind",
-      body: formula?.text ?? (total ? "Each item is drawn on the sheet and listed below; any of them can be left out." : undefined),
+      body: formula?.text ?? (total ? "Each item is drawn on the sheet and listed below. Any of them can be left out." : undefined),
     });
     if (result.checks.length) {
       steps.push({
@@ -118,14 +125,13 @@ function Trace({ result, marked, settled }: { result: AskResult; marked: number;
       });
     }
   }
-  if (settled) steps.push({ title: reason.title, body: reason.text, tone: result.state });
   return (
-    <section className="tb-cell trace">
+    <section className="block steps">
       <h3>How it was worked out</h3>
       <ol>
         {steps.map((step, i) => (
-          <li key={step.title.split(":")[0]} className={step.tone ?? ""} style={{ animationDelay: `${Math.min(i, 3) * 0.16}s` }}>
-            <i>{i + 1}</i>
+          <li key={step.title.split(":")[0]}>
+            <i>{String(i + 1).padStart(2, "0")}</i>
             <div>
               <strong>{step.title}</strong>
               {step.body && <div className="body">{step.body}</div>}
@@ -137,51 +143,73 @@ function Trace({ result, marked, settled }: { result: AskResult; marked: number;
   );
 }
 
-// One counted item, cut out of the drawing itself: a reviewer checks the whole count at a glance.
-function Crop({ item, view, theme }: { item: Evidence; view: DrawingDetail["view"]; theme: Theme }) {
-  const box = boxOf(item)!;
-  const side = Math.max(box[2] - box[0], box[3] - box[1]) * 1.9 + Math.max(view.width, view.height) * 0.018 + 16;
-  const cx = (box[0] + box[2]) / 2, cy = (box[1] + box[3]) / 2;
-  const k = 58 / side;
+// This system beside a vision model answering alone: the answer, what it cost, how long it took.
+function Compare({ result }: { result: AskResult }) {
+  const base = result.baseline;
+  const reference = result.reference;
+  const unit = result.unit ?? reference?.unit ?? null;
+  const mark = (status: string | undefined) => (status === "correct" ? "right" : status === "wrong" ? "wrong" : "");
   return (
-    <span className={`crop theme-${theme}`}>
-      <i style={{
-        backgroundImage: `url(${view.url})`,
-        backgroundSize: `${view.width * k}px ${view.height * k}px`,
-        backgroundPosition: `${-(cx - side / 2) * k}px ${-(cy - side / 2) * k}px`,
-      }} />
-    </span>
+    <section className="block compare">
+      <table>
+        <thead>
+          <tr><th /><th>Answer</th><th>Cost</th><th>Time</th></tr>
+        </thead>
+        <tbody>
+          <tr className="ours">
+            <td>{result.engine}{result.replayed_from ? ", logged" : ""}</td>
+            <td className={mark(reference?.status)}>{result.answer === null ? "—" : formatValue(result.answer, unit)}</td>
+            <td>{euro(result.cost_eur)}</td>
+            <td>{time(result.latency_ms)}</td>
+          </tr>
+          {base && (
+            <tr>
+              <td>{base.model ?? "Vision model"} alone</td>
+              <td className={mark(base.status)}>{base.answer === null ? "—" : formatValue(base.answer as number, unit)}</td>
+              <td>{euro(base.cost_eur)}</td>
+              <td>{time(base.latency_ms)}</td>
+            </tr>
+          )}
+          {reference && (
+            <tr className="reference">
+              <td>Dataset's answer</td>
+              <td>{formatValue(reference.answer as number, reference.unit)}</td>
+              <td colSpan={2}>{reference.status === "correct" ? "matches ours" : reference.status === "wrong" ? "differs from ours" : reference.status === "abstained" ? "we did not answer" : "not graded"}</td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </section>
   );
 }
 
-function EvidenceBlock(props: Pick<Props, "excluded" | "hover" | "focus" | "view" | "theme" | "onHover" | "onToggle" | "onFocus"> & { items: Evidence[] }) {
-  const { items, excluded, hover, focus, view, theme, onHover, onToggle, onFocus } = props;
+function EvidenceBlock(props: Pick<Props, "excluded" | "hover" | "focus" | "view" | "onHover" | "onToggle" | "onFocus"> & { items: Evidence[] }) {
+  const { items, excluded, hover, focus, view, onHover, onToggle, onFocus } = props;
   const [all, setAll] = useState(false);
   const countable = items.filter((e) => e.kind !== "formula" && e.kind !== "context");
   const context = items.filter((e) => e.kind === "context");
-  const formula = items.find((e) => e.kind === "formula");
   const measured = countable.some((e) => e.area_m2 != null || e.volume_m3 != null || e.length_m != null);
-  if (!countable.length && !formula && !context.length) return null;
+  if (!countable.length && !context.length) return null;
   const onSheet = !!view?.url && countable.length > 0 && countable.every((e) => boxOf(e));
-  const limit = measured ? 14 : onSheet ? 60 : 90;
+  const limit = measured ? 12 : onSheet ? 48 : 80;
   const visible = all ? countable : countable.slice(0, limit);
   const at = focus !== null ? countable.findIndex((e) => e.n === focus) : -1;
   return (
-    <section className="tb-cell evidence">
-      <h3>
-        Evidence
-        <span>{countable.length ? `${countable.length} item${countable.length === 1 ? "" : "s"} · click one to leave it out` : ""}</span>
-      </h3>
+    <section className="block evidence">
+      <header>
+        <h3>Evidence</h3>
+        {countable.length > 0 && <span>{countable.length} item{countable.length === 1 ? "" : "s"} · select one to leave it out</span>}
+      </header>
       {onSheet && countable.length > 1 && (
         <div className="inspect">
           {at === -1 ? (
-            <button onClick={() => onFocus(countable[0].n!)}>Inspect one by one</button>
+            <button onClick={() => onFocus(countable[0].n!)}>Inspect one by one →</button>
           ) : (
             <>
               <button onClick={() => onFocus(countable[(at - 1 + countable.length) % countable.length].n!)} aria-label="Previous item">←</button>
-              <span><b>{at + 1}</b> of {countable.length}</span>
+              <span>{at + 1} of {countable.length}</span>
               <button onClick={() => onFocus(countable[(at + 1) % countable.length].n!)} aria-label="Next item">→</button>
-              <button className={excluded.has(focus!) ? "on" : ""} onClick={() => onToggle(focus!)}>{excluded.has(focus!) ? "Put back" : "Not one"}</button>
+              <button onClick={() => onToggle(focus!)}>{excluded.has(focus!) ? "Put back" : "Leave out"}</button>
               <button onClick={() => onFocus(null)}>Done</button>
             </>
           )}
@@ -199,9 +227,7 @@ function EvidenceBlock(props: Pick<Props, "excluded" | "hover" | "focus" | "view
             >
               <i>{e.n}</i>
               <span>{e.label || e.cls}</span>
-              <b>
-                {e.area_m2 != null ? `${e.area_m2.toFixed(2)} m²` : e.volume_m3 != null ? `${e.volume_m3.toFixed(2)} m³` : e.length_m != null ? `${e.length_m.toFixed(2)} m` : ""}
-              </b>
+              <b>{e.area_m2 != null ? `${e.area_m2.toFixed(2)} m²` : e.volume_m3 != null ? `${e.volume_m3.toFixed(2)} m³` : e.length_m != null ? `${e.length_m.toFixed(2)} m` : ""}</b>
             </li>
           ))}
         </ul>
@@ -217,7 +243,7 @@ function EvidenceBlock(props: Pick<Props, "excluded" | "hover" | "focus" | "view
               onClick={() => onToggle(e.n!)}
               onDoubleClick={() => onFocus(e.n!)}
             >
-              <Crop item={e} view={view!} theme={theme} />
+              <Crop item={e} view={view!} />
               <em>{e.n}</em>
             </button>
           ))}
@@ -241,11 +267,10 @@ function EvidenceBlock(props: Pick<Props, "excluded" | "hover" | "focus" | "view
       {countable.length > limit && (
         <button className="more" onClick={() => setAll(!all)}>{all ? "Show fewer" : `Show all ${countable.length}`}</button>
       )}
-      {formula && <p className="formula">{formula.text}</p>}
       {context.length > 0 && (
         <ul className="context">
           {context.map((e, i) => (
-            <li key={i} className={e.role === "not counted" ? "doubt" : "support"}>
+            <li key={i}>
               <b>{e.label}</b>
               <span>{e.role === "not counted" ? `read but not counted${e.why ? `: ${e.why}` : ""}` : e.role}</span>
             </li>
@@ -256,139 +281,92 @@ function EvidenceBlock(props: Pick<Props, "excluded" | "hover" | "focus" | "view
   );
 }
 
-// This system against a vision model answering alone: the answer, what it cost, how long it took.
-function Duel({ result }: { result: AskResult }) {
-  const base = result.baseline;
-  const reference = result.reference;
-  const unit = result.unit ?? reference?.unit ?? null;
-  const longest = Math.max(result.latency_ms, base?.latency_ms ?? 0, 1);
-  const verdict = (status: string | undefined) => (status === "correct" ? "right" : status === "wrong" ? "wrong" : "");
-  return (
-    <section className="tb-cell duel">
-      <div className="duel-row ours">
-        <span className="who">{result.engine}{result.replayed_from ? " · logged" : ""}</span>
-        <b className={`said ${verdict(reference?.status)}`}>{result.answer === null ? "—" : formatValue(result.answer, unit)}</b>
-        <b>{euro(result.cost_eur)}</b>
-        <b>{time(result.latency_ms)}</b>
-        <i className="bar"><i style={{ width: `${Math.max(1.5, (100 * result.latency_ms) / longest)}%` }} /></i>
-      </div>
-      {base && (
-        <div className="duel-row theirs">
-          <span className="who">{base.model ?? "Vision model"} alone</span>
-          <b className={`said ${verdict(base.status)}`}>{base.answer === null ? "—" : formatValue(base.answer as number, unit)}</b>
-          <b>{euro(base.cost_eur)}</b>
-          <b>{time(base.latency_ms)}</b>
-          <i className="bar"><i style={{ width: `${Math.max(1.5, (100 * base.latency_ms) / longest)}%` }} /></i>
-        </div>
-      )}
-      {reference && (
-        <div className={`duel-ref ${reference.status}`}>
-          <span>Dataset's answer</span>
-          <b>{formatValue(reference.answer as number, reference.unit)}{unitLabel(reference.unit) ? ` ${unitLabel(reference.unit)}` : ""}</b>
-          <em>{reference.status === "correct" ? "matches" : reference.status === "wrong" ? "differs" : reference.status === "abstained" ? "not answered" : "not graded"}</em>
-        </div>
-      )}
-    </section>
-  );
-}
-
 export function AnswerPanel(props: Props) {
   const { result, asking, error, shown, settled, adjusted, excluded } = props;
   if (error) {
     return (
-      <aside className="panel">
-        <div className="empty"><h2>Something went wrong</h2><p>{error}</p></div>
-      </aside>
+      <div className="answer">
+        <div className="lead"><h2>Something went wrong</h2><p>{error}</p></div>
+      </div>
     );
   }
   if (!result) {
     return (
-      <aside className="panel">
-        <div className={`empty${asking ? " busy" : ""}`}>
-          <span className="eyebrow">Make blueprints talk</span>
-          <h2>{asking ? "Reading the drawing…" : "Ask the drawing."}</h2>
+      <div className="answer">
+        <div className={`lead${asking ? " busy" : ""}`}>
+          <h2>{asking ? "Reading the drawing" : "Ask this drawing anything."}</h2>
           <p>
-            Every answer comes back <b className="s-verified">Verified</b>, <b className="s-check">Check this</b> or{" "}
-            <b className="s-declined">Can't answer reliably</b>, and every counted or measured item is marked on the
-            sheet like a reviewer's red pen. Numbers are computed from geometry and objects, never written by a language model.
+            Counts, areas and volumes are computed from the drawing's own geometry and marked on the sheet, so you can
+            check an answer in seconds. Each one comes back Verified, Check this, or Can't answer reliably.
           </p>
           {!asking && props.starters.length > 0 && (
-            <div className="starters">
-              <h3>Try one</h3>
+            <ul className="starters">
               {props.starters.map((text) => (
-                <button key={text} onClick={() => props.onAsk(text)}>{text}</button>
+                <li key={text}><button onClick={() => props.onAsk(text)}><span>{text}</span><i>→</i></button></li>
               ))}
-            </div>
+            </ul>
           )}
         </div>
-      </aside>
+      </div>
     );
   }
   const state = STATE[result.state];
   const unit = unitLabel(result.unit);
+  const reason = why(result);
   return (
-    <aside className={`panel state-${result.state}${asking ? " stale" : ""}`}>
-      <header className="verdict">
-        <div className="badge"><StateIcon state={result.state} /></div>
-        <div>
-          <strong>{state.label}</strong>
-          <span>{state.line}</span>
-        </div>
-      </header>
+    <article className={`answer state-${result.state}${asking ? " stale" : ""}`}>
+      <p className="asked">{result.question}</p>
 
-      <section className="tb-cell asked">
-        <h3>Question</h3>
-        <p>{result.question}</p>
-      </section>
+      <div className="verdict">
+        <span className="pill"><i />{state.label}</span>
+        <span className="line">{state.line}</span>
+      </div>
 
-      <section className="tb-cell answer">
-        <h3>Answer</h3>
-        <div className="value" aria-live="polite">
-          {result.answer === null ? (
-            <span className="none">—</span>
-          ) : (
-            <>
-              <span className={`figure${settled ? " settled" : ""}`}>{formatValue(shown, result.unit)}</span>
-              {unit && <span className="unit">{unit}</span>}
-            </>
-          )}
-        </div>
-        {adjusted !== null && (
-          <div className="adjusted">
-            Without the {excluded.size} item{excluded.size === 1 ? "" : "s"} you left out:{" "}
-            <b>{formatValue(adjusted, result.unit)}{unit ? ` ${unit}` : ""}</b>
-            <button onClick={props.onRestore}>Put back</button>
-          </div>
+      <div className="figure" aria-live="polite">
+        {result.answer === null ? <span className="none">No number</span> : (
+          <>
+            <span className={settled ? "settled" : ""}>{formatValue(shown, result.unit)}</span>
+            {unit && <em>{unit}</em>}
+          </>
         )}
-        {result.explanation && <p className="explain">{result.explanation}</p>}
-      </section>
+      </div>
+      {result.explanation && <p className="explain">{result.explanation}</p>}
+      {adjusted !== null && (
+        <p className="adjusted">
+          Without the {excluded.size} item{excluded.size === 1 ? "" : "s"} you left out:{" "}
+          <b>{formatValue(adjusted, result.unit)}{unit ? ` ${unit}` : ""}</b>
+          <button onClick={props.onRestore}>Put back</button>
+        </p>
+      )}
 
-      <Duel result={result} />
-
-      <Trace result={result} marked={props.marked} settled={settled} />
-
-      {result.can_use_model && (
-        <section className="tb-cell fallback">
-          <p>
-            {result.answer === null ? "No exact engine covers this question on a scan." : "The printed labels alone are a weak source here."}{" "}
-            A vision model can point at each item for about a cent; its answer is always marked Check this.
-          </p>
-          <button onClick={props.onUseModel} disabled={asking}>Ask the vision model</button>
+      {settled && (
+        <section className="proof">
+          <h3>{reason.title}</h3>
+          <p>{reason.text}</p>
+          {result.can_use_model && (
+            <div className="fallback">
+              <p>
+                {result.answer === null ? "No exact engine covers this question on a scan." : "The printed labels alone are a weak source here."}{" "}
+                A vision model can point at each item for about a cent. Its answer is always marked Check this.
+              </p>
+              <button onClick={props.onUseModel} disabled={asking}>Ask the vision model</button>
+            </div>
+          )}
         </section>
       )}
 
+      <Compare result={result} />
+      <Steps result={result} marked={props.marked} />
       <EvidenceBlock
         items={result.evidence}
         excluded={excluded}
         hover={props.hover}
         focus={props.focus}
         view={props.view}
-        theme={props.theme}
         onHover={props.onHover}
         onToggle={props.onToggle}
         onFocus={props.onFocus}
       />
-
-    </aside>
+    </article>
   );
 }

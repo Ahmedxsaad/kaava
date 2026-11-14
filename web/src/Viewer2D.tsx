@@ -1,12 +1,9 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { DrawingDetail, Evidence, Room } from "./api";
-import { centroid, cloud, loop, squiggle, strike, trace } from "./sketch";
-
-export type Theme = "blueprint" | "paper";
+import { type Box, centroid, pointList } from "./geometry";
 
 interface Props {
   detail: DrawingDetail;
-  theme: Theme;
   evidence: Evidence[];
   context: Evidence[];
   visible: Set<number>;  // the items marked so far
@@ -20,6 +17,12 @@ interface Props {
   onToggle(n: number): void;
 }
 
+interface Transform {
+  k: number;
+  x: number;
+  y: number;
+}
+
 type Tool = "move" | "measure" | "loupe";
 
 interface Measure {
@@ -27,15 +30,7 @@ interface Measure {
   b: [number, number];
 }
 
-const LENS = 210;  // the loupe's diameter on screen
-
-interface Transform {
-  k: number;
-  x: number;
-  y: number;
-}
-
-type Box = [number, number, number, number];
+const LENS = 200;  // the loupe's diameter on screen
 
 export function boxOf(item: Evidence): Box | null {
   if (item.points?.length) {
@@ -64,10 +59,19 @@ function boundsOf(items: Evidence[]): Box | null {
   return Number.isFinite(x0) ? [x0, y0, x1, y1] : null;
 }
 
-const points = (list: [number, number][]) => list.map((p) => p.join(",")).join(" ");
+// A small label on a white plate, sized to its text.
+function Plate({ text, className = "" }: { text: string; className?: string }) {
+  const w = text.length * 6.5 + 16;
+  return (
+    <g className={`plate ${className}`}>
+      <rect x={-w / 2} y={-11} width={w} height={22} rx={11} />
+      <text textAnchor="middle" y={4}>{text}</text>
+    </g>
+  );
+}
 
 export function Viewer2D(props: Props) {
-  const { detail, theme, evidence, context, visible, sweepAt, excluded, hover, focus, leftOut, focusKey, onHover, onToggle } = props;
+  const { detail, evidence, context, visible, sweepAt, excluded, hover, focus, leftOut, focusKey, onHover, onToggle } = props;
   const frame = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [t, setT] = useState<Transform>({ k: 1, x: 0, y: 0 });
@@ -81,6 +85,7 @@ export function Viewer2D(props: Props) {
   const [lens, setLens] = useState<{ x: number; y: number } | null>(null);
   const { width, height, url } = detail.view;
   const pxPerM = detail.view.px_per_m;
+
   // Screen position -> image pixels.
   const toImage = (e: { clientX: number; clientY: number }): [number, number] => {
     const rect = frame.current!.getBoundingClientRect();
@@ -89,7 +94,7 @@ export function Viewer2D(props: Props) {
   useEffect(() => { setMeasures([]); setDrawing(null); setTool("move"); }, [detail.id]);
 
   const fitTo = useCallback(
-    (box: Box | null, pad = 0.9): Transform => {
+    (box: Box | null, pad = 0.88): Transform => {
       const [x0, y0, x1, y1] = box ?? [0, 0, width, height];
       const bw = Math.max(x1 - x0, 1), bh = Math.max(y1 - y0, 1);
       const k = Math.min((size.w * pad) / bw, (size.h * pad) / bh, 8);
@@ -140,7 +145,7 @@ export function Viewer2D(props: Props) {
     const item = evidence.find((e) => e.n === focus);
     const box = item && boxOf(item);
     if (!box) return;
-    const reach = Math.max(box[2] - box[0], box[3] - box[1]) * 3 + 0.16 * Math.max(width, height);  // the item and the rooms around it
+    const reach = Math.max(box[2] - box[0], box[3] - box[1]) * 3 + 0.16 * Math.max(width, height);
     const cx = (box[0] + box[2]) / 2, cy = (box[1] + box[3]) / 2;
     glide(fitTo([cx - reach / 2, cy - reach / 2, cx + reach / 2, cy + reach / 2], 1));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -170,12 +175,13 @@ export function Viewer2D(props: Props) {
 
   const shown = useMemo(() => evidence.filter((e) => visible.has(e.n ?? -1)), [evidence, visible]);
   const u = 1 / t.k;  // one screen pixel, in image pixels
-  const pen = 2.5 * u;
+  const single = pxPerM && evidence.filter((e) => e.points).length === 1 ? shown.find((e) => e.points) : undefined;
 
   return (
     <div
       ref={frame}
-      className={`viewer2d theme-${theme}`}
+      className="viewer2d"
+      data-tool={tool}
       onPointerDown={(e) => {
         if (e.button !== 0) return;
         (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
@@ -215,7 +221,6 @@ export function Viewer2D(props: Props) {
       }}
       onPointerLeave={() => setLens(null)}
       onDoubleClick={() => tool === "move" && glide(fitTo(null))}
-      data-tool={tool}
     >
       <div
         className={`sheet${gliding ? " gliding" : ""}${loaded ? " loaded" : ""}`}
@@ -224,10 +229,10 @@ export function Viewer2D(props: Props) {
         {url && <img src={url} width={width} height={height} alt="" draggable={false} onLoad={() => setLoaded(true)} />}
         <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
           <defs>
-            <pattern id="hatch" width={11 * u} height={11 * u} patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-              <line x1="0" y1="0" x2="0" y2={11 * u} className="hatch-line" strokeWidth={2.2 * u} />
+            <pattern id="hatch" width={9 * u} height={9 * u} patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+              <line x1="0" y1="0" x2="0" y2={9 * u} className="hatch-line" strokeWidth={1.2 * u} />
             </pattern>
-            <linearGradient id="sweep-glow" x1="0" x2="1" y1="0" y2="0">
+            <linearGradient id="sweep-trail" x1="0" x2="1" y1="0" y2="0">
               <stop offset="0" className="sweep-stop-0" />
               <stop offset="1" className="sweep-stop-1" />
             </linearGradient>
@@ -238,9 +243,8 @@ export function Viewer2D(props: Props) {
             <polygon
               key={room.ref}
               className="room-hit"
-              points={points(room.points)}
-              strokeWidth={1.5 * u}
-              strokeDasharray={`${5 * u} ${4 * u}`}
+              points={pointList(room.points)}
+              strokeWidth={1.2 * u}
               onPointerMove={(e) => {
                 if (drag.current?.moved || tool !== "move") return;
                 const rect = frame.current!.getBoundingClientRect();
@@ -255,126 +259,113 @@ export function Viewer2D(props: Props) {
             const [cx, cy] = centroid(room.points);
             return (
               <g key={room.ref} className="left-out">
-                <polygon points={points(room.points)} fill="url(#hatch)" strokeWidth={1.6 * u} strokeDasharray={`${6 * u} ${5 * u}`} />
-                <g transform={`translate(${cx},${cy}) scale(${u})`}><text className="hand note" textAnchor="middle" y={-12}>left out</text></g>
+                <polygon points={pointList(room.points)} fill="url(#hatch)" strokeWidth={1.1 * u} strokeDasharray={`${4 * u} ${4 * u}`} />
+                <g transform={`translate(${cx},${cy}) scale(${u})`}><Plate text="not included" className="quiet" /></g>
               </g>
             );
           })}
 
-          {/* Measured rooms: coloured in with a highlighter, traced with the pen, the area written in. */}
+          {/* Measured rooms: a tint, a fine outline, and the area on a plate below the room's own text. */}
           {shown.filter((e) => e.points).map((item) => {
             const [cx, mid] = centroid(item.points!);
             const ys = item.points!.map((q) => q[1]);
-            const xs = item.points!.map((q) => q[0]);
-            const cy = mid + 0.24 * (Math.max(...ys) - Math.min(...ys));  // below the room's own printed text
-            // Written to fit the room: a cupboard gets small figures, a living room large ones.
-            const across = (Math.max(...xs) - Math.min(...xs)) * t.k;
-            const lettering = Math.min(22, Math.max(10.5, across / 5.2));
-            const off = excluded.has(item.n!);
+            const cy = mid + 0.24 * (Math.max(...ys) - Math.min(...ys));
             return (
               <g
                 key={`room-${item.n}`}
-                className={`mark room${hover === item.n ? " hot" : ""}${off ? " off" : ""}`}
+                className={`mark room${hover === item.n || focus === item.n ? " hot" : ""}${excluded.has(item.n!) ? " off" : ""}`}
                 onPointerEnter={() => onHover(item.n!)}
                 onPointerLeave={() => onHover(null)}
-                onClick={() => !drag.current?.moved && onToggle(item.n!)}
+                onClick={() => !drag.current?.moved && tool === "move" && onToggle(item.n!)}
               >
-                <polygon className="highlighter" points={points(item.points!)} />
-                <path className="ink draw" pathLength={1} d={trace(item.points!, item.n!, 1.6 * u)} strokeWidth={pen} />
+                <polygon className="tint" points={pointList(item.points!)} />
+                <polygon className="edge" points={pointList(item.points!)} strokeWidth={1.6 * u} />
                 <g transform={`translate(${cx},${cy}) scale(${u})`}>
-                  <text className="hand figure" textAnchor="middle" y={lettering / 3} style={{ fontSize: lettering, strokeWidth: lettering / 4.5 }}>
-                    {item.area_m2 != null ? `${item.area_m2.toFixed(2)} m²` : item.n}
-                  </text>
+                  <Plate text={item.area_m2 != null ? `${item.area_m2.toFixed(2)} m²` : String(item.n)} />
                 </g>
               </g>
             );
           })}
+
+          {/* One measured room: its overall width and depth, as on a dimensioned drawing. */}
+          {single && pxPerM && (() => {
+            const xs = single.points!.map((q) => q[0]), ys = single.points!.map((q) => q[1]);
+            const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+            const gap = 18 * u, tick = 4 * u;
+            return (
+              <g className="dims">
+                <path strokeWidth={1.1 * u}
+                  d={`M${x0} ${y0 - gap}H${x1}M${x0} ${y0 - gap - tick}v${2 * tick}M${x1} ${y0 - gap - tick}v${2 * tick}` +
+                     `M${x0 - gap} ${y0}V${y1}M${x0 - gap - tick} ${y0}h${2 * tick}M${x0 - gap - tick} ${y1}h${2 * tick}`} />
+                <g transform={`translate(${(x0 + x1) / 2},${y0 - gap}) scale(${u})`}><Plate text={`${((x1 - x0) / pxPerM).toFixed(2)} m`} className="quiet" /></g>
+                <g transform={`translate(${x0 - gap},${(y0 + y1) / 2}) scale(${u})`}><Plate text={`${((y1 - y0) / pxPerM).toFixed(2)} m`} className="quiet" /></g>
+              </g>
+            );
+          })()}
 
           {/* Text the engine read and did not count: the type line it checked against, labels it doubted. */}
           {context.map((item, i) => {
             const [x0, y0, x1, y1] = item.bbox!;
             const doubt = item.role === "not counted";
             return (
-              <g key={`ctx-${i}`} className={`mark aside${doubt ? " doubt" : ""}`}>
-                {doubt
-                  ? <path className="ink draw" pathLength={1} d={cloud(x0 - 6 * u, y0 - 6 * u, x1 + 6 * u, y1 + 6 * u, 7 * u)} strokeWidth={1.8 * u} />
-                  : <path className="ink draw" pathLength={1} d={squiggle(x0 - 2 * u, x1 + 2 * u, y1 + 5 * u, 2.2 * u)} strokeWidth={1.8 * u} />}
-                <g transform={`translate(${(x0 + x1) / 2},${doubt ? y0 - 9 * u : y1 + 9 * u}) scale(${u})`}>
-                  <text className="hand note" textAnchor="middle" y={doubt ? -4 : 16}>{doubt ? "not counted" : item.role}</text>
+              <g key={`ctx-${i}`} className={`aside${doubt ? " doubt" : ""}`}>
+                <rect x={x0 - 4 * u} y={y0 - 4 * u} width={x1 - x0 + 8 * u} height={y1 - y0 + 8 * u} rx={3 * u}
+                  strokeWidth={1.2 * u} strokeDasharray={`${4 * u} ${3 * u}`} />
+                <g transform={`translate(${(x0 + x1) / 2},${y1 + 18 * u}) scale(${u})`}>
+                  <Plate text={doubt ? "not counted" : item.role ?? ""} className="quiet" />
                 </g>
               </g>
             );
           })}
 
-          {/* Counted items: a loop round each one and its number, as a reviewer would mark them. */}
+          {/* Counted items: a fine ring round each one and its number. */}
           {shown.filter((e) => !e.points).map((item) => {
             const box = boxOf(item)!;
-            const cx = (box[0] + box[2]) / 2, cy = (box[1] + box[3]) / 2;
-            const rx = Math.max(((box[2] - box[0]) / 2) * 1.5, 12 * u), ry = Math.max(((box[3] - box[1]) / 2) * 1.5, 12 * u);
-            const off = excluded.has(item.n!);
+            const isPoint = box[0] === box[2] && box[1] === box[3];
+            const pad = isPoint ? 11 * u : 4 * u;
+            const x0 = box[0] - pad, y0 = box[1] - pad, w = box[2] - box[0] + 2 * pad, h = box[3] - box[1] + 2 * pad;
+            const hot = hover === item.n || focus === item.n;
             return (
               <g
-                key={`loop-${item.n}`}
-                className={`mark count${hover === item.n ? " hot" : ""}${off ? " off" : ""}`}
+                key={`count-${item.n}`}
+                className={`mark count${hot ? " hot" : ""}${excluded.has(item.n!) ? " off" : ""}`}
                 onPointerEnter={() => onHover(item.n!)}
                 onPointerLeave={() => onHover(null)}
-                onClick={(e) => { e.stopPropagation(); if (!drag.current?.moved) onToggle(item.n!); }}
+                onClick={(e) => { e.stopPropagation(); if (!drag.current?.moved && tool === "move") onToggle(item.n!); }}
               >
-                <ellipse className="hit" cx={cx} cy={cy} rx={rx * 1.15} ry={ry * 1.15} />
-                <path className="ink draw" pathLength={1} d={loop(cx, cy, rx, ry, item.n!)} strokeWidth={hover === item.n ? pen * 1.7 : pen} />
-                {off && <path className="ink" d={strike(cx, cy, rx * 0.8, ry * 0.8, item.n!)} strokeWidth={pen} />}
-                <g transform={`translate(${cx + rx * 0.78},${cy - ry * 0.78}) scale(${u})`}>
-                  <text className="hand number" x={5} y={-3}>{item.n}</text>
+                <rect className="ring" x={x0} y={y0} width={w} height={h} rx={isPoint ? w / 2 : 3 * u} strokeWidth={(hot ? 2.2 : 1.5) * u} />
+                <g transform={`translate(${x0},${y0}) scale(${u})`}>
+                  <g className="dot">
+                    <circle r={9} />
+                    <text textAnchor="middle" y={3.4} style={{ fontSize: (item.n ?? 0) > 99 ? 8 : 10 }}>{item.n}</text>
+                  </g>
                 </g>
               </g>
             );
           })}
-
-          {/* One measured room: its overall width and depth written beside it, as on a dimensioned drawing. */}
-          {pxPerM && shown.filter((e) => e.points).length === 1 && evidence.filter((e) => e.points).length === 1 && (() => {
-            const room = shown.find((e) => e.points)!;
-            const xs = room.points!.map((q) => q[0]), ys = room.points!.map((q) => q[1]);
-            const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
-            const gap = 16 * u, tick = 5 * u;
-            return (
-              <g className="mark dims">
-                <path className="ink draw" pathLength={1} strokeWidth={1.6 * u}
-                  d={`M${x0} ${y0 - gap}H${x1}M${x0} ${y0 - gap - tick}v${2 * tick}M${x1} ${y0 - gap - tick}v${2 * tick}` +
-                     `M${x0 - gap} ${y0}V${y1}M${x0 - gap - tick} ${y0}h${2 * tick}M${x0 - gap - tick} ${y1}h${2 * tick}`} />
-                <g transform={`translate(${(x0 + x1) / 2},${y0 - gap}) scale(${u})`}>
-                  <text className="hand note" textAnchor="middle" y={-7}>{((x1 - x0) / pxPerM).toFixed(2)} m overall</text>
-                </g>
-                <g transform={`translate(${x0 - gap},${(y0 + y1) / 2}) scale(${u}) rotate(-90)`}>
-                  <text className="hand note" textAnchor="middle" y={-7}>{((y1 - y0) / pxPerM).toFixed(2)} m overall</text>
-                </g>
-              </g>
-            );
-          })()}
 
           {/* The reader's own tape measure. */}
           {pxPerM && [...measures, ...(drawing ? [drawing] : [])].map((m, i) => {
             const dx = m.b[0] - m.a[0], dy = m.b[1] - m.a[1];
             const length = Math.hypot(dx, dy);
             if (length < 1e-6) return null;
-            const nx = (-dy / length) * 6 * u, ny = (dx / length) * 6 * u;
-            let angle = (Math.atan2(dy, dx) * 180) / Math.PI;
-            if (angle > 90 || angle < -90) angle += 180;
+            const nx = (-dy / length) * 5 * u, ny = (dx / length) * 5 * u;
             return (
-              <g key={`tape-${i}`} className="mark tape">
-                <path className="ink" strokeWidth={1.8 * u}
+              <g key={`tape-${i}`} className="tape">
+                <path strokeWidth={1.3 * u}
                   d={`M${m.a[0]} ${m.a[1]}L${m.b[0]} ${m.b[1]}M${m.a[0] - nx} ${m.a[1] - ny}L${m.a[0] + nx} ${m.a[1] + ny}M${m.b[0] - nx} ${m.b[1] - ny}L${m.b[0] + nx} ${m.b[1] + ny}`} />
-                <g transform={`translate(${(m.a[0] + m.b[0]) / 2},${(m.a[1] + m.b[1]) / 2}) scale(${u}) rotate(${angle})`}>
-                  <text className="hand figure" textAnchor="middle" y={-8} style={{ fontSize: 18 }}>{(length / pxPerM).toFixed(2)} m</text>
+                <g transform={`translate(${(m.a[0] + m.b[0]) / 2},${(m.a[1] + m.b[1]) / 2}) scale(${u})`}>
+                  <Plate text={`${(length / pxPerM).toFixed(2)} m`} className="ink" />
                 </g>
               </g>
             );
           })}
 
-          {/* The reading line that sweeps the sheet while items are marked. */}
+          {/* The reading line that crosses the sheet while items are marked. */}
           {sweepAt !== null && (
             <g className="sweep" transform={`translate(${sweepAt},0)`}>
-              <rect x={-90 * u} y={0} width={90 * u} height={height} fill="url(#sweep-glow)" />
-              <line x1={0} y1={0} x2={0} y2={height} strokeWidth={1.6 * u} />
+              <rect x={-70 * u} y={0} width={70 * u} height={height} fill="url(#sweep-trail)" />
+              <line x1={0} y1={0} x2={0} y2={height} strokeWidth={1.2 * u} />
             </g>
           )}
         </svg>
@@ -387,7 +378,7 @@ export function Viewer2D(props: Props) {
         </div>
       )}
 
-      {/* A loupe that shows the drawing as it came, enlarged, whatever the sheet looks like around it. */}
+      {/* A loupe on the drawing, enlarged. */}
       {tool === "loupe" && lens && url && (
         <div
           className="loupe"
@@ -395,24 +386,25 @@ export function Viewer2D(props: Props) {
             left: lens.x - LENS / 2, top: lens.y - LENS / 2, width: LENS, height: LENS,
             backgroundImage: `url(${url})`,
             backgroundSize: `${width * t.k * 2.4}px ${height * t.k * 2.4}px`,
-            backgroundPosition: `${LENS / 2 - ((lens.x - t.x) / t.k) * t.k * 2.4}px ${LENS / 2 - ((lens.y - t.y) / t.k) * t.k * 2.4}px`,
+            backgroundPosition: `${LENS / 2 - (lens.x - t.x) * 2.4}px ${LENS / 2 - (lens.y - t.y) * 2.4}px`,
           }}
         />
       )}
 
-      <div className="viewer-tools" onPointerDown={(e) => e.stopPropagation()} onPointerMove={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
+      <div className="tools" onPointerDown={(e) => e.stopPropagation()} onPointerMove={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
         {pxPerM && (
-          <button className={`wide${tool === "measure" ? " on" : ""}`} onClick={() => setTool(tool === "measure" ? "move" : "measure")} title="Drag on the sheet to measure a length">
+          <button className={tool === "measure" ? "on" : ""} onClick={() => setTool(tool === "measure" ? "move" : "measure")} title="Drag on the sheet to measure a length">
             Measure
           </button>
         )}
-        {measures.length > 0 && <button className="wide" onClick={() => setMeasures([])}>Clear</button>}
-        <button className={`wide${tool === "loupe" ? " on" : ""}`} onClick={() => { setTool(tool === "loupe" ? "move" : "loupe"); setLens(null); setTip(null); }} title="A loupe on the original drawing">
+        {measures.length > 0 && <button onClick={() => setMeasures([])}>Clear</button>}
+        <button className={tool === "loupe" ? "on" : ""} onClick={() => { setTool(tool === "loupe" ? "move" : "loupe"); setLens(null); setTip(null); }} title="Enlarge the drawing under the pointer">
           Loupe
         </button>
-        <button onClick={() => zoomBy(1.5)} aria-label="Zoom in">+</button>
-        <button onClick={() => zoomBy(1 / 1.5)} aria-label="Zoom out">−</button>
-        <button onClick={() => glide(fitTo(null))} aria-label="Fit the sheet" className="wide">Fit</button>
+        <span className="sep" />
+        <button className="glyph" onClick={() => zoomBy(1.5)} aria-label="Zoom in">+</button>
+        <button className="glyph" onClick={() => zoomBy(1 / 1.5)} aria-label="Zoom out">−</button>
+        <button onClick={() => glide(fitTo(null))} aria-label="Fit the sheet">Fit</button>
       </div>
       {detail.view.note && <div className="viewer-note">{detail.view.note}</div>}
     </div>

@@ -13,24 +13,22 @@ page.on("console", (m) => m.type() === "error" && problems.push(`console: ${m.te
 page.on("pageerror", (e) => problems.push(`page: ${e.message}`));
 page.on("response", (r) => r.status() >= 400 && problems.push(`${r.status()} ${r.url()}`));
 await page.goto(base, { waitUntil: "domcontentloaded" });
-await page.waitForSelector(".sheet.loaded, .viewer3d", { timeout: 60000 });
-const stops = await page.evaluate(() => document.querySelectorAll(".tour li").length);
-await page.click(".tour > button");
-const count = await page.evaluate(() => document.querySelectorAll(".tour li").length);
-await page.click(".tour > button");
+await page.waitForSelector(".example", { timeout: 60000 });
+await page.click(".example");
+await page.waitForSelector(".answer .verdict", { timeout: 120000 });
+const count = Number(process.env.STOPS ?? 10);
 for (let i = 0; i < count; i++) {
-  await page.locator("body").press("ArrowRight");
-  await page.waitForSelector(".panel .verdict", { timeout: 120000 });
+  if (i > 0) await page.locator("body").press("ArrowRight");
+  await page.waitForSelector(".answer .verdict", { timeout: 120000 });
   await page.waitForTimeout(5200);
   const seen = await page.evaluate(() => ({
-    state: document.querySelector(".verdict strong")?.textContent,
-    value: document.querySelector(".value")?.textContent,
+    state: document.querySelector(".verdict .pill")?.textContent,
+    value: document.querySelector(".figure")?.textContent,
     question: document.querySelector(".asked")?.textContent?.slice(0, 70),
-    loops: document.querySelectorAll(".mark.count").length,
+    marks: document.querySelectorAll(".mark.count").length,
     rooms: document.querySelectorAll(".mark.room").length,
     tags3d: document.querySelectorAll(".tag3d").length,
     listed: document.querySelectorAll(".contact button, .chips button, .rows li").length,
-    stamp: document.querySelector(".stamp .main")?.textContent,
   }));
   console.log(i + 1, JSON.stringify(seen));
   if (out) await page.screenshot({ path: `${out}/stop-${String(i + 1).padStart(2, "0")}.png` });

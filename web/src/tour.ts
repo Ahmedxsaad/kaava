@@ -10,11 +10,13 @@ export interface Stop {
   drawing: string;
   question: string;
   view?: "plan" | "3d" | "both";
+  card?: boolean;  // shown as a card on the home page
 }
 
 export const TOUR: Stop[] = [
   {
     label: "Count every door on a floor",
+    card: true,
     note: "Geometry · 32 pins · the vision model alone said 22",
     state: "verified",
     drawing: "data/swiss_dwellings/site2150_bldg3001_floor13690",
@@ -22,6 +24,7 @@ export const TOUR: Stop[] = [
   },
   {
     label: "Net area of one apartment",
+    card: true,
     note: "Rooms fill with their m² · balconies hatched out · model alone said 113",
     state: "verified",
     drawing: "data/swiss_dwellings/site3764_bldg5789_floor24598",
@@ -44,6 +47,7 @@ export const TOUR: Stop[] = [
   },
   {
     label: "Doors on one storey of a building model",
+    card: true,
     note: "IFC query · 42 doors lit in 3D · model alone said 39",
     state: "check",
     drawing: "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-04-4-korrus",
@@ -52,6 +56,7 @@ export const TOUR: Stop[] = [
   },
   {
     label: "One room's area, asked in Estonian",
+    card: true,
     note: "IFC query · two geometry sources agree · model alone said 4.6",
     state: "check",
     drawing: "data/ifc_models/bsc-esplanades_1807-ep-ar-v18_plan-04-4-korrus",
@@ -60,6 +65,7 @@ export const TOUR: Stop[] = [
   },
   {
     label: "Bedrooms on a scan, read from its labels",
+    card: true,
     note: "Local OCR · two printed sources agree · free",
     state: "check",
     drawing: "data/cubicasa5k/high_quality_architectural-14441",
@@ -81,6 +87,7 @@ export const TOUR: Stop[] = [
   },
   {
     label: "A question the plan cannot answer",
+    card: true,
     note: "A 2D plan holds no heights, so there is no number to give",
     state: "declined",
     drawing: "data/swiss_dwellings/site2150_bldg3001_floor13690",
