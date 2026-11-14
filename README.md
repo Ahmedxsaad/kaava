@@ -50,6 +50,14 @@ The exact engines read a fixed set of phrasings. Anything else ("the windows in 
 
 ![A question in your own words: read twice as a query, run on the geometry, 13 windows kept and 1 left out](docs/diagrams/04-own-words.png)
 
+### Rooms of any shape, holes, and a scale from standards
+
+On a sheet with no model or DXF, a room is measured as the free space inside its walls: an L-shaped room by its own outline, a corridor around a lift without the lift, a hall without its columns. What was taken out is drawn on the sheet and listed in the working. A plain rectangular room is still measured as its rectangle, and that is checked against the outline.
+
+The scale comes from the best thing on the sheet that has a known size: the graphic scale bar; else a dimension printed on the plan (the model points at it, the program reads the figure itself and finds the ends of the dimension line in the pixels); else the doors, taken as standard doors 0.9 m wide. That last one is an estimate and is shown as one, with the range it leaves open (doors are 0.8 to 1.0 m), and is never Verified. The same standard is a check on the other two: a room's door openings, measured at the sheet's scale, must come out as wide as doors are, or nothing is measured.
+
+Scans get the same treatment, and a 3D view of their own: the walls are found in the scan's pixels (no model is asked), raised on the scan itself, and what an answer counted stands in place on it. A scan whose walls cannot be told from the rest has no 3D view rather than a misleading one.
+
 ### More diagrams
 
 | | |
@@ -80,10 +88,10 @@ All of these are "Check this": which figures matter is the model's judgement, an
 
 | On Stoa's four sheets, 27 questions | Right | Wrong | No number | Cost per question |
 | --- | --- | --- | --- | --- |
-| This system | 26 | 0 | 1 | €0.020 |
+| This system | 27 | 0 | 0 | €0.021 |
 | Gemini alone, from the picture | 26 | 1 | 0 | €0.006 |
 
-These are questions a frontier model can also read off the sheet, and it does: both get 26. The difference is the 27th, the area of the 150 mm slab. Gemini alone answered 64.93 m², adding alcoves it estimated by eye. The system worked it out twice, got 61.69 and 67.69 m², and gave no number, showing both workings. (Our key says 61.69, the plain rectangle; whether a landing belongs to that slab is exactly what the two workings disagreed on.) The system costs about three times as much per question, for the text list it sends and the second working.
+These are questions a frontier model can also read off the sheet, and it mostly does: it gets 26, the system 27. The difference is the area of the 150 mm slab. Gemini alone answered 64.93 m², adding alcoves it estimated by eye. The system computes 6200 × 9950 mm = 61.69 m² from the two printed figures, re-reads both where they are printed, and works it out a second time. In an earlier run its two workings disagreed (61.69 and 67.69 m²) and it gave no number, showing both: that is the behaviour we want when the model is unsure, and why the figure above was 26 right and 1 refused before the last run. The system costs about three times as much per question, for the text list it sends and the second working.
 
 What else is measured, and what is not:
 
@@ -205,6 +213,10 @@ cloudflared tunnel --url http://127.0.0.1:8000            # prints a https://…
 ```
 
 A quick tunnel's address changes each time it starts; a named tunnel on your own domain keeps one (`cloudflared tunnel create`, then `cloudflared tunnel route dns`). `scripts/serve_public.sh start` then runs the Docker image and that tunnel together (over HTTP/2: on some networks the tunnel's default QUIC connections do not hold), `update` rebuilds the image from the current code first, `status` says what is running, and `stop` takes it offline. What a public visitor can do: open the examples (their answers come with the app and cost nothing), ask new questions (model spend stops at the cap, after which the app says so), bring a drawing of up to 25 MB, and have an answer read aloud (400 characters at most). A long answer is worked on by the server on its own and the page asks for it again every few seconds, so it survives the 100 seconds a proxy allows one request. The keys stay in `.env` on the server; the page never sees them.
+
+### On a small VM
+
+`scripts/deploy_vm.sh update` sends the last commit to a VM, builds the image there and restarts the app; `cache` copies this machine's cache (indexes, 3D meshes, kept answers); `status` says what runs. Where the VM is comes from a git-ignored `.env.deploy`. Two vCPUs and 8 GB are enough: the app uses about 220 MB at rest, the exact engines answer in under a millisecond and the vision model runs elsewhere. The 3D mesh of a large IFC model is the one heavy job, so build those once (`scripts/warm_models.py`) and copy the cache.
 
 ### Docker
 

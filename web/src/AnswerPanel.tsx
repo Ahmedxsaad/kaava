@@ -74,6 +74,12 @@ function why(result: AskResult): { title: string; text: React.ReactNode } {
     if (two) {
       return { title: "Why it needs a look", text: `The printed labels and the vision model give the same count. ${notVerified(result)}` };
     }
+    if (result.estimate) {
+      return {
+        title: "Why it needs a look",
+        text: `No scale is printed on this sheet, so the program took one from ${result.estimate.from}. Every length on the sheet was measured in pixels; only the size of that one thing is assumed. If it is a little larger or smaller than assumed, the answer moves within the range shown. An estimate is never marked Verified.`,
+      };
+    }
     if (result.coinciding) {
       const { extra, distinct, outlines, counted } = result.coinciding;
       const what = /door/i.test(result.interpreted ?? result.question) ? "door" : /window/i.test(result.interpreted ?? result.question) ? "window" : "item";
@@ -415,6 +421,10 @@ export function AnswerPanel(props: Props) {
         )}
       </div>
       {result.explanation && <p className="explain">{result.explanation}</p>}
+      {result.estimate && settled && (
+        // The scale was not printed on the sheet: the number rests on a standard, and the range that leaves is said.
+        <p className="twice">An estimate: between <b>{formatValue(result.estimate.low, result.unit)}</b> and <b>{formatValue(result.estimate.high, result.unit)}</b> {result.estimate.unit}. The scale is taken from {result.estimate.from}.</p>
+      )}
       {result.coinciding && settled && (result.coinciding.counted === "distinct" ? (
         <p className="twice">The file holds <b>{result.coinciding.outlines}</b> outlines, {result.coinciding.extra} exactly on another. The dataset's answer counts outlines: {result.coinciding.outlines}.</p>
       ) : (

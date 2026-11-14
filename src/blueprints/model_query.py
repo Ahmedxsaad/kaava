@@ -17,6 +17,8 @@ shown in words and the elements it selected are lit in the model.
 
 from __future__ import annotations
 
+import time
+
 from dataclasses import dataclass, field
 
 from .answer import Answer
@@ -115,7 +117,8 @@ def ask(question: str, index: dict, drawing_name: str, llm) -> Query:
     common = dict(model=getattr(reply, "model", "") or getattr(llm, "model", ""), cut=cut,
                   cost_usd=reply.cost_usd or 0.0, latency_ms=reply.latency_ms or 0.0)
     if reply.error:
-        return Query(cannot=True, reading="the language model could not be reached", error=reply.error, **common)
+        return Query(cannot=True, reading="The language model could not be reached just now (a connection problem, "
+                                          "not something about this model). Ask again.", error=reply.error, **common)
     data = reply.data or {}
     storeys = sorted({i for i in data.get("storeys") or [] if isinstance(i, int) and 0 <= i < len(index.get("storeys", []))})
     rooms = sorted({i for i in data.get("rooms") or [] if isinstance(i, int) and 0 <= i < min(MAX_ROOMS, len(index.get("spaces", [])))})
@@ -143,8 +146,19 @@ def ask_twice(question: str, index: dict, drawing_name: str, llm) -> tuple[Query
     """Two independent readings of the question, side by side. Only readings that agree are run."""
     from concurrent.futures import ThreadPoolExecutor
 
+    def reading(_):
+        got = ask(question, index, drawing_name, llm)
+        for pause in (1.5, 4.0):  # a dropped connection is not a reason to say "can't answer"
+            if not got.error:
+                break
+            time.sleep(pause)
+            again = ask(question, index, drawing_name, llm)
+            again.cost_usd += got.cost_usd
+            got = again
+        return got
+
     with ThreadPoolExecutor(max_workers=2) as pool:
-        first, second = pool.map(lambda _: ask(question, index, drawing_name, llm), range(2))
+        first, second = pool.map(reading, range(2))
     first.cost_usd += second.cost_usd
     first.latency_ms = max(first.latency_ms, second.latency_ms)
     return first, second

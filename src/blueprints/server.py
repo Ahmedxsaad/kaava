@@ -29,7 +29,7 @@ from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import cloud, config, interpret, mesh, model_query, overlay, plan_query, progress, sheet, verify
+from . import cloud, config, interpret, mesh, model_query, overlay, plan_query, progress, scan_plan, sheet, verify
 from .answer import Answer
 from .data import Dataset, Question, drawing_of, question_id, source_of
 from .engines import dxf, dxf_index, ifc, ifc_index, raster_labels, router
@@ -275,6 +275,29 @@ class Service:
             return "dxf"
         return None
 
+    def scan_image(self, drawing: str) -> Path | None:
+        """The picture of a drawing that is only a picture: no model, no DXF, no PDF behind it."""
+        files = self.files_of(drawing)
+        if ".pdf" in files or self.engine_of(drawing):
+            return None
+        raster = next((files[e] for e in RASTER if e in files), None)
+        return self.ds.abspath(raster) if raster else None
+
+    def scan_3d(self, drawing: str, known_only: bool = False) -> bool:
+        """Whether a scan's walls were found in its pixels well enough to stand it up in 3D (scan_plan.py).
+
+        `known_only` answers from what was already worked out, for listings: it costs one `stat`.
+        """
+        path = self.scan_image(drawing)
+        if path is None:
+            return False
+        try:
+            if known_only:
+                return bool(scan_plan.verdict_if_known(path))
+            return bool(scan_plan.load(path).get("ok"))
+        except Exception:  # an image that cannot be read has no 3D view; the plan view says why
+            return False
+
     # ---- logged runs (answers already paid for)
 
     def _load_logged_runs(self) -> dict[str, dict[str, dict]]:
@@ -472,6 +495,16 @@ class Service:
         drawing itself can be the floor the 3D walls stand on.
         """
         view = self.view(drawing)
+        if view.kind == "image":
+            # A scan stood up from its own pixels: the scan lies under its walls, pixel for pixel.
+            path = self.scan_image(drawing)
+            if path is None or not self.scan_3d(drawing):
+                return None
+            header, _, _ = mesh.unpack(mesh.scan_mesh(path))
+            unit, (ox, oy, oz) = header["scan"]["unit_per_px"], header["offset"]
+            wide, high = header["scan"]["width"], header["scan"]["height"]
+            return {"corners": [[round(u * unit - ox, 4), round((high - v) * unit - oy, 4), round(0.012 - oz, 4)]
+                                for u, v in ((0, 0), (wide, 0), (wide, high), (0, high))], "storey": 0}
         if view.kind not in ("plan", "page") or not view.clip:
             return None
         w, h = view.width, view.height
@@ -519,7 +552,7 @@ class Service:
             "formats": sorted(e.lstrip(".") for e in files),
             "questions": len({q.question for q in qs}),
             "engine": engine,
-            "has_3d": engine is not None,
+            "has_3d": engine is not None or self.scan_3d(drawing, known_only=True),
             "example": bool(self.ds.notes.get(drawing, {}).get("example")),
         }
 
@@ -560,6 +593,7 @@ class Service:
         for q in self.questions.get(drawing, []):
             seen.setdefault(q.question, {"question": q.question, "type": q.type, "unit": q.unit})
         model = self.model_of(drawing)
+        scan3d = self.scan_3d(drawing)  # before the summary, which only says what is already known
         return {
             **self.summary(drawing),
             "credit": self.ds.notes.get(drawing, {}).get("credit") or CREDITS.get(source_of(drawing), ""),
@@ -568,8 +602,8 @@ class Service:
                      "px_per_m": self.px_per_metre(drawing, view),
                      "url": None if view.kind == "none" else f"/api/image?drawing={_quote(drawing)}&page={view.page}"},
             "rooms": self.rooms_layer(drawing, view),
-            "mesh": (f"/api/mesh?drawing={_quote(drawing)}" if self.engine_of(drawing) else None),
-            "mesh_kind": "ifc" if model else "plan" if self.engine_of(drawing) == "dxf" else None,
+            "mesh": (f"/api/mesh?drawing={_quote(drawing)}" if self.engine_of(drawing) or scan3d else None),
+            "mesh_kind": "ifc" if model else "plan" if self.engine_of(drawing) == "dxf" else "scan" if scan3d else None,
             "model_file": PurePosixPath(model).name if model else None,
             "suggested": list(seen.values()) or (
                 [{"question": q, "type": "", "unit": None} for q in self.ds.notes.get(drawing, {}).get("questions", [])]
@@ -1028,6 +1062,8 @@ class Service:
             "latency_ms": round(latency, 1),
             "replayed_from": replayed,
             "interpreted": ans.meta.get("interpreted"),
+            # A measurement whose scale was not printed (taken from a standard door, say): the range it leaves open.
+            "estimate": ans.meta.get("estimate"),
             "basis": ans.meta.get("basis"),
             # What the program and the model each did, step by step (sheet_reading.py).
             "trace": [{"title": title, "body": body} for title, body in ans.meta.get("trace") or []],
@@ -1151,6 +1187,14 @@ class Service:
                     x0, y0, x1, y1 = item["bbox"]
                     (ax, ay), (bx, by) = view.px(x0, y1), view.px(x1, y0)
                     entry["bbox"] = [min(ax, bx), min(ay, by), max(ax, bx), max(ay, by)]
+                out.append(entry)
+            elif space == "image_px" and kind == "polygon":
+                # A room measured on the sheet by its own outline, with what stands in it cut out.
+                n += 1
+                entry = {"kind": "polygon", "n": n, "ref": None, "label": item.get("label", ""), "area_m2": item.get("area_m2"),
+                         "points": [[x * unit, y * unit] for x, y in item["points"]]}
+                if item.get("holes"):
+                    entry["holes"] = [[[x * unit, y * unit] for x, y in ring] for ring in item["holes"]]
                 out.append(entry)
             elif space == "image_px" and kind == "point":
                 n += 1
@@ -1515,6 +1559,12 @@ def create_app(dataset_root: Path | str | None = None) -> FastAPI:
                 data = mesh.ifc_mesh(path)
             elif ".dxf" in service.files_of(drawing):
                 data = mesh.plan_mesh(service.ds.abspath(service.files_of(drawing)[".dxf"]))
+            elif service.scan_image(drawing) is not None:
+                # A scan: its walls found in the pixels (no model is asked), standing on the scan itself.
+                try:
+                    data = mesh.scan_mesh(service.scan_image(drawing))
+                except mesh.NoScanWalls as exc:
+                    raise HTTPException(404, f"no 3D view for this scan: {exc}")
             else:
                 raise HTTPException(404, "no 3D view for this drawing")
         except mesh.MeshTooLarge as exc:

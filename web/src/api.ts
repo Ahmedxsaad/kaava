@@ -51,7 +51,7 @@ export interface DrawingDetail extends DrawingSummary {
   };
   rooms: Room[];
   mesh: string | null;
-  mesh_kind: "ifc" | "plan" | null;
+  mesh_kind: "ifc" | "plan" | "scan" | null;  // scan: walls found in the picture's pixels, scale assumed
   model_file: string | null;
   suggested: Suggested[];
   paper_scale: number | null;
@@ -112,6 +112,8 @@ export interface AskResult {
   interpreted: string | null;
   basis?: string | null;  // what the vision model said about how it got there
   trace?: { title: string; body: string }[];  // what the program and the model each did, in order
+  // A measurement whose scale was not printed on the sheet (taken from the doors, say): the range it leaves open.
+  estimate?: { low: number; high: number; from: string; unit?: string } | null;
   // `twice`: the question was read as a query two times, independently, and the readings had to match.
   restated: { question: string | null; reason: string; model: string; cost_eur: number; latency_ms: number; twice?: boolean } | null;
   checks: { name: string; value: number | string }[];

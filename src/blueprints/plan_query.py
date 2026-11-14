@@ -17,6 +17,8 @@ was answered.
 
 from __future__ import annotations
 
+import time
+
 from dataclasses import dataclass, field
 
 from .answer import Answer
@@ -133,7 +135,8 @@ def ask(question: str, index: dict, llm, is_outdoor) -> Query:
     common = dict(model=getattr(reply, "model", "") or getattr(llm, "model", ""),
                   cost_usd=reply.cost_usd or 0.0, latency_ms=reply.latency_ms or 0.0)
     if reply.error:
-        return Query(cannot=True, reading="the language model could not be reached", error=reply.error, **common)
+        return Query(cannot=True, reading="The language model could not be reached just now (a connection problem, "
+                                          "not something about this drawing). Ask again.", error=reply.error, **common)
     data = reply.data or {}
     count = len(rooms_of(index))
     rooms = sorted({i for i in data.get("rooms") or [] if isinstance(i, int) and 0 <= i < count})
@@ -158,8 +161,19 @@ def ask_twice(question: str, index: dict, llm, is_outdoor) -> tuple[Query, Query
     """Two independent readings of the question, side by side. Only readings that agree are run."""
     from concurrent.futures import ThreadPoolExecutor
 
+    def reading(_):
+        got = ask(question, index, llm, is_outdoor)
+        for pause in (1.5, 4.0):  # a dropped connection is not a reason to say "can't answer"
+            if not got.error:
+                break
+            time.sleep(pause)
+            again = ask(question, index, llm, is_outdoor)
+            again.cost_usd += got.cost_usd
+            got = again
+        return got
+
     with ThreadPoolExecutor(max_workers=2) as pool:
-        first, second = pool.map(lambda _: ask(question, index, llm, is_outdoor), range(2))
+        first, second = pool.map(reading, range(2))
     first.cost_usd += second.cost_usd
     first.latency_ms = max(first.latency_ms, second.latency_ms)
     return first, second
@@ -233,13 +247,21 @@ def _run(query: Query, rooms: list[dict], index: dict, dxf, words: str, common: 
     unit = "m2" if query.measure == "area" else "m"
     sign = "m²" if unit == "m2" else "m"
 
+    # What was taken out of an outline is said wherever an area is given (a perimeter says its own, below).
+    by_area = query.measure == "area"
     if query.combine in ("largest", "smallest"):
         room, value = (max if query.combine == "largest" else min)(values, key=lambda pair: pair[1])
         name = f"{room.get('number') or ''} {room.get('name') or ''}".strip()
+        holes, hole_checks, hole_steps = dxf.holes_note([room]) if by_area else ("", {}, [])
+        compared = dxf.holes_note(rooms)[1] if by_area else {}
+        among = (f" {sum(1 for r in rooms if r.get('holes'))} of the rooms compared are drawn around something; "
+                 f"each was compared by its area with that taken out." if compared and not holes else "")
         return Answer(answer=round(value, 2), unit=unit, state=CHECK, confidence=0.6,
                       evidence=[dxf._room_evidence(room)],
-                      explanation=f"The {query.combine} of the {len(rooms)} rooms asked about is {name}: {value:.2f} {sign}.",
-                      meta={"interpreted": words, "checks": {"rooms compared": len(rooms)}}, **common)
+                      explanation=f"The {query.combine} of the {len(rooms)} rooms asked about is {name}: {value:.2f} {sign}.{holes}{among}",
+                      meta={"interpreted": words, "checks": {"rooms compared": len(rooms), **hole_checks},
+                            "trace": [[f"Compared the {len(rooms)} rooms by {'floor area' if by_area else 'length'}",
+                                       f"{name} is the {query.combine}: {value:.2f} {sign}"], *hole_steps]}, **common)
     if query.measure == "area" and query.combine == "sum":
         # The engine's own sum, with its check of every room against the area printed in it.
         summed = dxf._sum_answer(rooms, "Rooms selected", None, common, interpreted=words)
@@ -248,7 +270,8 @@ def _run(query: Query, rooms: list[dict], index: dict, dxf, words: str, common: 
     total = sum(value for _, value in values)
     if query.combine == "average":
         total /= len(values)
-    parts = " + ".join(f"{value:.2f}" for _, value in values[:12]) + (" + ..." if len(values) > 12 else "")
+    parts = (" + ".join((dxf.area_in_parts(room) if by_area else f"{value:.2f}") for room, value in values[:12])
+             + (" + ..." if len(values) > 12 else ""))
     working = (f"({parts}) / {len(values)} = {total:.2f} {sign}" if query.combine == "average"
                else f"{parts} = {total:.2f} {sign}" if len(values) > 1 else f"{total:.2f} {sign}")
     evidence = [dxf._room_evidence(r) for r in rooms]
@@ -265,9 +288,11 @@ def _run(query: Query, rooms: list[dict], index: dict, dxf, words: str, common: 
     elif query.measure == "perimeter":
         note = " The length of each room's outline, with the rings of any holes in it."
     evidence.append({"kind": "formula", "text": working})
+    holes, hole_checks, hole_steps = dxf.holes_note(rooms) if by_area else ("", {}, [])
     return Answer(answer=round(total, 2), unit=unit, state=CHECK, confidence=0.6, evidence=evidence,
-                  explanation=f"{working}.{note}",
-                  meta={"interpreted": words, "checks": {"rooms measured": len(rooms)}}, **common)
+                  explanation=f"{working}.{note}{holes}",
+                  meta={"interpreted": words, "checks": {"rooms measured": len(rooms), **hole_checks},
+                        "trace": [["Measured each room on its outline", working], *hole_steps]}, **common)
 
 
 def _items_of(query: Query, rooms: list[dict], index: dict, dxf, words: str, common: dict) -> Answer:

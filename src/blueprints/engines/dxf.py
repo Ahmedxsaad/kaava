@@ -110,6 +110,42 @@ def part_named(question: str, index: dict) -> str | None:
     return None
 
 
+def area_in_parts(room: dict) -> str:
+    """A room's area as it was worked out: "13.99", or "(17.23 − 3.24)" when holes were taken out of its outline."""
+    if room.get("holes"):
+        return f"({room['gross_area']:.2f} − {room['gross_area'] - room['area']:.2f})"
+    return f"{room['area']:.2f}"
+
+
+def holes_note(rooms: list[dict]) -> tuple[str, dict, list]:
+    """What was taken out of the outlines of these rooms: a sentence, the checks, and a step for the working.
+
+    A room drawn around a shaft, a column or a room of its own is one outline with other outlines
+    inside it: its floor area is its own outline less those. Whoever asks for the room's area must
+    be told that this was done, and by how much.
+    """
+    holed = [r for r in rooms if r.get("holes")]
+    if not holed:
+        return "", {}, []
+    taken = sum(r["gross_area"] - r["area"] for r in holed)
+    count = sum(r["holes"] for r in holed)
+    name = lambda r: f"{r.get('number') or ''} {r.get('name') or ''}".strip() or "the room"  # noqa: E731
+    if len(holed) == 1:
+        r = holed[0]
+        text = (f" The outline of {name(r)} encloses {r['gross_area']:.2f} m²; {r['holes']} "
+                f"hole{'' if r['holes'] == 1 else 's'} inside it ({taken:.2f} m²: shafts, columns or rooms of their own) "
+                f"{'is' if r['holes'] == 1 else 'are'} taken out: {r['gross_area']:.2f} − {taken:.2f} = {r['area']:.2f} m².")
+    else:
+        text = (f" {len(holed)} of these rooms are drawn around something ({count} holes, {taken:.2f} m² in all: "
+                f"shafts, columns or rooms of their own): taken out of each outline.")
+    checks = {"outlines before their holes are taken out": round(sum(r["gross_area"] for r in holed), 3),
+              f"holes inside those outlines ({count})": round(taken, 3)}
+    step = [f"Took out what lies inside {'the outline' if len(holed) == 1 else 'the outlines'}",
+            "; ".join(f"{name(r)}: {r['gross_area']:.2f} − {r['gross_area'] - r['area']:.2f} = {r['area']:.2f} m²" for r in holed[:6])
+            + (" …" if len(holed) > 6 else "")]
+    return text, checks, [step]
+
+
 def _sum_answer(rooms: list[dict], what: str, pdf: dict | None, common: dict, *,
                 unknown_rooms: list[dict] = (), interpreted: str) -> Answer:
     """Sum room outlines; cross-check against the areas printed for the same rooms."""
@@ -138,13 +174,16 @@ def _sum_answer(rooms: list[dict], what: str, pdf: dict | None, common: dict, *,
         confidence = 0.85
         note = (f" {checked} of {len(rooms)} rooms have a printed area to compare with (all agree)."
                 if checked else " No areas are printed on this drawing to compare with.")
-    parts = " + ".join(f"{r['area']:.2f}" for r in rooms[:12]) + (" + ..." if len(rooms) > 12 else "")
+    parts = " + ".join(area_in_parts(r) for r in rooms[:12]) + (" + ..." if len(rooms) > 12 else "")
+    # Holes are said after the score is set: they are part of the outline's area, not a second source for it.
+    holes, hole_checks, hole_steps = holes_note(rooms)
     return Answer(
         answer=round(total, 2), unit="m2", state=CHECK, confidence=confidence,
         evidence=[_room_evidence(r) for r in rooms]
                  + [{"kind": "formula", "text": f"{parts} = {total:.2f} m²"}],
-        explanation=f"{what}: {len(rooms)} room outline(s), {total:.2f} m² in total.{note}",
-        meta={"interpreted": interpreted, "checks": checks}, **common)
+        explanation=f"{what}: {len(rooms)} room outline(s), {total:.2f} m² in total.{note}{holes}",
+        meta={"interpreted": interpreted, "checks": {**checks, **hole_checks}, **({"trace": hole_steps} if hole_steps else {})},
+        **common)
 
 
 def answer(q: Question, dataset: Dataset) -> Answer:

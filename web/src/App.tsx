@@ -117,7 +117,8 @@ export function App() {
       const in3d = answer.evidence.some((e) => e.kind === "element");
       const forced = wanted.current;
       wanted.current = null;
-      setMode((current) => forced ?? (in3d && !onPlan ? (has2d && current === "both" ? "both" : "3d") : onPlan && current === "3d" ? "plan" : current));
+      const scan3d = drawing.mesh_kind === "scan";  // a scan's marks stand in its 3D view too: stay there
+      setMode((current) => forced ?? (in3d && !onPlan ? (has2d && current === "both" ? "both" : "3d") : onPlan && current === "3d" && !scan3d ? "plan" : current));
     } catch (e) {
       if (mine === ticket.current) {
         setResult(null);
@@ -317,12 +318,16 @@ export function App() {
   const searched = useMemo(() => context.filter((e) => e.points), [context]);
   const highlights: Highlight[] = useMemo(() => {
     if (!result) return [];
-    return places(units).flatMap((e) => {
+    const scan = detail?.mesh_kind === "scan";
+    return places(units).flatMap((e): Highlight[] => {
       const id = e.kind === "element" ? e.id : e.ref;
       const tone = e.kind === "polygon" || e.cls === "IfcSpace" ? "area" as const : "count" as const;
-      return id ? [{ id, n: e.n!, tone, times: e.times }] : [];
+      if (id) return [{ id, n: e.n!, tone, times: e.times }];
+      // On a scan the evidence is a box or a point in the picture: it stands in the 3D view at that place.
+      const box = !scan ? null : e.bbox ? e.bbox : e.x !== undefined && e.y !== undefined ? [e.x, e.y, e.x, e.y] : null;
+      return box ? [{ id: "", n: e.n!, tone: "count" as const, box: box as [number, number, number, number] }] : [];
     });
-  }, [result, units]);
+  }, [result, units, detail]);
   // Outdoor rooms a sum left out, shown hatched: only when the answer is a sum over rooms.
   const leftOut = useMemo(() => {
     if (!detail || !result || result.unit !== "m2") return [];
@@ -433,7 +438,7 @@ export function App() {
     setPlaying(false);
     writeRoute({ drawing: detail?.id ?? null, question: asked, page: next });
   };
-  const groundUrl = detail && has3d && (detail.view.kind === "plan" || detail.view.kind === "page")
+  const groundUrl = detail && has3d && (detail.view.kind === "plan" || detail.view.kind === "page" || detail.mesh_kind === "scan")
     ? `/api/ground?drawing=${encodeURIComponent(detail.id)}` : null;
 
   return (

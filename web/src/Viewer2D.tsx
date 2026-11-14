@@ -361,7 +361,8 @@ export function Viewer2D(props: Props) {
             const second = item.role === "marked by the vision model";  // the same thing, counted a second way
             // Measured on the sheet: a door opening left out of a length, and the scale bar it was read against.
             const opening = item.role === "door opening, left out";
-            const measured = opening || item.role === "scale bar";
+            // A door measured in the pixels and taken as a standard door: the ruler, when no scale is printed.
+            const measured = opening || item.role === "scale bar" || item.role === "door used as the ruler";
             // Boxed in one of two passes over the tiles: doubtful, drawn dashed, not counted.
             const once = item.role === "boxed in one pass only";
             // Looked at and not counted: a window that sits in the next room's wall.

@@ -22,6 +22,7 @@ export interface Highlight {
   n: number;
   tone: "count" | "area";
   times?: number;  // the file has this outline more than once, in the same place
+  box?: [number, number, number, number];  // on a scan: the mark's box in the picture's pixels (no element has it)
 }
 
 interface Props {
@@ -54,12 +55,16 @@ interface MeshElement {
 
 interface Parsed {
   header: {
-    kind: "ifc" | "plan";
+    kind: "ifc" | "plan" | "scan";
     elements: MeshElement[];
     storeys: { name: string; z: number | null }[];
     bbox: number[];
     triangles: number;
     vertices: number;
+    offset?: number[];
+    wall_height?: number;
+    // A scan stood up from its pixels: how a pixel of the picture maps into the model (less `offset`).
+    scan?: { width: number; height: number; unit_per_px: number; walls?: string };
   };
   positions: Float32Array;
   indices: Uint32Array;
@@ -407,7 +412,7 @@ export function Viewer3D({ meshUrl, groundUrl, imageUrl, highlights, visible, ho
       root.rotation.x = -Math.PI / 2;  // the model's z axis points up
       scene.add(root);
       const shared = new THREE.BufferAttribute(parsed.positions, 3);
-      const isPlan = parsed.header.kind === "plan";
+      const isPlan = parsed.header.kind !== "ifc";  // a plan from a DXF, or a scan stood up from its pixels
       // Each room's floor takes the tint of its use; everything else is coloured by its material.
       const tints = new Float32Array(parsed.header.vertices * 3).fill(1);
       const tint = new THREE.Color();
@@ -588,7 +593,9 @@ export function Viewer3D({ meshUrl, groundUrl, imageUrl, highlights, visible, ho
       };
       fly(modelBox, { fromAbove: true });
       setStoreys(isPlan ? 0 : order.length);
-      setInfo(`${parsed.header.elements.length.toLocaleString("en")} elements · ${parsed.header.triangles.toLocaleString("en")} triangles`);
+      setInfo(parsed.header.kind === "scan"
+        ? "Walls traced from the scan's own pixels · scale assumed"
+        : `${parsed.header.elements.length.toLocaleString("en")} elements · ${parsed.header.triangles.toLocaleString("en")} triangles`);
       setStatus("ready");
       onReady?.();
 
@@ -679,7 +686,8 @@ export function Viewer3D({ meshUrl, groundUrl, imageUrl, highlights, visible, ho
     s.lit.clear();
     s.items.clear();
     for (const child of [...s.tallies.children]) s.tallies.remove(child);
-    const isPlan = s.parsed.header.kind === "plan";
+    const isPlan = s.parsed.header.kind !== "ifc";
+    const scan = s.parsed.header.scan;
     const active = highlights.length > 0;
     // When the whole answer sits on one storey, the storeys above are lifted off and that
     // storey stays readable; everything else steps back so the answer shows through.
@@ -741,31 +749,46 @@ export function Viewer3D({ meshUrl, groundUrl, imageUrl, highlights, visible, ho
     const withLabels = highlights.length <= 160;
     for (const h of highlights) {
       const element = s.byId.get(h.id);
-      if (!element) continue;
-      const [v0, vn] = element.v;
-      const positions = s.parsed.positions.slice(v0 * 3, (v0 + vn) * 3);
-      const index = new Uint32Array(element.i[1]);
-      for (let k = 0; k < index.length; k++) index[k] = s.parsed.indices[element.i[0] + k] - v0;
-      const geometry = new THREE.BufferGeometry();
-      geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-      geometry.setIndex(new THREE.BufferAttribute(index, 1));
+      let geometry: THREE.BufferGeometry;
+      let positions = new Float32Array(0);
+      const marked = !element && !!h.box && !!scan;  // a mark on a scan: no element of the model has it
+      if (element) {
+        const [v0, vn] = element.v;
+        positions = s.parsed.positions.slice(v0 * 3, (v0 + vn) * 3);
+        const index = new Uint32Array(element.i[1]);
+        for (let k = 0; k < index.length; k++) index[k] = s.parsed.indices[element.i[0] + k] - v0;
+        geometry = new THREE.BufferGeometry();
+        geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+        geometry.setIndex(new THREE.BufferAttribute(index, 1));
+      } else if (marked) {
+        // The box drawn on the scan, standing on the sheet where it was drawn, to a door's height.
+        const [ox, oy, oz] = s.parsed.header.offset ?? [0, 0, 0];
+        const k = scan!.unit_per_px;
+        const least = Math.max(0.3, 0.012 * Math.max(scan!.width, scan!.height) * k);  // a point still shows
+        const cx = ((h.box![0] + h.box![2]) / 2) * k - ox, cy = (scan!.height - (h.box![1] + h.box![3]) / 2) * k - oy;
+        const wide = Math.max((h.box![2] - h.box![0]) * k, least), deep = Math.max((h.box![3] - h.box![1]) * k, least);
+        const tall = (s.parsed.header.wall_height ?? 2.6) * 0.8;
+        geometry = new THREE.BoxGeometry(wide, deep, tall);
+        geometry.translate(cx, cy, -oz + tall / 2);
+      } else continue;
       geometry.computeBoundingBox();
       const extent = geometry.boundingBox!.clone();  // in model coordinates, before centring
       const centre = extent.getCenter(new THREE.Vector3());
       geometry.translate(-centre.x, -centre.y, -centre.z);  // so it can swell around its own centre
       // On a plan a counted door is its thin leaf, hung at one jamb, opening a little as it is counted.
-      const leaf = isPlan && h.tone === "count" && /door/i.test(element.cls) ? leafOf(positions) : null;
+      const leaf = element && isPlan && h.tone === "count" && /door/i.test(element.cls) ? leafOf(positions) : null;
       const colour = h.tone === "area" ? lookNow.area : lookNow.count;
       // Drawn after the faded building, so the answer is never dimmed by a wall in front of it.
       const material = new THREE.MeshStandardMaterial({
         color: colour, emissive: colour, emissiveIntensity: 0.25, roughness: 0.7, flatShading: true,
-        side: THREE.DoubleSide, transparent: true, opacity: h.tone === "area" ? 0.62 : 1, depthWrite: h.tone !== "area",
+        side: THREE.DoubleSide, transparent: true, opacity: marked ? 0.46 : h.tone === "area" ? 0.62 : 1,
+        depthWrite: !marked && h.tone !== "area",  // a scan's mark is glass: the wall or the label inside it shows
       });
       const hung = leaf ? leafGeometry(leaf) : null;  // `positions` are about the centre by now, and so is the leaf
       const mesh = new THREE.Mesh(hung ?? geometry, material);
       if (hung) geometry.dispose();
       mesh.renderOrder = 2;
-      mesh.castShadow = h.tone !== "area";
+      mesh.castShadow = !marked && h.tone !== "area";
       const rest = centre.z + (isPlan && h.tone === "area" ? 0.035 : 0);  // a room plate sits just above the sheet
       const node = new THREE.Group();
       if (leaf) {  // the node is the hinge: the jamb at the low end of the opening
@@ -800,8 +823,9 @@ export function Viewer3D({ meshUrl, groundUrl, imageUrl, highlights, visible, ho
         new THREE.Vector3(extent.min.x, extent.min.z, -extent.max.y),
         new THREE.Vector3(extent.max.x, extent.max.z, -extent.min.y));
       const swing = leaf ? (h.n % 2 ? 1 : -1) * 0.56 : 0;  // about a third open: clear to see, and clear of its neighbours
-      s.items.set(h.n, { node, swing, closed: leaf?.angle ?? 0, mesh, label, tone: h.tone, born: 0, storey: element.storey, rest, box: world });
-      const lift = element.storey != null ? s.offsets.get(element.storey)?.target ?? 0 : 0;
+      const storey = element ? element.storey : 0;
+      s.items.set(h.n, { node, swing, closed: leaf?.angle ?? 0, mesh, label, tone: h.tone, born: 0, storey, rest, box: world });
+      const lift = storey != null ? s.offsets.get(storey)?.target ?? 0 : 0;
       box.union(world.clone().translate(new THREE.Vector3(0, lift, 0)));
     }
 

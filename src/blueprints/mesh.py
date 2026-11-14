@@ -341,6 +341,125 @@ def _build_plan_mesh(dxf_path: Path) -> bytes:
     return _pack(header, positions, indices)
 
 
+# ----------------------------------------------------------------- a scan stood up from its pixels
+
+SCAN_WALL_M = 0.22        # a scan has no scale: its walls are taken to be this thick...
+SCAN_SPAN_M = (7.0, 60.0)  # ...as long as the page's longer side then comes out between these
+
+
+class NoScanWalls(Exception):
+    """The walls of this scan could not be told from the rest of the drawing: it has no 3D view."""
+
+
+def _prism_with_holes(positions: array, indices: array, outer: list[tuple[float, float]],
+                      holes: list[list[tuple[float, float]]], z0: float, z1: float) -> None:
+    """A vertical prism over a polygon with holes (a ring of walls around a room is one).
+
+    Every ring gets its side faces; the caps come from a triangulation that keeps to the polygon.
+    """
+    import shapely
+    from shapely.geometry import Polygon
+
+    polygon = Polygon(outer, holes)
+    if not polygon.is_valid:
+        polygon = polygon.buffer(0)
+    for part in getattr(polygon, "geoms", [polygon]):
+        if part.is_empty or part.geom_type != "Polygon" or part.area <= 0:
+            continue
+        rings = [_clean_ring(part.exterior.coords)] + [_clean_ring(ring.coords) for ring in part.interiors]
+        base = len(positions) // 3
+        count = sum(len(ring) for ring in rings)
+        for z in (z0, z1):
+            for ring in rings:
+                for x, y in ring:
+                    positions.extend((x, y, z))
+        lookup: dict[tuple[float, float], int] = {}
+        start = 0
+        for ring in rings:
+            n = len(ring)
+            for a in range(n):
+                b = (a + 1) % n
+                lookup.setdefault((round(ring[a][0], 6), round(ring[a][1], 6)), start + a)
+                lo_a, lo_b = base + start + a, base + start + b
+                indices.extend((lo_a, lo_b, lo_b + count, lo_a, lo_b + count, lo_a + count))  # side face
+            start += n
+        if hasattr(shapely, "constrained_delaunay_triangles"):
+            triangles = list(getattr(shapely.constrained_delaunay_triangles(part), "geoms", []))
+        else:  # an older shapely: Delaunay over the corners, keeping the triangles inside
+            from shapely.ops import triangulate
+
+            triangles = [t for t in triangulate(part) if part.contains(t.representative_point())]
+        for triangle in triangles:
+            corners = [lookup.get((round(x, 6), round(y, 6))) for x, y in list(triangle.exterior.coords)[:3]]
+            if None in corners:
+                continue
+            a, b, c = corners
+            indices.extend((base + count + a, base + count + b, base + count + c))  # top
+            indices.extend((base + c, base + b, base + a))  # bottom
+
+
+def scan_mesh(image_path: Path) -> bytes:
+    """A scanned plan raised to 3D: its walls, found in the pixels, standing on the sheet.
+
+    The header's "scan" entry says how an image pixel maps into the mesh (x = px * unit_per_px,
+    y = (height - py) * unit_per_px, both less the header's offset), so that what an answer marked
+    on the scan can be stood in the model at the same place. The scale is assumed, and says so.
+    Raises NoScanWalls when the walls cannot be told from the drawing.
+    """
+    from . import scan_plan
+
+    plan = scan_plan.load(image_path)
+    if not plan.get("ok"):
+        raise NoScanWalls(plan.get("why") or "no walls found")
+    cache = _cache_file(image_path, f"scan{scan_plan.VERSION}")
+    if cache.is_file():
+        return cache.read_bytes()
+    with _build_lock:
+        if cache.is_file():
+            return cache.read_bytes()
+        data = _build_scan_mesh(plan)
+        cache.parent.mkdir(parents=True, exist_ok=True)
+        cache.write_bytes(data)
+        return data
+
+
+def _build_scan_mesh(plan: dict) -> bytes:
+    width, height = plan["width"], plan["height"]
+    unit = SCAN_WALL_M / max(plan["thickness_px"], 1.0)
+    span = max(width, height) * unit
+    unit *= min(max(span, SCAN_SPAN_M[0]), SCAN_SPAN_M[1]) / span
+
+    def place(points) -> list[tuple[float, float]]:  # an image's y runs down, a model's y runs up
+        return [(x * unit, (height - y) * unit) for x, y in points]
+
+    positions, indices = array("f"), array("I")
+    elements = []
+
+    def element(kind: str, ident: str, build) -> None:
+        v0, i0 = len(positions) // 3, len(indices)
+        build()
+        if len(indices) > i0:
+            elements.append({"id": ident, "cls": kind, "name": "", "storey": 0,
+                             "v": [v0, len(positions) // 3 - v0], "i": [i0, len(indices) - i0]})
+
+    sheet = place([(0, 0), (width, 0), (width, height), (0, height)])
+    element("IfcSlab", "sheet", lambda: _prism(positions, indices, sheet, -0.05, 0.0, [(0, 1, 2), (0, 2, 3)]))
+    for n, polygon in enumerate(plan["polygons"]):
+        outer, holes = place(polygon["outer"]), [place(hole) for hole in polygon["holes"]]
+        element("wall", f"wall-{n}", lambda: _prism_with_holes(positions, indices, outer, holes, 0.0, WALL_HEIGHT))
+    if len(elements) < 2:
+        raise NoScanWalls("no wall outline could be raised")
+    offset, bbox = _centre(positions, elements)
+    header = {"version": MESH_VERSION, "kind": "scan", "elements": elements,
+              "storeys": [{"name": "plan", "z": 0.0}],
+              "vertices": len(positions) // 3, "triangles": len(indices) // 3,
+              "offset": offset, "bbox": bbox, "wall_height": WALL_HEIGHT,
+              "scan": {"width": width, "height": height, "unit_per_px": round(unit, 6),
+                       "walls": plan["quality"].get("how"), "scale": "assumed",
+                       "assumed_wall_m": SCAN_WALL_M}}
+    return _pack(header, positions, indices)
+
+
 if __name__ == "__main__":  # python -m blueprints.mesh <model.ifc>: build one model's mesh into the cache
     import os
     import sys

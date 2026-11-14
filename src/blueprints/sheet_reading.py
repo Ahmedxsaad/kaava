@@ -43,14 +43,14 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Callable
 
-from . import measure, progress, sheet_text, tiles
+from . import measure, progress, scale, sheet_text, tiles
 from .answer import Answer
 from .data import Dataset, Question
 from .pointing import _box
 from .render import can_render, render
 from .scoring import CHECK
 
-PROMPT = 4
+PROMPT = 5
 MAX_TEXTS = 1100
 # How many times a question is worked out, independently. Two workings that disagree give no number.
 WORKINGS = max(1, int(os.environ.get("BLUEPRINTS_WORKINGS", "2")))
@@ -68,7 +68,7 @@ You do not state the final number. You give what you read and how it combines, a
 
 4. look_closer: for a question asking how many drawn symbols there are on a plan when they are many and small and carry no identifying text (doors, windows, fixtures, columns, outlets). Do not list them. Give `what`: one sentence saying exactly what counts as one item and how it is drawn, and box_2d: the part of the sheet that holds the plan to search (leave out the title block, legends and notes). The program then looks at that part piece by piece at full size. In the other three forms, leave `what` empty.
 
-5. measure: for the size of a room or of several rooms (floor area, perimeter, length of baseboard or skirting) when the sheet prints no figure for it but the plan is drawn to scale with a graphic scale bar. Do not estimate the size. Set quantity to area, perimeter or baseboard, and list the rooms: for each, text_id of the room's name on the plan (-1 when the list does not have it), name, box_2d: a box whose four sides lie on the inner faces of the room's walls, and rectangular: false when the room is not a plain rectangle. The program finds the walls along your box, measures the room against the scale bar, and for baseboard leaves out the door openings. In the other forms, leave quantity empty.
+5. measure: for the size of a room or of several rooms (floor area, perimeter, length of baseboard or skirting) when the sheet prints no figure for it but the plan is drawn to scale. Do not estimate the size. Set quantity to area, perimeter or baseboard, and list the rooms: for each, text_id of the room's name on the plan (-1 when the list does not have it), name, box_2d: a box whose four sides lie on the inner faces of the room's walls (for a room that is not a rectangle: the box around the whole room), and rectangular: false when the room is not a plain rectangle. The program finds the room inside its walls whatever its shape, takes out what stands in it (columns, shafts, cores), and for baseboard leaves out the door openings. It needs the sheet's scale and takes it itself from the first of these that the sheet has: (a) a graphic scale bar: then leave reference and doors empty; (b) reference: one dimension printed on the plan, given as text_id of its figure, unit (mm, cm, m, in or ft), and from and to, the two ends of its dimension line, each as [y, x] on the grid; choose a long one whose line runs straight across or straight down the sheet; (c) only when the sheet has neither: doors, boxes around up to eight ordinary single doors on the plan, each box tight around the door leaf and its swing; the program measures them against the standard width of a door and gives an estimate. In the other forms, leave quantity empty.
 
 - If the sheet does not let you answer in one of these forms, set cannot_tell to true and say in basis what is missing.
 - basis: one or two sentences on how you got there."""
@@ -103,7 +103,12 @@ SCHEMA = {
                 "type": "object",
                 "properties": {"text_id": {"type": "integer"}, "name": {"type": "string"}, "box_2d": _BOX,
                                "rectangular": {"type": "boolean"}},
-                "required": ["text_id", "name", "box_2d", "rectangular"], "additionalProperties": False}}},
+                "required": ["text_id", "name", "box_2d", "rectangular"], "additionalProperties": False}},
+            # Where the scale comes from when the sheet has no scale bar: a printed dimension, else the doors.
+            "reference": {"type": "object", "properties": {
+                "text_id": {"type": "integer"}, "unit": {"type": "string"}, "from": _BOX, "to": _BOX},
+                "required": ["text_id", "unit", "from", "to"], "additionalProperties": False},
+            "doors": {"type": "array", "items": _BOX}},
             "required": ["quantity", "rooms"], "additionalProperties": False},
         "cannot_tell": {"type": "boolean"},
         "basis": {"type": "string"},
@@ -391,7 +396,9 @@ def make_engine(vlm) -> Callable[[Question, Dataset], Answer]:
             meta["trace"].append(["The model pointed at the rooms and asked for the ruler",
                                   f"{wanted['quantity']} of: " + ", ".join(str(r.get("name") or "room") for r in rooms)])
             common["method"] = method + ":measured"
-            return _measured(q, path, index, wanted["quantity"], rooms, width, height, common)
+            return _measured(q, path, index, wanted["quantity"], rooms, width, height, common,
+                             reference=wanted.get("reference") if isinstance(wanted.get("reference"), dict) else None,
+                             doors=[d for d in wanted.get("doors") or [] if isinstance(d, list)])
 
         if what and not figures and not items:
             # Many small symbols: the part of the sheet that holds the plan is searched tile by tile.
@@ -653,64 +660,191 @@ def _quantity(q: Question, figures: list[dict], expression: str, result_unit, te
                   **common)
 
 
+def _poly_to_source(points: list[list[float]], zoom: float) -> list[list[float]]:
+    return [[x / zoom, y / zoom] for x, y in points]
+
+
+def _scale_of(path, index: dict, texts: dict, reference: dict | None, doors: list, width: float, height: float,
+              zoom: float) -> dict | None:
+    """The sheet's scale from the best thing on it that has a known size (scale.py): bar, printed dimension, doors."""
+    found = scale.from_bar(path, index)
+    if found is not None:
+        return found
+    grid = max(width, height) * zoom / 1000.0  # one step of the model's grid, in pixels
+
+    def point(yx) -> tuple[float, float] | None:
+        if not isinstance(yx, list) or len(yx) != 2:
+            return None
+        return float(yx[1]) / 1000.0 * width * zoom, float(yx[0]) / 1000.0 * height * zoom
+
+    if reference:
+        item = texts.get(reference.get("text_id", -1))
+        unit = unit_of(str(reference.get("unit") or "")) or "mm"
+        start, end = point(reference.get("from")), point(reference.get("to"))
+        if item is not None and start and end and unit in _LINEAR:
+            value = number_in(item["text"], unit)  # the figure as the program reads it, not as the model does
+            if value:
+                found = scale.from_dimension(path, start, end, value * _LINEAR[unit], f"{item['text'].strip()} {unit}", grid)
+                if found is not None:
+                    found["evidence"].append({"kind": "box", "space": "image_px", "bbox": [v * zoom for v in item["box"]],
+                                              "role": "read here", "label": "the dimension used as the scale"})
+                    return found
+    boxes = []
+    for door in doors:
+        box = _box({"box_2d": door}, width, height)
+        if box:
+            boxes.append([v * zoom for v in box["bbox"]])
+    return scale.from_doors(path, boxes)
+
+
 def _measured(q: Question, path, index: dict, quantity: str, rooms: list[dict], width: float, height: float,
-              common: dict) -> Answer:
-    """Rooms measured on the sheet itself: wall pixels against the scale bar (measure.py)."""
+              common: dict, reference: dict | None = None, doors: list | None = None) -> Answer:
+    """Rooms measured on the sheet itself: the free space inside their walls, against the sheet's scale.
+
+    A plain rectangular room is measured as its rectangle (measure.measure_room) and checked against
+    its own outline (measure.room_shape); a room of another shape is measured by its outline. What
+    stands inside a room (a column, a shaft, a core) is taken out of its area and drawn.
+    """
     source_index = index
+    texts = {item["id"]: item for item in source_index["items"]}
     path, zoom, index = as_pixels(path, source_index)
-    bar = measure.scale_bar(path, index)
-    if bar is None:
-        return Answer.decline("no graphic scale bar was found on the sheet to measure against", **common)
-    evidence, parts, checks = [], [], {}
-    checks["scale bar"] = f"{bar['label']} = {bar['length_px']:,} px ({bar['px_per_m']:.1f} px per metre)"
-    checks["scale bar labels standing at their marks"] = f"{bar['labels_in_place']} of {bar['labels']}"
+    ruler = _scale_of(path, index, texts, reference, doors or [], width, height, zoom)
+    if ruler is None:
+        return Answer.decline("the sheet has nothing to take its scale from: no graphic scale bar was found, and no printed "
+                              "dimension or doors were pointed at", **common)
+    ppm = ruler["px_per_m"]
+    evidence, parts, checks = [], [], dict(ruler["checks"])
     total = 0.0
     left_out: list[dict] = []
+    openings_seen: list[dict] = []
+    holes_taken = 0
+    by_outline = 0
+    unconfirmed = 0
     for room in rooms:
         name = str(room.get("name") or "room").strip()[:60]
-        if room.get("rectangular") is False:
-            return Answer.decline(f"{name} is not a plain rectangle, and only rectangular rooms are measured so far", **common)
         rough = _box(room, width, height)
         if rough is None:
             return Answer.decline(f"no usable box for {name}", **common)
-        found = measure.measure_room(path, [v * zoom for v in rough["bbox"]], bar["px_per_m"])
-        if not found["ok"]:
-            return Answer.decline(f"{name} could not be measured: {found['why']}", **common)
-        w, h = found["width_m"], found["height_m"]
-        checks[f"wall along each side of {name} (share of the side that is wall)"] = ", ".join(
-            f"{side} {share:.0%}" for side, share in found["sides"].items())
-        if quantity == "area":
-            total += found["area_m2"]
-            parts.append(f"{w:.2f} m × {h:.2f} m")
-            label = f"{name}: {w:.2f} m × {h:.2f} m = {found['area_m2']:.2f} m²"
+        box = [v * zoom for v in rough["bbox"]]
+        def both(how: str) -> tuple[dict, dict]:
+            by_rectangle = (measure.measure_room(path, box, ppm, how) if room.get("rectangular") is not False
+                            else {"ok": False, "why": "it is not a plain rectangle"})
+            return by_rectangle, measure.room_shape(path, by_rectangle["bbox"] if by_rectangle["ok"] else box, ppm,
+                                                    texts=index["items"], how=how)
+
+        rect, shape = both("ink")
+        if not rect["ok"] and not shape["ok"] and measure.is_scan(path):
+            # A scanned plan whose walls are not plain black strokes: found the way its 3D view finds them.
+            rect, shape = both("scan")
+            if rect["ok"] or shape["ok"]:
+                checks["walls"] = "found in the scan's pixels as its 3D view finds them (coloured, grey or double-line walls)"
+        if not rect["ok"] and not shape["ok"]:
+            why = shape["why"] if room.get("rectangular") is False else rect["why"]
+            return Answer.decline(f"{name} could not be measured: {why}", **common)
+        confirmed = True
+        if rect["ok"] and shape["ok"] and abs(shape["gross_m2"] - rect["area_m2"]) > 0.03 * rect["area_m2"]:
+            # The outline does not come to the rectangle's size: it is not used, and that is said.
+            confirmed = False
+            unconfirmed += 1
+            checks[f"{name} by its own outline"] = (f"{shape['gross_m2']:.2f} m², against {rect['area_m2']:.2f} m² for the rectangle: "
+                                                    "the outline is not used, and holes in the room were not looked for")
+        holes = shape["holes"] if shape["ok"] and confirmed else []
+        hole_m2 = sum(h["area_m2"] for h in holes)
+        holes_taken += len(holes)
+        cut = f" − {hole_m2:.2f} m² standing in it ({len(holes)} hole{'' if len(holes) == 1 else 's'})" if holes else ""
+        if rect["ok"]:
+            w, h = rect["width_m"], rect["height_m"]
+            checks[f"wall along each side of {name} (share of the side that is wall)"] = ", ".join(
+                f"{side} {share:.0%}" for side, share in rect["sides"].items())
+            if shape["ok"] and confirmed:
+                checks[f"{name} by its own outline, holes left in"] = f"{shape['gross_m2']:.2f} m² (the rectangle: {rect['area_m2']:.2f} m²)"
+            area = rect["area_m2"] - hole_m2
+            perimeter = rect["perimeter_m"] + sum(hole["perimeter_m"] for hole in holes)
+            openings = rect["openings"]
+            size = f"{w:.2f} m × {h:.2f} m"
+            outline = [[rect["bbox"][0], rect["bbox"][1]], [rect["bbox"][2], rect["bbox"][1]],
+                       [rect["bbox"][2], rect["bbox"][3]], [rect["bbox"][0], rect["bbox"][3]]]
         else:
-            openings = found["openings"] if quantity == "baseboard" else []
-            gone = sum(o["width_m"] for o in openings)
-            total += found["perimeter_m"] - gone
-            parts.append(f"2 × ({w:.2f} m + {h:.2f} m)" + (f" − {gone:.2f} m of door openings" if openings else ""))
-            label = f"{name}: {w:.2f} m × {h:.2f} m, perimeter {found['perimeter_m']:.2f} m"
-            left_out.extend({**o, "room": name} for o in openings)
-        evidence.append(_to_source({"kind": "box", "space": "image_px", "bbox": found["bbox"], "label": label}, zoom))
+            by_outline += 1
+            area, perimeter, openings = shape["area_m2"], shape["perimeter_m"], shape["openings"]
+            size = f"{shape['gross_m2']:.2f} m² inside its walls"
+            outline = shape["polygon"]
+            checks[f"{name}: measured by its outline (not a rectangle)"] = (
+                f"{shape['gross_m2']:.2f} m² enclosed, openings narrower than {shape['seal_m']:.1f} m closed off")
+        openings_seen += openings
+        if quantity == "area":
+            total += area
+            parts.append(f"{size}{cut}" if rect["ok"] or holes else f"{area:.2f} m²")
+            label = f"{name}: {size}{cut} = {area:.2f} m²"
+        else:
+            taken = openings if quantity == "baseboard" else []
+            gone = sum(o["width_m"] for o in taken)
+            total += perimeter - gone
+            around = (f"2 × ({w:.2f} m + {h:.2f} m)" if rect["ok"] else f"{shape['perimeter_m']:.2f} m around")
+            if rect["ok"] and holes:
+                around += f" + {sum(hole['perimeter_m'] for hole in holes):.2f} m around {len(holes)} hole{'' if len(holes) == 1 else 's'}"
+            parts.append(around + (f" − {gone:.2f} m of door openings" if taken else ""))
+            label = f"{name}: {size}, {perimeter:.2f} m around"
+            left_out.extend({**o, "room": name} for o in taken)
+        if holes or not rect["ok"]:
+            # Drawn as the room's own outline with its holes cut out of it, so what was taken out can be seen.
+            evidence.append({"kind": "polygon", "space": "image_px", "points": _poly_to_source(outline, zoom),
+                             "holes": [_poly_to_source(hole["ring"], zoom) for hole in holes], "label": label,
+                             "area_m2": round(area, 2)})
+        else:
+            evidence.append(_to_source({"kind": "box", "space": "image_px", "bbox": rect["bbox"], "label": label}, zoom))
     for opening in left_out:
         evidence.append(_to_source({"kind": "box", "space": "image_px", "bbox": opening["bbox"],
                                     "role": "door opening, left out", "label": f"{opening['width_m']:.2f} m"}, zoom))
-    evidence.append(_to_source({"kind": "box", "space": "image_px", "bbox": [float(v) for v in bar["bbox"]],
-                                "role": "scale bar", "label": f"{bar['label']} = {bar['length_px']:,} px"}, zoom))
+    evidence += [_to_source(dict(item), zoom) for item in ruler["evidence"]]
+
+    # A standard as a check: door openings measured at this scale must come out as wide as doors are.
+    doorways = scale.door_check(openings_seen) if ruler["source"] != "doors" else None
+    if doorways is not None:
+        checks["door leaves at this scale (a door is 0.8 to 1.0 m)"] = f"{doorways['leaf_m']:.2f} m ({doorways['leaves']} leaves)"
+        if not doorways["ok"] and doorways["leaves"] >= 2:
+            common["meta"] = {**common["meta"], "checks": checks}
+            return Answer.decline(f"at the scale read from {ruler['said']} the doors of the room come out "
+                                  f"{doorways['leaf_m']:.2f} m wide, which no door is: the scale is in doubt, so nothing is measured",
+                                  **common)
+
     unit = "m2" if quantity == "area" else "m"
     shown, shown_unit = convert(total, unit, asked_unit(q.question))
     working = " + ".join(parts) + f" = {_fmt(total)} {pretty(unit)}"
     if shown_unit != unit:
         working += f" = {_fmt(shown)} {pretty(shown_unit)}"
     evidence.append({"kind": "formula", "text": working})
-    common["meta"].setdefault("trace", []).extend([
-        ["The program read the scale from the scale bar", f"{bar['label']} = {bar['length_px']:,} px, {bar['px_per_m']:.1f} px per metre"],
-        ["The program moved each side of the box onto its wall and measured", working]])
+    how = ("The program measured the room by its own outline" if by_outline == len(rooms) else
+           "The program moved each side of the box onto its wall and measured")
+    steps = [ruler["trace"], [how, working]]
+    if holes_taken:
+        steps.append(["Took out what stands inside the room", f"{holes_taken} hole{'' if holes_taken == 1 else 's'} "
+                      "(columns, shafts or cores enclosed by the room): drawn on the sheet, their area is not floor"])
+    if doorways is not None:
+        steps.append(["Checked the scale against a standard: the width of a door",
+                      f"the room's door leaves come out {doorways['leaf_m']:.2f} m wide at this scale; a door is 0.8 to 1.0 m"])
+    common["meta"].setdefault("trace", []).extend(steps)
     what = {"area": "floor area", "perimeter": "perimeter", "baseboard": "baseboard length: the perimeter less the door openings"}[quantity]
     common["meta"] = {**common["meta"], "checks": checks, "working": working,
                       "interpreted": f"{what} of {len(rooms)} room{'' if len(rooms) == 1 else 's'}, measured on the sheet"}
-    doors = f" {len(left_out)} door opening{'' if len(left_out) == 1 else 's'} left out." if quantity == "baseboard" else ""
-    return Answer(answer=round(shown, 2), unit=shown_unit, state=CHECK, confidence=0.6, evidence=evidence,
-                  explanation=f"{working}. Measured on the sheet: each side of the room was moved onto the inner face "
-                              f"of its wall, and the lengths were read against the scale bar ({bar['label']} = "
-                              f"{bar['length_px']:,} px).{doors}",
+    said_doors = f" {len(left_out)} door opening{'' if len(left_out) == 1 else 's'} left out." if quantity == "baseboard" else ""
+    said_holes = (f" {holes_taken} hole{'' if holes_taken == 1 else 's'} standing in the room "
+                  f"{'was' if holes_taken == 1 else 'were'} taken out." if holes_taken else "")
+    measured_how = ("the room was measured by its own outline, the free space inside its walls" if by_outline else
+                    "each side of the room was moved onto the inner face of its wall")
+    confidence = 0.45 if unconfirmed else 0.6
+    estimate = ""
+    if ruler["estimate"]:
+        # The scale is not printed: it rests on a standard or on where the model pointed. Said, with the range it leaves.
+        power = 2 if quantity == "area" else 1
+        low, high = sorted((shown * (ppm / ruler["high"]) ** power, shown * (ppm / ruler["low"]) ** power))
+        confidence = 0.3
+        common["meta"]["estimate"] = {"low": round(low, 2), "high": round(high, 2), "from": ruler["said"],
+                                      "unit": pretty(shown_unit)}
+        common["meta"]["not_verifiable"] = True
+        estimate = (f" This is an estimate: no scale is printed on the sheet. Between {_fmt(low)} and {_fmt(high)} "
+                    f"{pretty(shown_unit)} over the range that leaves open.")
+    return Answer(answer=round(shown, 2), unit=shown_unit, state=CHECK, confidence=confidence, evidence=evidence,
+                  explanation=f"{working}. Measured on the sheet: {measured_how}, and the lengths were read against "
+                              f"{ruler['said']}.{said_doors}{said_holes}{estimate}",
                   **common)
