@@ -26,7 +26,7 @@ OVERLAP = 260        # shared with the next tile, so that a symbol on a seam is 
 MAX_TILES = 16
 MIN_INK = 0.004      # a tile with less than this share of dark pixels is empty paper
 SAME = 0.35          # two boxes are the same symbol when they share this much of the smaller one
-WORKERS = 4
+WORKERS = 8   # tiles asked about at the same time
 
 SYSTEM_TILE = SYSTEM_BOXES + """
 - This image is one part of a larger sheet. Mark an item that is cut by the edge of the image only if more than half of it is inside the image.

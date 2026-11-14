@@ -137,10 +137,22 @@ class View:
                 round((-t["scale"] * y + t["ty"] - self.clip[1]) * self.zoom, 1)]
 
 
+# How long one request waits for a model answer before saying "still working". Well under the
+# 100 seconds after which a proxy such as Cloudflare gives up on a request.
+WAIT_FOR_MODEL_S = float(os.environ.get("BLUEPRINTS_WAIT_S", "50"))
+
+
+class StillWorking(Exception):
+    """The answer is being worked on; ask again and it will be there, or nearer."""
+
+
 class AskRequest(BaseModel):
     drawing: str
     question: str
     use_model: bool = False
+
+
+MAX_SPOKEN_CHARS = 400
 
 
 class SpeakRequest(BaseModel):
@@ -200,6 +212,7 @@ class Service:
         self._restated: dict[tuple[str, str], interpret.Restated] = {}  # a question is only restated once
         self._enhanced: dict[str, dict] = {}  # drawing -> its enlarged view on Cloudinary
         self.logged = self._load_logged_runs()
+        self._flights: dict[str, dict] = {}  # model answers being worked on right now, by question
         self.examples = self._take_in_examples()
 
     def _take_in_examples(self) -> list[str]:
@@ -602,19 +615,52 @@ class Service:
             raise HTTPException(503, "no vision-model key is configured on the server")
         engine = model_path.make(vlm)
 
+        def work(q: Question, dataset, job: dict) -> None:
+            try:
+                ans = engine(q, dataset)
+                if ans.error is None and ans.answer is not None:  # an answer is kept; a failure is tried again
+                    store = _kept_file(q)
+                    store.parent.mkdir(parents=True, exist_ok=True)
+                    store.write_text(json.dumps({"answer": ans.answer, "unit": ans.unit, "state": ans.state,
+                                                 "confidence": ans.confidence, "method": ans.method, "evidence": ans.evidence,
+                                                 "explanation": ans.explanation, "reason": ans.reason,
+                                                 "latency_ms": ans.latency_ms, "meta": ans.meta}), encoding="utf-8")
+                job["answer"] = ans
+            except Exception as exc:  # the one waiting is told, whatever went wrong
+                job["failed"] = exc
+            finally:
+                job["finished"] = time.time()
+                job["done"].set()
+
         def remembered(q: Question, dataset) -> Answer:
-            """A model answer is paid for once: the same question about the same drawing is shown again from disk."""
-            kept = _kept_answer(q)
-            if kept is not None:
-                return kept
-            ans = engine(q, dataset)
-            if ans.error is None and ans.answer is not None:  # an answer is kept; a failure is tried again
-                store = _kept_file(q)
-                store.parent.mkdir(parents=True, exist_ok=True)
-                store.write_text(json.dumps({"answer": ans.answer, "unit": ans.unit, "state": ans.state,
-                                             "confidence": ans.confidence, "method": ans.method, "evidence": ans.evidence,
-                                             "explanation": ans.explanation, "reason": ans.reason,
-                                             "latency_ms": ans.latency_ms, "meta": ans.meta}), encoding="utf-8")
+            """A model answer is paid for once, and worked on once however many times it is asked for.
+
+            A long answer (a hundred doors boxed tile by tile) takes longer than a proxy in front of the
+            app lets one request live. So the work runs on its own; a request waits for it a while, and if
+            it is not done says so (StillWorking). The page asks again and joins the same piece of work.
+            """
+            key = _kept_file(q).name
+            with self.lock:
+                for old in [k for k, j in self._flights.items() if j.get("finished") and time.time() - j["finished"] > 300]:
+                    del self._flights[old]
+                job = self._flights.get(key)
+                if job is None or job["paid"]:  # no work under way, or its answer was already handed over
+                    kept = _kept_answer(q)
+                    if kept is not None:
+                        return kept
+                if job is None:
+                    job = self._flights[key] = {"done": threading.Event(), "answer": None, "failed": None, "paid": False}
+                    threading.Thread(target=work, args=(q, dataset, job), daemon=True).start()
+            if not job["done"].wait(WAIT_FOR_MODEL_S):
+                raise StillWorking()
+            if job["failed"] is not None:
+                with self.lock:
+                    self._flights.pop(key, None)
+                raise job["failed"]
+            ans = job["answer"]
+            if job["paid"]:  # another request already took this answer and its cost into the session's total
+                ans = Answer(**{**ans.__dict__, "cost_usd": 0.0})
+            job["paid"] = True  # the first request to get the answer carries what it cost
             return ans
 
         return remembered
@@ -802,13 +848,19 @@ class Service:
             elif req.use_model:
                 if self.spent_eur >= self.budget_eur:
                     raise HTTPException(402, f"the demo's model budget of EUR {self.budget_eur:.2f} is used up")
-                progress.say(asked.qid, "Asking the vision model")
+                if progress.get(asked.qid) is None:
+                    progress.say(asked.qid, "Asking the vision model")
                 try:
                     ans = self._model_fallback()(asked, self.ds)
+                except StillWorking:
+                    raise  # the work goes on; what it is doing stays on show
                 except FatalEngineError as exc:
-                    raise HTTPException(503, f"cannot ask the vision model: {exc}")
-                finally:
                     progress.clear(asked.qid)
+                    raise HTTPException(503, f"cannot ask the vision model: {exc}")
+                except Exception:
+                    progress.clear(asked.qid)
+                    raise
+                progress.clear(asked.qid)
                 self.spent_eur += config.usd_to_eur(ans.cost_usd or 0.0)
             if labels is not None and ans is not labels and ans.answer is not None:
                 _second_opinion(ans, labels)
@@ -1284,9 +1336,14 @@ def create_app(dataset_root: Path | str | None = None) -> FastAPI:
         return placed
 
     @app.post("/api/ask")
-    def ask(req: AskRequest) -> dict:
+    def ask(req: AskRequest, response: Response):
         need(req.drawing)
-        return service.ask(req)
+        try:
+            return service.ask(req)
+        except StillWorking:
+            # Not an error: a long answer is still being worked on. The page asks again and joins it.
+            response.status_code = 202
+            return {"pending": True}
 
     @app.post("/api/known")
     def known(body: dict) -> dict:
@@ -1322,7 +1379,11 @@ def create_app(dataset_root: Path | str | None = None) -> FastAPI:
 
     @app.post("/api/speak")
     def speak_aloud(req: SpeakRequest):
-        return Response(speak(" ".join(req.text.split())), media_type="audio/mpeg")
+        # An answer is a sentence or two. On a public link, longer text is not read: the voice is paid by the character.
+        text = " ".join(req.text.split())[:MAX_SPOKEN_CHARS]
+        if not text:
+            raise HTTPException(400, "nothing to read aloud")
+        return Response(speak(text), media_type="audio/mpeg")
 
     @app.get("/api/partners")
     def partners() -> dict:

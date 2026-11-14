@@ -391,3 +391,51 @@ def test_the_app_can_ask_which_examples_this_server_holds_and_what_a_long_answer
     assert progress.get("some-question").endswith("3 of 8 tiles")
     progress.clear("some-question")
     assert progress.get("some-question") is None and question_id("a", "b")
+
+
+def test_a_long_model_answer_is_worked_on_once_and_a_request_that_outlives_its_wait_is_told_so(monkeypatch, tmp_path):
+    """A proxy in front of the app cuts a request off after a while. The work goes on; asking again joins it."""
+    import threading
+    import time
+
+    from blueprints import model_path, server
+    from blueprints.answer import Answer
+    from blueprints.data import Question
+
+    calls, release = [], threading.Event()
+
+    def slow_engine(vlm):
+        def answer(q, dataset):
+            calls.append(q.question)
+            release.wait(5)
+            return Answer(answer=7, unit="count", method="sheet-working:test", cost_usd=0.02,
+                          evidence=[{"kind": "formula", "text": "7"}])
+        return answer
+
+    monkeypatch.setattr(model_path, "make", slow_engine)
+    monkeypatch.setattr(server, "WAIT_FOR_MODEL_S", 0.2)
+    monkeypatch.setattr(server.config, "REPO_ROOT", tmp_path)          # kept answers go to a scratch folder
+    monkeypatch.setattr(server, "EXAMPLES_DIR", tmp_path / "examples")
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key-not-used")
+    app_state = object.__new__(server.Service)                          # only the part that asks the model is needed
+    app_state.lock, app_state._flights = threading.Lock(), {}
+    q = Question(qid="q1", path="uploads/abc.png", question="How many doors?", answer=None, unit=None, type="",
+                 source="uploads", drawing="uploads/abc", group="uploads")
+    ask = app_state._model_fallback()
+    try:
+        ask(q, None)
+        raise AssertionError("the first request should have been told the work is still going on")
+    except server.StillWorking:
+        pass
+    try:
+        app_state._model_fallback()(q, None)                            # asked again: joins the same work
+    except server.StillWorking:
+        pass
+    assert calls == ["How many doors?"]                                 # the model was asked once
+    release.set()
+    time.sleep(0.3)
+    first = app_state._model_fallback()(q, None)
+    assert first.answer == 7 and first.cost_usd == 0.02
+    again = app_state._model_fallback()(q, None)
+    assert again.answer == 7 and again.cost_usd == 0.0                  # shown again from disk, paid for once
+    assert calls == ["How many doors?"]

@@ -236,13 +236,22 @@ export const api = {
     return res.ok ? ((await res.json()) as { text: string | null }).text : null;
   },
   async ask(drawing: string, question: string, useModel: boolean): Promise<AskResult> {
-    const res = await fetch("/api/ask", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ drawing, question, use_model: useModel }),
-    });
-    if (!res.ok) throw new Error(await message(res));
-    return res.json();
+    // A long answer is worked on by the server on its own. A request that outlives it comes back as
+    // "still working" (202) well before any proxy would cut it off; asking again joins the same work.
+    for (let tries = 0; tries < 40; tries++) {
+      const res = await fetch("/api/ask", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ drawing, question, use_model: useModel }),
+      });
+      if (res.status === 202) {
+        await new Promise((wait) => window.setTimeout(wait, 1500));
+        continue;
+      }
+      if (!res.ok) throw new Error(await message(res));
+      return res.json();
+    }
+    throw new Error("the answer took too long; ask again to pick it up where it is");
   },
   async upload(file: File): Promise<DrawingSummary> {
     const res = await fetch(`/api/upload?name=${encodeURIComponent(file.name)}`, { method: "POST", body: file });

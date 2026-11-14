@@ -175,6 +175,17 @@ BLUEPRINTS_COUNT=outlines ./bp run router --split dev   # the same, counting rep
 cd web && npm run dev                              # front end with hot reload (API on port 8000)
 ```
 
+### Put it online
+
+The app is one server with the drawings on its disk, so the simplest public link is a tunnel from the machine that runs it. With Cloudflare:
+
+```bash
+BLUEPRINTS_UI_BUDGET_EUR=5 ./bp serve --port 8000        # the cap on model spend for this run of the server
+cloudflared tunnel --url http://127.0.0.1:8000            # prints a https://….trycloudflare.com address
+```
+
+A quick tunnel's address changes each time it starts; a named tunnel on your own domain keeps one (`cloudflared tunnel create`, then `cloudflared tunnel route dns` and `cloudflared tunnel run`). What a public visitor can do: open the examples (their answers come with the app and cost nothing), ask new questions (model spend stops at the cap, after which the app says so), bring a drawing of up to 25 MB, and have an answer read aloud (400 characters at most). A long answer is worked on by the server on its own and the page asks for it again every few seconds, so it survives the 100 seconds a proxy allows one request. The keys stay in `.env` on the server; the page never sees them.
+
 ### Docker
 
 The image holds the app, the API and the OCR models, but no drawings: mount the dataset and a cache folder.
