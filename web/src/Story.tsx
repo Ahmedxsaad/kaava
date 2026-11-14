@@ -138,7 +138,7 @@ export function Story({ stats, onOpen, onAsk, onBrowse, onBring, onTalk, canTalk
   useEffect(() => {
     if (!opening || !ready) return;
     setReadyAt((t) => t || performance.now());
-    const timer = window.setInterval(() => setNow(performance.now()), 34);
+    const timer = window.setInterval(() => { if (!document.hidden) setNow(performance.now()); }, 50);
     return () => window.clearInterval(timer);
   }, [opening, ready]);
   const scene = scenes.length ? scenes[sceneAt % scenes.length] : null;

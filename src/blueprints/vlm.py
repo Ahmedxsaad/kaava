@@ -10,6 +10,7 @@ import base64
 import hashlib
 import json
 import os
+import threading
 import time
 from dataclasses import dataclass, field
 from typing import Sequence
@@ -170,6 +171,9 @@ class AnthropicVLM:
                         latency_ms=(time.perf_counter() - t0) * 1000)
 
 
+CALL_TIMEOUT_MS = 150_000  # one model call may take this long, then it fails (a call that hangs must not hang the app)
+
+
 class GeminiVLM:
     """Gemini via the Interactions API with a JSON-schema constrained reply."""
 
@@ -200,24 +204,29 @@ class GeminiVLM:
         self._genai, self._errors, self._types = genai, errors, types
         self._attempts = attempts
         self._client = None  # made on first use, so a dry run needs no key
+        self._client_lock = threading.Lock()
         self.model, self.effort, self.resolution = model, effort, resolution
         self.max_output_tokens = max_output_tokens
 
     @property
     def client(self):
-        if self._client is None:
-            key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
-            if not key:
-                raise FatalEngineError(
-                    "no Gemini credentials found. Put GEMINI_API_KEY=... in .env (see .env.example)."
+        # Several calls can start at once (two workings of a question, the tiles of a sheet). The client
+        # is made once, under a lock: two threads making it at the same moment left a call that never returned.
+        with self._client_lock:
+            if self._client is None:
+                key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+                if not key:
+                    raise FatalEngineError(
+                        "no Gemini credentials found. Put GEMINI_API_KEY=... in .env (see .env.example)."
+                    )
+                options = self._types.HttpOptions(
+                    retry_options=self._types.HttpRetryOptions(attempts=self._attempts),
+                    timeout=CALL_TIMEOUT_MS,  # a call that hangs is an error, not a wait without end
+                    # Tests point this at a local server; unset means Google's endpoint.
+                    base_url=os.environ.get("GEMINI_BASE_URL") or None,
                 )
-            options = self._types.HttpOptions(
-                retry_options=self._types.HttpRetryOptions(attempts=self._attempts),
-                # Tests point this at a local server; unset means Google's endpoint.
-                base_url=os.environ.get("GEMINI_BASE_URL") or None,
-            )
-            self._client = self._genai.Client(api_key=key, http_options=options)
-        return self._client
+                self._client = self._genai.Client(api_key=key, http_options=options)
+            return self._client
 
     @property
     def label(self) -> str:

@@ -287,6 +287,7 @@ h1, h2 { font-family: var(--serif); font-weight: 650; letter-spacing: -0.028em; 
 .mark.count.off .dot text { fill: var(--ink-4); text-decoration: line-through; }
 .mark.room .tint { fill: var(--mark-tint); fill-opacity: 0.6; mix-blend-mode: multiply; animation: appear 0.45s ease-out both; }
 .mark.room .edge { fill: none; stroke: var(--mark); stroke-linejoin: round; animation: appear 0.3s ease-out both; }
+.mark.room .hole { stroke: #c2410c; animation: appear 0.45s 0.2s ease-out both; }
 .mark.room.hot .tint { fill-opacity: 0.85; }
 .mark.room.off .tint { fill: #e3e5e7; fill-opacity: 0.5; }
 .mark.room.off .edge { stroke: var(--ink-5); stroke-dasharray: 4 4; }
@@ -695,12 +696,13 @@ html[data-on-stage] .app.page-home .top .ghost { color: rgb(255 255 255 / 0.8); 
 /* ---------------------------------------------------------------- the opening screen
    The promise and an ask bar that works on the left. On the right the drawing itself: each counted
    item is marked on the sheet as it is counted, and the answer stands on the colour of its state. */
-.aurora { position: absolute; inset: -12%; pointer-events: none; filter: blur(90px); opacity: 0.7; transition: opacity 1s ease; }
-.aurora i { position: absolute; border-radius: 50%; mix-blend-mode: screen; animation: drift 24s ease-in-out infinite alternate; }
-.aurora i:nth-child(1) { width: 48vw; height: 48vw; left: 2%; top: -14%; background: radial-gradient(circle, #19c26b 0%, rgb(25 194 107 / 0) 62%); opacity: 0.5; }
-.aurora i:nth-child(2) { width: 54vw; height: 54vw; right: -8%; top: 6%; background: radial-gradient(circle, #2f6bff 0%, rgb(47 107 255 / 0) 62%); opacity: 0.5; animation-delay: -8s; }
-.aurora i:nth-child(3) { display: none; }
-@keyframes drift { from { transform: translate(0, 0) scale(1); } to { transform: translate(5%, 7%) scale(1.16); } }
+/* Two soft lights on the opening's ground. Plain gradients, still: a blurred, moving layer this large
+   costs a weak graphics card every frame. */
+.aurora { position: absolute; inset: 0; pointer-events: none; opacity: 0.75; transition: opacity 1s ease;
+  background:
+    radial-gradient(52vw 52vw at 22% 6%, rgb(25 194 107 / 0.3) 0%, rgb(25 194 107 / 0) 68%),
+    radial-gradient(58vw 58vw at 92% 36%, rgb(47 107 255 / 0.3) 0%, rgb(47 107 255 / 0) 68%); }
+.aurora i { display: none; }
 .story-pin:not(.tone-0) .aurora { opacity: 0.28; }
 .story-stage.wait { opacity: 0; pointer-events: none; }
 
@@ -829,3 +831,47 @@ html[data-on-stage] .app.page-home .top .ghost { color: rgb(255 255 255 / 0.8); 
 .examples.hard { margin-bottom: 84px; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 16px; }
 .examples.hard .example strong { font-size: 18px; }
 @media (max-width: 1180px) { .examples.hard { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* ---------------------------------------------------------------- how it works
+   The route, the model's tools and its reply format, the refusals, the hard cases. */
+.guide .n-head p b { color: #fff; font-weight: 600; }
+.guide .n-head { padding-bottom: 76px; margin-bottom: 20px; }
+.how-route { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+.how-engine { display: grid; gap: 8px; align-content: start; padding: 16px 16px 14px; border-radius: 12px; background: var(--sunken); }
+.how-engine strong { font: 620 18px/1.2 var(--serif); letter-spacing: -0.01em; }
+.how-engine .when { font-size: 13.5px; line-height: 1.4; color: var(--ink-2); }
+.how-engine .what { font-size: 13px; line-height: 1.45; color: var(--ink-3); }
+.how-engine em { font-style: normal; font-size: 12.5px; color: var(--ink-3); padding-top: 8px; border-top: 1px solid var(--line); margin-top: auto; }
+.how-engine em b { color: var(--ink); font-weight: 600; }
+.how-after { margin: 18px 0 0 !important; font-size: 15px; color: var(--ink-2) !important; }
+.guide .s-verified { color: var(--ok); } .guide .s-check { color: var(--warn); } .guide .s-declined { color: var(--stop); }
+.how-tools { width: 100%; border-collapse: collapse; font-size: 14.5px; line-height: 1.5; }
+.how-tools th { text-align: left; font-size: 12.5px; font-weight: 500; color: var(--ink-3); padding: 0 16px 8px 0; border-bottom: 1px solid var(--line); }
+.how-tools td { vertical-align: top; padding: 12px 16px 12px 0; border-bottom: 1px solid var(--line); color: var(--ink-2); }
+.how-tools td:first-child { white-space: nowrap; color: var(--ink); width: 170px; }
+.how-tools td:nth-child(2) { width: 34%; }
+.how-bench td:first-child { width: auto; } .how-bench td:nth-child(2) { width: auto; }
+.how-schema { margin-top: 22px; padding: 18px 20px; border-radius: 12px; background: #0f1a12; color: #d6e7d8; font: 13px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; overflow-x: auto; }
+.how-no { display: grid; gap: 10px; }
+.how-no li { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.4fr); gap: 20px; padding: 12px 0; border-bottom: 1px solid var(--line); font-size: 14.5px; line-height: 1.5; }
+.how-no li b { font-weight: 600; }
+.how-no li span { color: var(--stop); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+.how-verified { display: grid; gap: 8px; }
+.how-verified li { display: flex; gap: 14px; align-items: baseline; font-size: 15px; }
+.how-verified li b { min-width: 280px; font-weight: 600; }
+.how-verified li span { color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.how-hard { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.how-hard button { display: grid; gap: 6px; text-align: left; padding: 16px 18px; border-radius: 12px; background: var(--sunken); transition: background 0.2s, transform 0.15s; }
+.how-hard button:hover { background: #e4e8e3; transform: translateY(-1px); }
+.how-hard strong { font: 620 17px/1.25 var(--serif); letter-spacing: -0.01em; }
+.how-hard span { font-size: 13.5px; line-height: 1.45; color: var(--ink-2); }
+@media (max-width: 1100px) {
+  .how-route { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .how-hard { grid-template-columns: minmax(0, 1fr); }
+  .how-no li { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+}
+
+/* What a long answer is doing right now */
+.busy-note { display: flex; align-items: center; gap: 10px; margin: 14px 0 4px; padding: 10px 14px; border-radius: 10px; background: var(--sunken); font-size: 14px; line-height: 1.4; color: var(--ink-2); }
+.busy-note i { flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--ink); animation: busy 1s ease-in-out infinite; }
+@keyframes busy { 0%, 100% { opacity: 0.25; transform: scale(0.8); } 50% { opacity: 1; transform: scale(1); } }

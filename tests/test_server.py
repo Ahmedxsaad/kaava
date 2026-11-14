@@ -149,7 +149,10 @@ def test_dataset_answer_never_reaches_the_engine(client):
 def test_demo_tour_returns_the_states_it_promises(client):
     source = (config.REPO_ROOT / "web" / "src" / "tour.ts").read_text(encoding="utf-8")
     stops = re.findall(r'state: "(\w+)",\s+drawing: "([^"]+)",\s+question: "([^"]+)"', source)
-    assert len(stops) >= 6
+    # A stop on a drawing this dataset does not hold (the preview is a part of the full set) is left out by the app.
+    known = set(client.post("/api/known", json={"drawings": [drawing for _, drawing, _ in stops]}).json()["known"])
+    stops = [stop for stop in stops if stop[1] in known]
+    assert len(stops) >= 12
     for state, drawing, question in stops:
         answer = ask(client, drawing, question)
         assert answer["state"] == state, (drawing, question, answer["state"], answer["reason"])
@@ -367,3 +370,18 @@ def test_a_dataset_answer_becomes_an_evidence_sheet(client):
     shared = client.post("/api/share", json={"drawing": SWISS, "question": DOORS}).json()
     picture = client.get(shared["url"])
     assert picture.status_code == 200 and len(picture.content) > 50_000
+
+
+@needs_data
+def test_the_app_can_ask_which_examples_this_server_holds_and_what_a_long_answer_is_doing(client):
+    known = client.post("/api/known", json={"drawings": [SWISS, "data/swiss_dwellings/no_such_floor", 7]}).json()
+    assert known == {"known": [SWISS]}                      # an example on a drawing this dataset lacks is left out
+    idle = client.get("/api/progress", params={"drawing": SWISS, "question": DOORS}).json()
+    assert idle == {"text": None}                           # nothing is being worked on
+    from blueprints import progress
+    from blueprints.data import question_id
+
+    progress.say("some-question", "Boxing the symbols tile by tile at full size: 3 of 8 tiles")
+    assert progress.get("some-question").endswith("3 of 8 tiles")
+    progress.clear("some-question")
+    assert progress.get("some-question") is None and question_id("a", "b")

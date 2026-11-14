@@ -76,6 +76,7 @@ export interface Evidence {
   volume_m3?: number;
   length_m?: number;
   score?: number | null;
+  holes?: [number, number][][];  // rings cut out of a measured room (shafts, or rooms of their own inside it)
   same_as?: number;  // lies exactly on that earlier item: the same outline is in the file more than once
   times?: number;  // how many outlines lie here: the place is one mark
 }
@@ -110,6 +111,7 @@ export interface AskResult {
   replayed_from: string | null;
   interpreted: string | null;
   basis?: string | null;  // what the vision model said about how it got there
+  trace?: { title: string; body: string }[];  // what the program and the model each did, in order
   restated: { question: string | null; reason: string; model: string; cost_eur: number; latency_ms: number } | null;
   checks: { name: string; value: number | string }[];
   verified_because: {
@@ -197,6 +199,8 @@ export interface Stats {
   };
   full_set_mix: { source: string; type: string; questions: number }[];
   labels_on_scans: { run_id: string; scan_questions: number; answered: number; correct: number; share: number; share_alone: number } | null;
+  // Stoa's sample sheets scored against our own answer key: this system, and the vision model alone.
+  sheets_bench?: Record<string, { n: number; correct: number; wrong: number; declined: number; accuracy: number; eur_per_question: number; eur_total: number }>;
   model_budget_eur: number;
   model_spent_eur: number;
 }
@@ -226,6 +230,11 @@ export const api = {
     get<DrawingDetail>(`/api/drawing?drawing=${encodeURIComponent(id)}&page=${page}`),
   thumb: (id: string) => `/api/thumb?drawing=${encodeURIComponent(id)}`,
   stats: () => get<Stats>("/api/stats"),
+  // What a long answer is doing right now, while the app waits for it.
+  async progress(drawing: string, question: string): Promise<string | null> {
+    const res = await fetch(`/api/progress?drawing=${encodeURIComponent(drawing)}&question=${encodeURIComponent(question)}`);
+    return res.ok ? ((await res.json()) as { text: string | null }).text : null;
+  },
   async ask(drawing: string, question: string, useModel: boolean): Promise<AskResult> {
     const res = await fetch("/api/ask", {
       method: "POST",

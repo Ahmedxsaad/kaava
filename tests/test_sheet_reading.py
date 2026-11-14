@@ -23,13 +23,18 @@ INDEX = {"source": "ocr", "width": 1000, "height": 800, "items": [
 
 
 class Reader(MockVLM):
-    def __init__(self, **reply):
+    """Gives the same working each time it is asked, or the workings it was given one after another."""
+
+    def __init__(self, *others, **reply):
         super().__init__()
-        self.reply, self.seen = {**EMPTY, **reply}, []
+        self.replies, self.seen = [{**EMPTY, **reply}, *({**EMPTY, **other} for other in others)], []
 
     def ask(self, system, images, text, schema):
         self.seen.append((system, text, schema))
-        return VLMReply(data=self.reply, model="mock", cost_usd=0.02, latency_ms=5.0)
+        reply = self.replies[min(len(self.seen), len(self.replies)) - 1]
+        if reply.get("fails"):
+            return VLMReply(data=None, model="mock", cost_usd=0.0, error="the call failed")
+        return VLMReply(data=reply, model="mock", cost_usd=0.02, latency_ms=5.0)
 
 
 @pytest.fixture
@@ -83,35 +88,69 @@ def test_a_quantity_is_computed_from_the_figures_and_each_figure_is_checked_agai
                           figure("c", 2, "4975", 4975, "mm")],
                  expression="a * (b + c)", result_unit="mm2", basis="the slab's clear dimensions")
     ans = sheet(vlm, "What is the area of the 150 mm slab-on-grade in m²?")
-    assert ans.answer == 61.69 and ans.unit == "m2" and ans.state == CHECK and ans.cost_usd == 0.02
+    assert ans.answer == 61.69 and ans.unit == "m2" and ans.state == CHECK
+    assert len(vlm.seen) == 2 and ans.cost_usd == 0.04      # worked out twice, independently, and both are paid for
     boxes = [e for e in ans.evidence if e["kind"] == "box"]
     assert [e["bbox"] for e in boxes] == [[400, 100, 460, 120], [700, 300, 720, 360], [700, 500, 720, 560]]
     assert ans.evidence[-1] == {"kind": "formula", "text": "6200 × (4975 + 4975) = 61,690,000 mm² = 61.69 m²"}
-    assert all(v == "the program reads the same figure here" for v in ans.meta["checks"].values())
-    assert ans.confidence == 0.85
+    checks = ans.meta["checks"]
+    assert checks.pop("a second, independent working") == "the same result"
+    assert all(v == "the program reads the same figure here" for v in checks.values())
+    assert ans.confidence == 0.9
+    steps = [title for title, _ in ans.meta["trace"]]
+    assert steps == ["A program read the sheet", "The model named the figures and wrote the expression, not the result",
+                     "The program read each figure again at the place marked", "The calculator computed",
+                     "The question was worked out a second time, independently"]
     system, text, schema = vlm.seen[0]
     assert "0 | 6200 |" in text and "5 | 1,240 SF |" in text   # the model is given the texts the program read
     assert "answer_number" not in schema["properties"]         # and has no field to state the result in
 
 
-def test_a_figure_the_model_misread_shows_as_a_disagreement(sheet):
+def test_a_figure_the_program_reads_differently_means_no_number(sheet):
     vlm = Reader(figures=[figure("a", 0, "6800", 6800, "mm")], expression="a", result_unit="mm")
     ans = sheet(vlm, "How long is the slab in metres?")
-    assert ans.answer == 6.8 and ans.confidence == 0.3
-    assert "the program reads 6,200 here, the model 6,800" in list(ans.meta["checks"].values())[0]
-    assert "1 differ" in ans.explanation
+    assert ans.state == DECLINED and ans.answer is None
+    assert "the program reads 6,200 here, the model 6,800" in ans.reason and "no number is given" in ans.reason
+
+
+def test_two_workings_that_disagree_mean_no_number_and_both_are_shown(sheet):
+    one = dict(figures=[figure("a", 0, "6200", 6200, "mm"), figure("b", 1, "4975", 4975, "mm")],
+               expression="a * b", result_unit="mm2")
+    other = dict(figures=[figure("a", 0, "6200", 6200, "mm"), figure("b", 1, "4975", 4975, "mm"),
+                          figure("c", 2, "4975", 4975, "mm")], expression="a * (b + c)", result_unit="mm2")
+    ans = sheet(Reader(other, **one), "What is the area of the slab in m²?")
+    assert ans.state == DECLINED and ans.cost_usd == 0.04
+    assert "Two independent workings gave different results" in ans.reason
+    assert "30.84 m²" in ans.reason and "61.69 m²" in ans.reason and "6200 × (4975 + 4975)" in ans.reason
+    # One working that answers and one that finds no way is not agreement either.
+    unsure = sheet(Reader({"cannot_tell": True, "basis": "the room's length is not printed"}, **one), "What is the area?")
+    assert unsure.state == DECLINED and "the other found no way to answer" in unsure.reason
+    # Two that agree within half a per cent are one result; a count must agree exactly.
+    near = dict(figures=[figure("a", 0, "6200", 6200.5, "mm")], expression="a", result_unit="mm")
+    exact = dict(figures=[figure("a", 0, "6200", 6200, "mm")], expression="a", result_unit="mm")
+    assert sheet(Reader(near, **exact), "How long is it in mm?").answer == 6200
+    pumps = [{"text_id": 3, "box_2d": [0, 0, 5, 5], "label": "pump"}, {"text_id": 4, "box_2d": [0, 0, 5, 5], "label": "pump"}]
+    counted = sheet(Reader({"items": pumps[:1]}, items=pumps), "How many pumps are shown?")
+    assert counted.state == DECLINED and "2 count" in counted.reason and "1 count" in counted.reason
+
+
+def test_when_one_of_the_two_calls_fails_the_answer_rests_on_one_working_and_says_so(sheet):
+    vlm = Reader({"fails": True}, figures=[figure("a", 0, "6200", 6200, "mm")], expression="a", result_unit="mm")
+    ans = sheet(vlm, "How long is the slab in mm?")
+    assert ans.answer == 6200 and ans.meta["trace"][-1] == ["A second working", "the second call failed, so there is only one"]
+    assert "a second, independent working" not in ans.meta["checks"]
 
 
 def test_a_figure_given_in_another_unit_of_length_still_matches(sheet):
     vlm = Reader(figures=[figure("a", 0, "6200", 6.2, "m")], expression="a", result_unit="m")
     ans = sheet(vlm, "How long is the slab in metres?")
-    assert ans.answer == 6.2 and ans.confidence == 0.85
+    assert ans.answer == 6.2 and ans.confidence == 0.9
 
 
 def test_feet_and_inches_and_table_entries(sheet):
     feet = sheet(Reader(figures=[figure("a", 6, "52'-8\"", 52.6667, "ft")], expression="a", result_unit="ft"),
                  "How wide is the north wing, in metres?")
-    assert feet.answer == pytest.approx(16.05, abs=0.01) and feet.unit == "m" and feet.confidence == 0.85
+    assert feet.answer == pytest.approx(16.05, abs=0.01) and feet.unit == "m" and feet.confidence == 0.9
     table = sheet(Reader(figures=[figure("a", 5, "1,240 SF", 1240, "ft2")], expression="sum", result_unit="ft2"),
                   "What is the common space circulation area?")
     assert table.answer == 1240 and table.unit == "ft2"
@@ -124,7 +163,9 @@ def test_a_count_is_the_number_of_listed_items_and_a_text_named_twice_is_one_ite
     ans = sheet(Reader(items=items), "How many fueling pumps are shown?")
     assert ans.answer == 3 and ans.unit == "count" and len(ans.evidence) == 3
     assert ans.evidence[0]["bbox"] == [100, 600, 140, 620]   # the printed tag's own box
-    assert ans.meta["checks"] == {"items listed": 3, "identified by a printed text": 2}
+    assert ans.meta["checks"] == {"items listed": 3, "identified by a printed text": 2,
+                                  "a second, independent working": "the same result"}
+    assert ans.meta["trace"][-2][0] == "The program counted the list"
 
 
 def test_nothing_printed_means_no_number(sheet):

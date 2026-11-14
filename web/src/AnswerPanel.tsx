@@ -5,6 +5,7 @@ import { boxOf } from "./Viewer2D";
 interface Props {
   result: AskResult | null;
   asking: boolean;
+  busy?: string | null;  // what a long answer is doing right now
   error: string | null;
   shown: number | string | null;  // the value while evidence is still being marked
   settled: boolean;
@@ -153,12 +154,21 @@ function Steps({ result, marked }: { result: AskResult; marked: number }) {
     },
     { title: `Chose the method: ${result.engine}`, body: route },
   ];
-  if (result.answer !== null) {
+  // An answer worked out on a sheet carries its own steps: what the program read, what the model was
+  // allowed to give (the working, never the number), what the calculator and the checks then did.
+  const traced = (result.trace?.length ?? 0) > 0;
+  for (const step of result.trace ?? []) steps.push({ title: step.title, body: step.body });
+  if (result.answer !== null && traced) {
+    if (result.basis) steps.push({ title: "The model's note", body: result.basis });
+    steps.push({ title: `Drew the evidence on the sheet: ${Math.min(marked, total)} of ${total}`, body: "Each figure, row or box the answer rests on is marked. Check them there." });
+  } else if (result.answer !== null) {
     steps.push({
       title: total ? `Marked the evidence: ${Math.min(marked, total)} of ${total}` : "Found nothing of this kind",
       body: formula?.text ?? (total ? "Each item is drawn on the sheet and listed below. Any of them can be left out." : undefined),
     });
     if (result.basis) steps.push({ title: "The model's note", body: result.basis });
+  }
+  if (result.answer !== null || traced) {
     if (result.checks.length) {
       steps.push({
         title: "Ran the checks",
@@ -177,7 +187,7 @@ function Steps({ result, marked }: { result: AskResult; marked: number }) {
       <h3>How it was worked out</h3>
       <ol>
         {steps.map((step, i) => (
-          <li key={step.title.split(":")[0]}>
+          <li key={i}>
             <i>{String(i + 1).padStart(2, "0")}</i>
             <div>
               <strong>{step.title}</strong>
@@ -344,6 +354,7 @@ export function AnswerPanel(props: Props) {
       <div className="answer">
         <div className={`lead${asking ? " busy" : ""}`}>
           <h2>{asking ? "Reading the drawing" : "Ask this drawing anything."}</h2>
+          {asking && props.busy && <p className="busy-note"><i />{props.busy}</p>}
           <p>
             Counts, areas and volumes are computed from the drawing's own geometry and marked on the sheet, so you can
             check an answer in seconds. Each one comes back Verified, Check this, or Can't answer reliably.
@@ -364,6 +375,7 @@ export function AnswerPanel(props: Props) {
   const reason = why(result);
   return (
     <article className={`answer state-${result.state}${asking ? " stale" : ""}`}>
+      {asking && <p className="busy-note"><i />{props.busy ?? "Working on it"}</p>}
       <p className="asked">{result.question}</p>
 
       <div className={`result-card ${result.state}${settled ? " settled" : ""}`}>

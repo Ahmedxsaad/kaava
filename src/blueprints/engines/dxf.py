@@ -71,8 +71,11 @@ def _room_label(room: dict) -> str:
 
 
 def _room_evidence(room: dict) -> dict:
-    return {"kind": "polygon", "space": "dxf_m", "points": room["polygon"],
-            "label": _room_label(room), "area_m2": round(room["area"], 2)}
+    evidence = {"kind": "polygon", "space": "dxf_m", "points": room["polygon"],
+                "label": _room_label(room), "area_m2": round(room["area"], 2)}
+    if room.get("hole_rings"):  # shafts and rooms lying inside this outline: cut out of it, and drawn so
+        evidence["holes"] = room["hole_rings"]
+    return evidence
 
 
 def _box_evidence(item: dict, label: str) -> dict:
@@ -154,6 +157,7 @@ def answer(q: Question, dataset: Dataset) -> Answer:
                 if room["name"] and norm(room["name"]) != norm(label):
                     return decline(f"room {asked[0]} is labelled '{room['name']}' on the drawing, not '{label}'")
                 checks = {"outline in the DXF": round(room["area"], 3)}
+                holes = ""
                 if room["printed_area"] is not None:
                     checks["area printed in the DXF"] = room["printed_area"]
                 if pdf is not None and asked[0] in pdf["areas"]:
@@ -167,10 +171,17 @@ def answer(q: Question, dataset: Dataset) -> Answer:
                     confidence, note = 0.5, f"the area printed in the room is {others[0]:.2f} m²: they differ"
                 else:
                     confidence, note = 0.85, "no area is printed in this room to compare with"
+                if room.get("holes"):  # a room around a shaft, a column or another room: the outline less what lies inside it
+                    taken = room["gross_area"] - room["area"]
+                    checks = {"outline before its holes are taken out": round(room["gross_area"], 3),
+                              f"holes inside the outline ({room['holes']})": round(taken, 3), **checks}
+                    holes = (f" The outline encloses {room['gross_area']:.2f} m²; {room['holes']} "
+                             f"hole{'' if room['holes'] == 1 else 's'} inside it ({taken:.2f} m²: shafts, columns or rooms of their own) "
+                             f"{'is' if room['holes'] == 1 else 'are'} taken out.")
                 return Answer(
                     answer=round(room["area"], 2), unit="m2", state=CHECK, confidence=confidence,
                     evidence=[_room_evidence(room)],
-                    explanation=f"Room {asked[0]} ('{label}'): outline area {room['area']:.2f} m²; {note}.",
+                    explanation=f"Room {asked[0]} ('{label}'): outline area {room['area']:.2f} m²; {note}.{holes}",
                     meta={"interpreted": f"net area of the room numbered {asked[0]}", "checks": checks},
                     **common)
             return _sum_answer(named(label), f"Rooms labelled '{label}'", pdf, common,

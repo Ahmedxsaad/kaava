@@ -41,6 +41,15 @@ export const TOUR: Stop[] = [
     question: "What is the net floor area of apartment B in m², summing all its rooms except balconies, loggias, terraces and other outdoor spaces?",
   },
   {
+    label: "A room with a hole in it",
+    card: true,
+    note: "A corridor around a lift: the outline encloses 17.23 m², the lift (3.24 m²) is cut out · free",
+    state: "verified",
+    drawing: "data/swiss_dwellings/site3565_bldg5449_floor23802",
+    question: "What is the net floor area of room 4.15 ('Korridor') in m²?",
+    view: "plan",
+  },
+  {
     label: "Slab area by type, from the printed dimensions",
     card: true,
     hard: true,

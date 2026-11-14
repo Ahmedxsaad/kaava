@@ -2,33 +2,47 @@
 
 For sheets no exact engine covers: a structural plan with dimension strings, a schedule,
 an area table, a piping plan with tagged equipment. A vision model asked for the number
-states one, and nothing shows where it came from. Here it may not state the number.
+states one, and nothing shows where it came from. Here it may not state the number: its
+reply has no field for one.
 
-  1. Every text on the sheet is read at full size by a program (sheet_text.py): the
-     PDF's own text layer, or the local OCR. The model gets the image and that list.
-  2. The model answers in one of three forms:
-       items      things to count, each identified by a printed text or a box
-       figures    printed figures (dimension strings, table entries) and an expression
-                  over them; it is told not to estimate sizes by eye
-       text       a descriptive answer with the texts it was read from
-  3. The code counts the items, evaluates the expression, converts the unit, and checks
-     each figure against the text the program read at that place.
+What the model is given, and what it can ask the program to do:
 
-So the number is computed, every figure in it is a box on the sheet, and a figure the
-model misread shows up as a disagreement with the program's reading. A person checks the
-working, not the model. Answers are state "check": which figures matter is still the
-model's judgement.
+  the sheet's texts   every text on the sheet, read at full size by a program
+                      (sheet_text.py): the PDF's own text layer, or the local OCR
+  a calculator        the model writes an expression over the figures it names; the code
+                      evaluates it (+ - * / and brackets, nothing else) and converts units
+  a counter           the model lists the rows or tags to count; the code counts the list
+  a closer look       many small symbols: the code cuts the sheet into tiles, has each
+                      symbol boxed at full size, merges and counts the boxes (tiles.py)
+  a ruler             a room with no printed size: the code finds its walls in the pixels
+                      and measures it against the scale bar (measure.py)
+
+What the program checks before it gives a number:
+
+  * every figure the model names is read again by the program at the place marked; a
+    figure the program reads differently means no number;
+  * the question is worked out twice, independently; two workings that disagree mean no
+    number, and both are shown;
+  * what cannot be done is said: nothing printed for it, no scale bar, a room that is
+    not a rectangle.
+
+So the number is computed, every figure in it is a box on the sheet, and when the
+working is not solid the answer is "Can't answer reliably" with the reason. What is
+left to the model is judgement (which figures matter), which is why these answers are
+"Check this" and never Verified.
 """
 
 from __future__ import annotations
 
 import ast
 import math
+import os
 import re
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Callable
 
-from . import measure, sheet_text, tiles
+from . import measure, progress, sheet_text, tiles
 from .answer import Answer
 from .data import Dataset, Question
 from .pointing import _box
@@ -37,6 +51,9 @@ from .scoring import CHECK
 
 PROMPT = 4
 MAX_TEXTS = 1100
+# How many times a question is worked out, independently. Two workings that disagree give no number.
+WORKINGS = max(1, int(os.environ.get("BLUEPRINTS_WORKINGS", "2")))
+AGREE_WITHIN = 0.005  # two quantities this close (relative) are the same result
 
 SYSTEM = """You answer a question about one sheet of a construction drawing set. You get the sheet as an image and a list of the texts printed on it. The list was read by a program at full resolution; each line is `id | text | y x`, where y and x give the centre of the text on a 0-1000 grid (y from the top edge, x from the left edge). Small text may be unreadable in the image: trust the list for what a text says, and the image for where things are and how they belong together.
 
@@ -301,14 +318,31 @@ def make_engine(vlm) -> Callable[[Question, Dataset], Answer]:
         if not can_render(q.path):
             return Answer.decline("no image of this file to read", method=method, cost_usd=0.0, latency_ms=0.0)
         path = dataset.abspath(q.path)
+        progress.say(q.qid, "Reading every text on the sheet at full size (once per sheet, about half a minute)")
         index = sheet_text.read(path)
         image = render(path, max_edge=vlm.max_edge, max_tokens=vlm.max_visual_tokens, max_pages=1)[0]
         listing, cut = _listing(index)
         how_read = "the PDF's own text layer" if index["source"] == "pdf" else "the local OCR at full size"
         prompt = f"Texts printed on the sheet ({how_read}):\n{listing}\n\nQuestion: {q.question}"
-        reply = vlm.ask(SYSTEM, [image], prompt, SCHEMA)
+        progress.say(q.qid, f"{len(index['items'])} texts read. The model is choosing what to read, count or measure"
+                            + (", twice over" if WORKINGS > 1 else ""))
+        with ThreadPoolExecutor(max_workers=WORKINGS) as pool:
+            replies = list(pool.map(lambda _: vlm.ask(SYSTEM, [image], prompt, SCHEMA), range(WORKINGS)))
+        progress.say(q.qid, "Counting, computing and checking each figure against the sheet")
+        read = (f"{len(index['items'])} texts, from {how_read}" + (" (the list was cut short)" if cut else ""))
+        # Many small symbols are boxed tile by tile: that is done once, whichever working asks for it.
+        closer = next((r for r in replies if r.data and _form(r.data) == "tiles"), None)
+        if closer is not None:
+            done = work(q, path, index, image, cut, closer, read)
+            done.cost_usd = (done.cost_usd or 0.0) + sum(r.cost_usd or 0.0 for r in replies if r is not closer)
+            return done
+        workings = [work(q, path, index, image, cut, reply, read) for reply in replies]
+        return settle(workings)
+
+    def work(q: Question, path: Path, index: dict, image, cut: bool, reply, read: str) -> Answer:
+        """One working: what one reply of the model comes to, once the code has counted, computed and checked."""
         meta = {**reply.usage(), "images": [image.describe()], "texts": len(index["items"]), "texts_from": index["source"],
-                "texts_cut": cut}
+                "texts_cut": cut, "trace": [["A program read the sheet", read]]}
         common = dict(method=method, cost_usd=reply.cost_usd, latency_ms=reply.latency_ms, meta=meta)
         if reply.error:
             return Answer.failed(reply.error, **common)
@@ -317,6 +351,7 @@ def make_engine(vlm) -> Callable[[Question, Dataset], Answer]:
         data = reply.data
         basis = str(data.get("basis") or "")
         if data.get("cannot_tell"):
+            meta["trace"].append(["The model said it cannot be worked out from this sheet", basis])
             return Answer.decline(f"the sheet does not print what this needs: {basis}"[:400], **common)
 
         texts = {item["id"]: item for item in index["items"]}
@@ -347,6 +382,8 @@ def make_engine(vlm) -> Callable[[Question, Dataset], Answer]:
 
         if wanted.get("quantity") and rooms and not figures and not items:
             meta["basis"] = basis
+            meta["trace"].append(["The model pointed at the rooms and asked for the ruler",
+                                  f"{wanted['quantity']} of: " + ", ".join(str(r.get("name") or "room") for r in rooms)])
             common["method"] = method + ":measured"
             return _measured(q, path, index, wanted["quantity"], rooms, width, height, common)
 
@@ -355,12 +392,17 @@ def make_engine(vlm) -> Callable[[Question, Dataset], Answer]:
             region = _box(closer, width, height)
             picture, zoom, _ = as_pixels(path, index)
             result = tiles.count(vlm, picture, f"{q.question}\nWhat counts as one item: {what}",
-                                 [v * zoom for v in region["bbox"]] if region else None)
+                                 [v * zoom for v in region["bbox"]] if region else None,
+                                 note=lambda text: progress.say(q.qid, text))
             result["boxes"] = [_to_source(box, zoom) for box in result["boxes"]]
             common["cost_usd"] = (reply.cost_usd or 0.0) + result["cost_usd"]
             common["latency_ms"] = (reply.latency_ms or 0.0) + result["latency_ms"]
             meta["interpreted"] = f"count of symbols boxed tile by tile. Counted as: {what}"
             meta["basis"] = basis
+            meta["trace"] += [["The model asked the program to look closer", what],
+                              ["The program boxed the symbols tile by tile and counted the boxes",
+                               f"{result['sent']} tiles at full size, {result['found_before_merge']} boxes, "
+                               f"{len(result['boxes'])} after merging the ones two tiles both found"]]
             common["method"] = method + ":tiles"
             meta["checks"] = {"tiles looked at": result["sent"], "boxes before merging tiles": result["found_before_merge"],
                               "boxes after merging": len(result["boxes"])}
@@ -395,6 +437,10 @@ def make_engine(vlm) -> Callable[[Question, Dataset], Answer]:
             meta["interpreted"] = "count of the items the model listed on the sheet"
             meta["basis"] = basis
             meta["checks"] = {"items listed": len(evidence), "identified by a printed text": named}
+            meta["trace"] += [["The model listed what to count, not the count",
+                               ", ".join(str(e.get("read") or e.get("label") or "item") for e in evidence[:14])
+                               + (" …" if len(evidence) > 14 else "")],
+                              ["The program counted the list", f"{len(evidence)} items, {named} named by a text printed on the sheet"]]
             return Answer(answer=len(evidence), unit="count", state=CHECK,
                           confidence=0.8 if named == len(evidence) else 0.6, evidence=evidence,
                           explanation=f"{len(evidence)} listed on the sheet by the model, counted by the code; "
@@ -408,6 +454,86 @@ def make_engine(vlm) -> Callable[[Question, Dataset], Answer]:
         return Answer.decline(f"the model gave nothing to count or compute: {basis}"[:400], **common)
 
     return answer
+
+
+def _form(data: dict) -> str:
+    """Which of the five forms a reply is in."""
+    if data.get("cannot_tell"):
+        return "cannot"
+    if data.get("figures"):
+        return "figures"
+    if data.get("items"):
+        return "items"
+    if isinstance(data.get("measure"), dict) and data["measure"].get("quantity") and data["measure"].get("rooms"):
+        return "measure"
+    if isinstance(data.get("look_closer"), dict) and str(data["look_closer"].get("what") or "").strip():
+        return "tiles"
+    return "text" if str(data.get("text") or "").strip() else "none"
+
+
+def _said(ans: Answer) -> str:
+    working = ans.meta.get("working")
+    value = f"{_fmt(ans.answer)} {pretty(ans.unit)}".strip() if isinstance(ans.answer, (int, float)) else str(ans.answer)
+    return f"{value} ({working})" if working else value
+
+
+def _same_result(a: Answer, b: Answer) -> bool:
+    if isinstance(a.answer, (int, float)) and isinstance(b.answer, (int, float)):
+        if (a.unit or "") != (b.unit or ""):
+            return False
+        if a.unit == "count":
+            return a.answer == b.answer
+        return math.isclose(a.answer, b.answer, rel_tol=AGREE_WITHIN, abs_tol=1e-9)
+    left, right = " ".join(str(a.answer).casefold().split()), " ".join(str(b.answer).casefold().split())
+    return left == right or left in right or right in left
+
+
+def settle(workings: list[Answer]) -> Answer:
+    """One answer from the independent workings of a question: the same result, or no number."""
+    first = workings[0]
+    if len(workings) == 1:
+        return first
+    cost = sum(w.cost_usd or 0.0 for w in workings)
+    latency = max(w.latency_ms or 0.0 for w in workings)  # they ran side by side
+    failed = [w for w in workings if w.error]
+    if failed:
+        workings = [w for w in workings if not w.error]
+        if not workings:
+            failed[0].cost_usd, failed[0].latency_ms = cost, latency
+            return failed[0]
+        only = workings[0]  # one call failed: one working is all there is, and the answer says so
+        only.cost_usd, only.latency_ms = cost, latency
+        only.meta["trace"] = [*only.meta.get("trace", []), ["A second working", "the second call failed, so there is only one"]]
+        return only
+    first, second = workings[0], workings[1]
+    trace = list(first.meta.get("trace", []))
+    common = dict(method=first.method, cost_usd=cost, latency_ms=latency)
+    if first.answer is None and second.answer is None:
+        first.cost_usd, first.latency_ms = cost, latency
+        first.meta["trace"] = [*trace, ["A second working", "also found no way to answer"]]
+        return first
+    if first.answer is None or second.answer is None:
+        gave, none = (second, first) if first.answer is None else (first, second)
+        reason = (f"Two workings of this question did not agree: one came to {_said(gave)}, the other found no way "
+                  f"to answer ({none.reason}). No number is given.")
+        return Answer.decline(reason[:600], meta={**gave.meta, "trace": [*gave.meta.get("trace", []), ["A second working", f"found no way to answer: {none.reason}"]]}, **common)
+    if _same_result(first, second):
+        first.cost_usd, first.latency_ms = cost, latency
+        if isinstance(first.answer, (int, float)):
+            first.confidence = min(0.95, (first.confidence or 0.6) + 0.05)
+            first.explanation += " A second, independent working came to the same result."
+        first.meta["checks"] = {**(first.meta.get("checks") or {}), "a second, independent working": "the same result"}
+        first.meta["trace"] = [*trace, ["The question was worked out a second time, independently", f"the same result: {_said(second)}"]]
+        return first
+    if not isinstance(first.answer, (int, float)):  # two descriptions in different words: shown, and flagged
+        first.cost_usd, first.latency_ms = cost, latency
+        first.confidence = 0.4
+        first.explanation = f"{first.explanation} A second reading said: {second.answer}.".strip()
+        first.meta["trace"] = [*trace, ["The question was worked out a second time, independently", f"in other words: {second.answer}"]]
+        return first
+    reason = (f"Two independent workings gave different results: {_said(first)} and {_said(second)}. "
+              f"No number is given.")
+    return Answer.decline(reason[:700], meta={**first.meta, "trace": [*trace, ["The question was worked out a second time, independently", f"a different result: {_said(second)}"]]}, **common)
 
 
 def _quantity(q: Question, figures: list[dict], expression: str, result_unit, texts: dict, index: dict,
@@ -448,6 +574,18 @@ def _quantity(q: Question, figures: list[dict], expression: str, result_unit, te
             checks[label] = "the program could not read a figure here"
         if box:
             evidence.append(box)
+    named = "; ".join(f"{f['name']} = {f['printed']}" + (f" {f.get('unit')}" if f.get("unit") and str(f.get("unit")) not in f["printed"] else "")
+                      + (f" ({f.get('what')})" if f.get("what") else "") for f in figures)
+    trace = common["meta"].setdefault("trace", [])
+    trace.append(["The model named the figures and wrote the expression, not the result", f"{named}. Expression: {expression}"])
+    reread = (f"{confirmed} of {len(figures)} match" + (f", {differs} read differently" if differs else "")
+              + (f", {len(figures) - confirmed - differs} could not be read" if len(figures) - confirmed - differs else ""))
+    trace.append(["The program read each figure again at the place marked", reread])
+    if differs:
+        wrong = next(f"{label}: {note}" for label, note in checks.items() if note.startswith("the program reads ") and "same" not in note)
+        common["meta"]["checks"] = checks
+        return Answer.decline(f"A figure could not be confirmed: {wrong}. A figure the program reads differently is "
+                              f"not computed with, so no number is given."[:600], **common)
     try:
         result = evaluate(expression, values)
     except ValueError as exc:
@@ -458,14 +596,15 @@ def _quantity(q: Question, figures: list[dict], expression: str, result_unit, te
     if shown_unit != unit:
         working += f" = {_fmt(shown)} {pretty(shown_unit)}"
     evidence.append({"kind": "formula", "text": working})
-    confidence = 0.3 if differs else (0.85 if confirmed == len(figures) else 0.6)
+    trace.append(["The calculator computed", working])
+    confidence = 0.85 if confirmed == len(figures) else 0.6
     common["meta"] = {**common["meta"], "checks": checks, "working": working, "basis": basis,
                       "interpreted": "computed from figures printed on the sheet"}
     note = ("The figure was read again by the program and matches." if confirmed == len(figures) == 1 else
             f"All {len(figures)} figures were read again by the program and match."
             if confirmed == len(figures) else
-            f"{confirmed} of {len(figures)} figures were read again by the program and match"
-            + (f"; {differs} differ" if differs else "") + ".")
+            f"{confirmed} of {len(figures)} figures were read again by the program and match; "
+            f"the program could not read the other{'s' if len(figures) - confirmed > 1 else ''} at the place marked.")
     return Answer(answer=round(shown, 2), unit=shown_unit, state=CHECK, confidence=confidence, evidence=evidence,
                   explanation=f"{working}. Computed from {len(figures)} figure{'' if len(figures) == 1 else 's'} "
                               f"printed on the sheet. {note}",
@@ -521,6 +660,9 @@ def _measured(q: Question, path, index: dict, quantity: str, rooms: list[dict], 
     if shown_unit != unit:
         working += f" = {_fmt(shown)} {pretty(shown_unit)}"
     evidence.append({"kind": "formula", "text": working})
+    common["meta"].setdefault("trace", []).extend([
+        ["The program read the scale from the scale bar", f"{bar['label']} = {bar['length_px']:,} px, {bar['px_per_m']:.1f} px per metre"],
+        ["The program moved each side of the box onto its wall and measured", working]])
     what = {"area": "floor area", "perimeter": "perimeter", "baseboard": "baseboard length: the perimeter less the door openings"}[quantity]
     common["meta"] = {**common["meta"], "checks": checks, "working": working,
                       "interpreted": f"{what} of {len(rooms)} room{'' if len(rooms) == 1 else 's'}, measured on the sheet"}

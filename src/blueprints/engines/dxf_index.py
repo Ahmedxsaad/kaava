@@ -27,7 +27,7 @@ from pathlib import Path
 
 from .. import config
 
-INDEX_VERSION = 9
+INDEX_VERSION = 10
 
 # $INSUNITS code -> metres per drawing unit
 _UNIT_SCALE = {1: 0.0254, 2: 0.3048, 4: 0.001, 5: 0.01, 6: 1.0}
@@ -123,8 +123,12 @@ def build_index(dxf_path: Path) -> dict:
                  and poly.contains(other.representative_point()) and poly.buffer(0.01).contains(other)]
         # A room that sits in the hole (a kitchen inside a living room) is drawn as its
         # own outline on top of the hole's ring: take the union so the hole counts once.
-        hole_area = unary_union(holes).area if holes else 0.0
-        rooms.append({"polygon": pts, "gross_area": round(poly.area, 4),
+        cut = unary_union(holes) if holes else None
+        hole_area = cut.area if cut is not None else 0.0
+        # The holes as rings, for drawing: what was taken out of the room can be seen.
+        rings = [] if cut is None else [[[round(x, 4), round(y, 4)] for x, y in part.exterior.coords[:-1]]
+                                        for part in getattr(cut, "geoms", [cut])]
+        rooms.append({"polygon": pts, "gross_area": round(poly.area, 4), "hole_rings": rings,
                       "area": round(poly.area - hole_area, 4), "holes": len(holes),
                       "shaft": crossed >= 2, "number": None, "name": None, "printed_area": None,
                       "apartment_tag": None, "unit": None, "texts": []})

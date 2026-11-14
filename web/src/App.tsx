@@ -4,12 +4,13 @@ import { api, type AskResult, type DrawingDetail, type Evidence, euro, formatVal
 import { Home } from "./Home";
 import { Numbers } from "./Numbers";
 import { Picker } from "./Picker";
+import { How } from "./How";
 import { type Stop, TOUR } from "./tour";
 import { anchorOf, Viewer2D } from "./Viewer2D";
 import { type Highlight, Viewer3D } from "./Viewer3D";
 
 type Mode = "plan" | "3d" | "both";
-type Page = "home" | "ask" | "numbers";
+type Page = "home" | "ask" | "numbers" | "how";
 
 interface Route {
   drawing: string | null;
@@ -25,7 +26,7 @@ function readRoute(): Route {
   return {
     drawing,
     question: params.get("q") ?? "",
-    page: p === "numbers" ? "numbers" : drawing ? "ask" : "home",
+    page: p === "numbers" ? "numbers" : p === "how" ? "how" : drawing ? "ask" : "home",
     view: (["plan", "3d", "both"] as const).find((m) => m === params.get("v")) ?? null,
   };
 }
@@ -33,6 +34,7 @@ function readRoute(): Route {
 function writeRoute(route: Route) {
   const params = new URLSearchParams();
   if (route.page === "numbers") params.set("p", "numbers");
+  if (route.page === "how") params.set("p", "how");
   if (route.page !== "home" && route.drawing) params.set("d", route.drawing);
   if (route.page === "ask" && route.question) params.set("q", route.question);
   if (route.page === "ask" && route.view && route.view !== "plan") params.set("v", route.view);
@@ -58,6 +60,7 @@ export function App() {
   const [asked, setAsked] = useState("");  // the question the shown answer belongs to
   const [result, setResult] = useState<AskResult | null>(null);
   const [asking, setAsking] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);  // what a long answer is doing right now
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<Mode>("plan");
   const [progress, setProgress] = useState(1);  // how far the reading line has crossed the evidence, 0 to 1
@@ -85,8 +88,13 @@ export function App() {
     if (!clean) return;
     const mine = ++ticket.current;
     setAsking(true);
+    setBusy(null);
     setError(null);
     setSuggesting(false);
+    // A long answer says where it is (reading the sheet, tile 3 of 8): shown while waiting.
+    const watch = window.setInterval(() => {
+      void api.progress(drawing.id, clean).then((text) => { if (mine === ticket.current) setBusy(text); }).catch(() => undefined);
+    }, 900);
     setQuestion("");
     setAsked(clean);
     writeRoute({ drawing: drawing.id, question: clean, page: "ask" });
@@ -116,7 +124,8 @@ export function App() {
         setError((e as Error).message);
       }
     } finally {
-      if (mine === ticket.current) setAsking(false);
+      window.clearInterval(watch);
+      if (mine === ticket.current) { setAsking(false); setBusy(null); }
     }
   }, []);
 
@@ -193,6 +202,7 @@ export function App() {
     const follow = () => {
       const next = readRoute();
       if (next.page === "numbers") return setPage("numbers");
+      if (next.page === "how") return setPage("how");
       if (next.page === "home" || !next.drawing) return setPage("home");
       void open(next.drawing, next.question || undefined, next.view ?? undefined);
     };
@@ -421,6 +431,7 @@ export function App() {
         <nav>
           <button className={page === "home" ? "on" : ""} onClick={() => go("home")}>Home</button>
           <button className={page === "ask" ? "on" : ""} onClick={() => (detail ? go("ask") : void openStop(TOUR[0]))}>Ask</button>
+          <button className={page === "how" ? "on" : ""} onClick={() => go("how")}>How it works</button>
           <button className={page === "numbers" ? "on" : ""} onClick={() => go("numbers")}>Numbers</button>
         </nav>
         <div className="right">
@@ -443,6 +454,7 @@ export function App() {
       {bringing && <div className="toast">Reading your drawing…</div>}
       {shared && shared !== "working" && <div className="toast">{shared}</div>}
       {page === "numbers" && <Numbers />}
+      {page === "how" && <How onOpen={(stop) => void openStop(stop)} />}
       {page === "ask" && (
         <main className="work">
           <section className="reading">
@@ -454,6 +466,7 @@ export function App() {
                 shown={shown}
                 settled={settled}
                 adjusted={adjusted}
+                busy={busy}
                 marked={revealed}
                 excluded={excluded}
                 hover={hover}

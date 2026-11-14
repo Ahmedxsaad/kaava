@@ -29,7 +29,7 @@ from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import cloud, config, interpret, mesh, overlay, sheet, verify
+from . import cloud, config, interpret, mesh, overlay, progress, sheet, verify
 from .answer import Answer
 from .data import Dataset, Question, drawing_of, question_id, source_of
 from .engines import dxf, dxf_index, ifc, ifc_index, raster_labels, router
@@ -802,10 +802,13 @@ class Service:
             elif req.use_model:
                 if self.spent_eur >= self.budget_eur:
                     raise HTTPException(402, f"the demo's model budget of EUR {self.budget_eur:.2f} is used up")
+                progress.say(asked.qid, "Asking the vision model")
                 try:
                     ans = self._model_fallback()(asked, self.ds)
                 except FatalEngineError as exc:
                     raise HTTPException(503, f"cannot ask the vision model: {exc}")
+                finally:
+                    progress.clear(asked.qid)
                 self.spent_eur += config.usd_to_eur(ans.cost_usd or 0.0)
             if labels is not None and ans is not labels and ans.answer is not None:
                 _second_opinion(ans, labels)
@@ -846,6 +849,8 @@ class Service:
             "replayed_from": replayed,
             "interpreted": ans.meta.get("interpreted"),
             "basis": ans.meta.get("basis"),
+            # What the program and the model each did, step by step (sheet_reading.py).
+            "trace": [{"title": title, "body": body} for title, body in ans.meta.get("trace") or []],
             "restated": restated,
             "checks": _checks(ans),
             "verified_because": ans.meta.get("verified_because"),
@@ -937,6 +942,8 @@ class Service:
                          "area_m2": item.get("area_m2")}
                 if view.kind == "plan":
                     entry["points"] = [view.px(x, y) for x, y in item["points"]]
+                    if item.get("holes"):  # what was cut out of the room, so that it is drawn cut out
+                        entry["holes"] = [[view.px(x, y) for x, y in ring] for ring in item["holes"]]
                 out.append(entry)
             elif space == "dxf_m" and kind == "box":
                 n += 1
@@ -1009,6 +1016,7 @@ class Service:
                 "labels_on_scans": self._labels_share(list(runs.values())),
                 "full_set_mix": [{"source": s, "type": t, "questions": n}
                                  for (s, t), n in sorted(config.FULL_SET_MIX.items())],
+                "sheets_bench": _sheets_bench(),
                 "model_budget_eur": self.budget_eur, "model_spent_eur": round(self.spent_eur, 4)}
 
 
@@ -1121,6 +1129,16 @@ def _coinciding(ans: Answer) -> dict | None:
         return None
     return {"outlines": twice["outlines"], "distinct": twice["distinct"],
             "extra": twice["outlines"] - twice["distinct"], "counted": twice["counted"]}
+
+
+def _sheets_bench() -> dict:
+    """The latest scored run of each kind on Stoa's sample sheets (scripts/bench_examples.py)."""
+    out: dict[str, dict] = {}
+    folder = config.RESULTS_DIR / "stoa_sheets"
+    for file in sorted(folder.glob("*.json")) if folder.is_dir() else []:
+        data = json.loads(file.read_text(encoding="utf-8"))
+        out[data["summary"]["method"].split(":")[0]] = {**data["summary"], "file": file.name}
+    return out
 
 
 def _kept_file(q: Question) -> Path:
@@ -1269,6 +1287,18 @@ def create_app(dataset_root: Path | str | None = None) -> FastAPI:
     def ask(req: AskRequest) -> dict:
         need(req.drawing)
         return service.ask(req)
+
+    @app.post("/api/known")
+    def known(body: dict) -> dict:
+        """Which of these drawings this server can show (the examples name drawings of the full dataset)."""
+        return {"known": [d for d in body.get("drawings", [])[:200] if isinstance(d, str) and service.allowed(d)]}
+
+    @app.get("/api/progress")
+    def progress_of(drawing: str, question: str) -> dict:
+        """What a long answer is doing right now (reading the sheet, tile 3 of 8), for the one waiting."""
+        need(drawing)
+        asked, _ = service._question_for(drawing, " ".join(question.split()))
+        return {"text": progress.get(asked.qid)}
 
     @app.post("/api/upload")
     async def upload(request: Request, name: str = "drawing") -> dict:

@@ -86,7 +86,7 @@ def merge(boxes: list[dict]) -> list[dict]:
     return sorted(kept, key=lambda b: (round(b["bbox"][1] / 300), b["bbox"][0]))
 
 
-def count(vlm, path: Path, question: str, region: list[float] | None = None) -> dict:
+def count(vlm, path: Path, question: str, region: list[float] | None = None, note=None) -> dict:
     """Box what the question asks about in every tile of `region` (pixels of the file) and merge.
 
     Returns {"boxes": [evidence box, ...], "tiles": n, "sent": n, "cost_usd", "latency_ms", "errors": [...]}.
@@ -111,9 +111,17 @@ def count(vlm, path: Path, question: str, region: list[float] | None = None) -> 
 
     started = time.perf_counter()
 
+    done = [0]
+    if note:
+        note(f"Boxing the symbols tile by tile at full size: 0 of {len(jobs)} tiles")
+
     def ask(job):
         tile, image = job
-        return tile, vlm.ask(SYSTEM_TILE, [image], f"Question: {question}", SCHEMA_BOXES)
+        reply = vlm.ask(SYSTEM_TILE, [image], f"Question: {question}", SCHEMA_BOXES)
+        done[0] += 1
+        if note:
+            note(f"Boxing the symbols tile by tile at full size: {done[0]} of {len(jobs)} tiles")
+        return tile, reply
 
     with ThreadPoolExecutor(max_workers=WORKERS) as pool:
         replies = list(pool.map(ask, jobs))

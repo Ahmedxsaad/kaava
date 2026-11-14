@@ -26,6 +26,20 @@ A router sends each question to the cheapest method that can answer it exactly.
 
 An answer becomes Verified only when its independent checks agree and answers of that kind stayed under 1% wrong (95% upper bound) on a calibration split of drawings that the engines were not built on.
 
+### What the vision model may and may not do
+
+Where a model is used, it never gives the number: its reply format has no field for one. On a sheet it has five tools, and each is a job the program does.
+
+| Tool | The model gives | The program does |
+| --- | --- | --- |
+| The sheet's texts | nothing: it receives them | Reads every text at full size, once (the PDF's text layer, or local OCR tile by tile) |
+| A calculator | the printed figures it uses, with their places, and an expression: `a * (b + c)` | Evaluates it (plus, minus, times, divide, brackets; nothing else can run), converts the unit, reads each figure again where it is marked |
+| A counter | the rows or tags that count, by the printed text that identifies each | Counts the list |
+| A closer look | what counts as one item, and where to search | Cuts the sheet into tiles, has each symbol boxed at full size, merges, counts |
+| A ruler | which room, and a rough box | Reads the scale bar, moves the box onto the walls, measures area, perimeter or baseboard |
+
+It says no rather than guess. An answer on a sheet ends without a number when the sheet does not print what the question needs, when the program reads a figure differently from the model, when a room cannot be measured honestly (no scale bar, not a rectangle), or when **two independent workings of the same question disagree**: every question on a sheet is worked out twice, and only two workings with the same result give a number. The app's "How it works" page shows all of this with the hard cases one click away.
+
 ## Stoa's harder sheets
 
 Stoa said the final evaluation uses unreleased drawings and posted four sample sheets with the kind of question to expect: floor areas, linear metres of baseboard, door and window counts, slab area by type, piping. None has a model or a DXF behind it. On these the vision model is never allowed to state the number: it says what to read and how it combines, and the code does the rest, with every figure boxed on the sheet.

@@ -211,3 +211,27 @@ def test_a_bathtub_without_its_rounded_outline_is_not_a_shower():
     plan = "data/swiss_dwellings/site317_bldg647_floor2745.pdf"
     assert _full_ask(plan, "How many bathtubs are drawn on this floor plan?").answer == 6
     assert _full_ask(plan, "How many showers are drawn on this floor plan?").answer == 2
+
+
+def test_a_room_with_holes_in_it_is_measured_without_them_and_says_so():
+    """A room around columns or a shaft: the outline less what lies inside it, which is what the drawing prints."""
+    import pytest
+
+    from blueprints import verify
+    from blueprints.data import Dataset
+    from blueprints.engines import dxf
+
+    try:
+        ds = Dataset("data/junction-dataset")
+        q = next(q for q in ds.questions if q.drawing == "data/swiss_dwellings/site1600_bldg2793_floor12911"
+                 and q.question == "What is the net floor area of room 6.01 ('Pièce') in m²?")
+    except (FileNotFoundError, StopIteration):
+        pytest.skip("the full dataset is not here")
+    ans = dxf.answer(q, ds)
+    assert ans.answer == 46.82 and ans.confidence == 0.99           # the printed 46.82 m² agrees with the net area
+    checks = ans.meta["checks"]
+    assert checks["outline before its holes are taken out"] == pytest.approx(46.97, abs=0.01)
+    assert checks["holes inside the outline (4)"] == pytest.approx(0.15, abs=0.01)
+    assert checks["area printed in the DXF"] == 46.82
+    assert len(ans.evidence[0]["holes"]) == 4 and "4 holes inside it" in ans.explanation
+    assert verify.apply(ans, verify.load_thresholds()).state == "verified"

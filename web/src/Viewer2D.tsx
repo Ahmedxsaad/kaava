@@ -310,7 +310,20 @@ export function Viewer2D(props: Props) {
                 onPointerEnter={() => onHover(item.n!)}
                 onPointerLeave={() => onHover(null)}
               >
-                <polygon className="tint" points={pointList(item.points!)} />
+                {item.holes?.length ? (
+                  // A room around a shaft or another room: the tint stops at the holes, and each hole is
+                  // outlined and hatched, so what was taken out of the area can be seen.
+                  <>
+                    <path className="tint" fillRule="evenodd"
+                      d={[item.points!, ...item.holes].map((ring) => `M${ring.map((q) => q.join(",")).join("L")}Z`).join("")} />
+                    {item.holes.map((ring, k) => (
+                      <polygon key={k} className="hole" points={pointList(ring)} fill="url(#hatch)" strokeWidth={1.3 * u}
+                        strokeDasharray={`${3 * u} ${2.4 * u}`} />
+                    ))}
+                  </>
+                ) : (
+                  <polygon className="tint" points={pointList(item.points!)} />
+                )}
                 <polygon className="edge" points={pointList(item.points!)} strokeWidth={1.6 * u} />
                 <g transform={`translate(${cx},${cy}) scale(${u})`}>
                   <Plate text={item.area_m2 != null ? `${item.area_m2.toFixed(2)} m²` : String(item.n)} />
