@@ -372,6 +372,12 @@ export function Viewer2D(props: Props) {
                     <circle r={9} />
                     <text textAnchor="middle" y={3.4} style={{ fontSize: (item.n ?? 0) > 99 ? 8 : 10 }}>{item.n}</text>
                   </g>
+                  {item.times && item.times > 1 && (  // the file has this outline more than once, here
+                    <g className="times" transform="translate(15,0)">
+                      <rect x={-8} y={-7} width={17} height={14} rx={7} />
+                      <text textAnchor="middle" x={0.5} y={3.2}>×{item.times}</text>
+                    </g>
+                  )}
                 </g>
               </g>
             );

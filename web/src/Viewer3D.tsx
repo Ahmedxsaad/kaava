@@ -21,6 +21,7 @@ export interface Highlight {
   id: string;
   n: number;
   tone: "count" | "area";
+  times?: number;  // the file has this outline more than once, in the same place
 }
 
 interface Props {
@@ -784,6 +785,11 @@ export function Viewer3D({ meshUrl, groundUrl, imageUrl, highlights, visible, ho
         const tag = document.createElement("div");
         tag.className = `tag3d ${h.tone}`;
         tag.textContent = String(h.n);
+        if (h.times && h.times > 1) {  // one place, several outlines in the file
+          const more = document.createElement("small");
+          more.textContent = `×${h.times}`;
+          tag.append(more);
+        }
         label = new CSS2DObject(tag);
         label.position.set(0, 0, (extent.max.z - extent.min.z) / 2);
         mesh.add(label);

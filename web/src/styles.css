@@ -752,7 +752,7 @@ html[data-on-stage] .app.page-home .top .ghost { color: rgb(255 255 255 / 0.8); 
 /* What a vision model alone said: a guess, shown as one */
 .guess { display: flex; align-items: center; gap: 18px; margin-top: 26px; max-width: 500px; padding: 16px 22px; border-radius: 16px;
   background: rgb(255 93 93 / 0.14); border: 1px solid rgb(255 130 130 / 0.4); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
-.guess strong { font: 700 62px/1 var(--serif); letter-spacing: -0.045em; color: #ffb4ae; text-decoration: line-through; text-decoration-thickness: 3px; text-decoration-color: rgb(255 120 110 / 0.9); }
+.guess strong { font: 700 54px/1 var(--serif); letter-spacing: -0.04em; color: #ffb4ae; white-space: nowrap; }
 .guess span { font-size: 15.5px; line-height: 1.5; color: rgb(255 255 255 / 0.8); }
 .guess span b { color: #fff; font-weight: 600; }
 
@@ -767,3 +767,12 @@ html[data-on-stage] .app.page-home .top .ghost { color: rgb(255 255 255 / 0.8); 
 /* Number tags on the model: smaller when there are many, hidden when the model is only a backdrop */
 .viewer3d.crowded .tag3d { min-width: 15px; height: 15px; padding: 0 3px; border-radius: 8px; font-size: 8.5px; line-height: 15px; transform: translateY(-11px); }
 .viewer3d.untagged .labels3d { display: none; }
+
+/* One place, several outlines in the file: the mark says how many */
+.mark.count .times rect { fill: #fff; stroke: var(--mark); stroke-width: 1.2; }
+.mark.count .times text { font: 700 8.5px var(--sans); fill: var(--mark-deep); pointer-events: none; }
+.tag3d small { margin-left: 2px; font-size: 0.86em; font-weight: 700; color: #ffb066; }
+.viewer3d.night .tag3d small { color: var(--mark); }
+.result-card .twice { margin-top: 10px; padding: 9px 13px; border-radius: 10px; font-size: 14px; line-height: 1.45; color: var(--card-soft);
+  background: color-mix(in srgb, var(--card-ink) 12%, transparent); }
+.result-card .twice b { color: var(--card-ink); font-weight: 700; font-size: 1.12em; }

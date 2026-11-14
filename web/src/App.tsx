@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnswerPanel } from "./AnswerPanel";
-import { api, type AskResult, type DrawingDetail, type Evidence, euro, formatValue, headlineRun, type Source, SOURCE_NAMES, spoken } from "./api";
+import { api, type AskResult, type DrawingDetail, type Evidence, euro, formatValue, headlineRun, places, type Source, SOURCE_NAMES, spoken } from "./api";
 import { Home } from "./Home";
 import { Numbers } from "./Numbers";
 import { Picker } from "./Picker";
@@ -279,19 +279,23 @@ export function App() {
   const toggle = useCallback((n: number) => {
     setExcluded((prev) => {
       const next = new Set(prev);
-      if (next.has(n)) next.delete(n); else next.add(n);
+      // A place where the file has the same outline several times is left out, or put back, as a whole.
+      const here = [n, ...(result?.evidence ?? []).filter((e) => e.same_as === n && e.n != null).map((e) => e.n!)];
+      const off = next.has(n);
+      for (const each of here) { if (off) next.delete(each); else next.add(each); }
       return next;
     });
-  }, []);
+  }, [result]);
 
-  const drawable = useMemo(() => (result ? result.evidence.filter((e) => e.kind !== "context" && (e.bbox || e.points || e.x !== undefined)) : []), [result]);
+  // One mark per place: an outline that is in the file twice is drawn once, and says so.
+  const drawable = useMemo(() => (result ? places(result.evidence.filter((e) => e.kind !== "context" && (e.bbox || e.points || e.x !== undefined))) : []), [result]);
   const context = useMemo(() => (result ? result.evidence.filter((e) => e.kind === "context" && e.bbox) : []), [result]);
   const highlights: Highlight[] = useMemo(() => {
     if (!result) return [];
-    return units.flatMap((e) => {
+    return places(units).flatMap((e) => {
       const id = e.kind === "element" ? e.id : e.ref;
       const tone = e.kind === "polygon" || e.cls === "IfcSpace" ? "area" as const : "count" as const;
-      return id ? [{ id, n: e.n!, tone }] : [];
+      return id ? [{ id, n: e.n!, tone, times: e.times }] : [];
     });
   }, [result, units]);
   // Outdoor rooms a sum left out, shown hatched: only when the answer is a sum over rooms.

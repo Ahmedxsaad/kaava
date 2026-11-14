@@ -73,6 +73,13 @@ function why(result: AskResult): { title: string; text: React.ReactNode } {
     if (two) {
       return { title: "Why it needs a look", text: `The printed labels and the vision model give the same count. ${notVerified(result)}` };
     }
+    if (result.coinciding) {
+      const { extra, distinct } = result.coinciding;
+      return {
+        title: "Why it needs a look",
+        text: `The drawing's file holds ${extra} of these outlines twice, exactly on top of another (a door between two units is listed for each). The dataset counts outlines, so the answer is ${result.answer}. Counted once per place it is ${distinct}. Which one you need depends on what you are ordering, so it is not marked Verified.`,
+      };
+    }
     if (result.restated?.question) {
       return {
         title: "Why it needs a look",
@@ -368,6 +375,9 @@ export function AnswerPanel(props: Props) {
         )}
       </div>
       {result.explanation && <p className="explain">{result.explanation}</p>}
+      {result.coinciding && settled && (
+        <p className="twice"><b>{result.coinciding.distinct}</b> distinct places: {result.coinciding.extra} outline{result.coinciding.extra === 1 ? " is" : "s are"} in the file twice.</p>
+      )}
       {adjusted !== null && (
         <p className="adjusted">
           Without the {excluded.size} item{excluded.size === 1 ? "" : "s"} you left out:{" "}

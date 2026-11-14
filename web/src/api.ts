@@ -75,6 +75,15 @@ export interface Evidence {
   volume_m3?: number;
   length_m?: number;
   score?: number | null;
+  same_as?: number;  // lies exactly on that earlier item: the same outline is in the file more than once
+  times?: number;  // how many outlines lie here (set by the app on the first of them)
+}
+
+// One mark per place: an item that lies exactly on an earlier one is folded into it.
+export function places(items: Evidence[]): Evidence[] {
+  const extra = new Map<number, number>();
+  for (const item of items) if (item.same_as != null) extra.set(item.same_as, (extra.get(item.same_as) ?? 0) + 1);
+  return items.filter((item) => item.same_as == null).map((item) => (item.n != null && extra.has(item.n) ? { ...item, times: 1 + extra.get(item.n)! } : item));
 }
 
 export interface Level {
@@ -119,6 +128,7 @@ export interface AskResult {
   evidence: Evidence[];
   can_use_model: boolean;
   can_confirm: boolean;  // a strong label reading that a vision model could count as well
+  coinciding: { extra: number; distinct: number } | null;  // outlines lying exactly on another, and the distinct places left
   readings: { labels: number | null; model: number | null } | null;  // two readings of one scan
   reference: { answer: number | string; unit: string | null; type: string; status: string } | null;
   baseline: {

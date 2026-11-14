@@ -15,10 +15,18 @@ export interface Stop {
 
 export const TOUR: Stop[] = [
   {
-    label: "Count every door on a floor",
+    label: "Count every window on a floor",
     card: true,
-    note: "Geometry · 32 pins · the vision model alone said 24",
+    note: "Geometry · 12 marked on the plan and in the model · free",
     state: "verified",
+    drawing: "data/swiss_dwellings/site2150_bldg3001_floor13690",
+    question: "How many windows are drawn on this floor plan?",
+  },
+  {
+    label: "Doors, and a door drawn twice",
+    card: true,
+    note: "32 outlines in the file, 23 distinct doors: it says so, and asks for a look",
+    state: "check",
     drawing: "data/swiss_dwellings/site2150_bldg3001_floor13690",
     question: "How many doors (interior doors and entrance doors together) are drawn on this floor plan?",
   },

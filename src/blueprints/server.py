@@ -800,7 +800,10 @@ class Service:
             "checks": _checks(ans),
             "verified_because": ans.meta.get("verified_because"),
             "family": self._family_stats(ans),
-            "evidence": self._evidence(ans, view, drawing),
+            "evidence": (evidence := self._evidence(ans, view, drawing)),
+            # Outlines that lie exactly on another: how many, and how many distinct places are left.
+            "coinciding": ({"extra": extra, "distinct": sum(1 for e in evidence if e.get("n") is not None) - extra}
+                           if (extra := sum(1 for e in evidence if e.get("same_as") is not None)) else None),
             "can_use_model": can_confirm or (not exact and not ans.method.startswith("vlm")
                                              and (ans.answer is None or router.is_weak(ans))),
             "can_confirm": can_confirm,
@@ -864,6 +867,7 @@ class Service:
         if view.dxf_file and any(e.get("space") == "dxf_m" for e in ans.evidence):
             index = dxf_index.load_index(self.ds.abspath(view.dxf_file))
         out, n = [], 0
+        first_at: dict[str, int] = {}  # the first item at each place: an outline can be in the file twice
         for item in ans.evidence:
             kind, space = item.get("kind"), item.get("space")
             if kind == "formula":
@@ -885,6 +889,11 @@ class Service:
             elif space == "dxf_m" and kind == "box":
                 n += 1
                 entry = {"kind": "box", "n": n, "ref": _box_ref(index, item["bbox"]), "label": item.get("label", "")}
+                if entry["ref"]:
+                    if entry["ref"] in first_at:
+                        entry["same_as"] = first_at[entry["ref"]]  # lies exactly on that earlier item
+                    else:
+                        first_at[entry["ref"]] = n
                 if view.kind == "plan":
                     x0, y0, x1, y1 = item["bbox"]
                     (ax, ay), (bx, by) = view.px(x0, y1), view.px(x1, y0)

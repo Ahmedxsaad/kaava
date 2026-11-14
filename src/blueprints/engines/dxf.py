@@ -239,12 +239,25 @@ def answer(q: Question, dataset: Dataset) -> Answer:
         if kind == "door":  # each door frame has one swing arc per leaf: one or two
             checks["door swing arcs in the DXF"] = index["door_arcs"]
             sane = len(items) <= index["door_arcs"] <= 2 * len(items) or not items
+        # The same outline can be in the file more than once (a door between two units, listed for each).
+        # The count is of outlines, as the dataset counts; how many distinct places they mark is said too.
+        distinct = len({tuple(item["bbox"]) for item in items})
+        twice = len(items) - distinct
+        if twice:
+            checks[f"distinct {kind} places (outlines lying exactly on another counted once)"] = distinct
+        # Outlines that coincide: the answer stays as the dataset counts it, and agrees with the dataset,
+        # so no score measured against the dataset can tell it apart. But a person ordering doors needs
+        # the distinct places. Such an answer is therefore marked as one that is never Verified.
+        meta = {"interpreted": f"count of {kind} outlines on the {kind.upper()} layer", "checks": checks}
+        if twice:
+            meta["not_verifiable"] = f"{twice} of the {len(items)} outlines lie exactly on another: {distinct} distinct places"
         return Answer(
             answer=len(items), unit="count", state=CHECK, confidence=0.9 if sane else 0.5,
             evidence=[_box_evidence(item, kind) for item in items],
             explanation=f"{len(items)} {kind} outline(s) on the {kind.upper()} layer."
+                        + (f" {twice} of them lie exactly on another outline: {distinct} distinct places." if twice else "")
                         + ("" if sane else " The number of swing arcs does not fit that count."),
-            meta={"interpreted": f"count of {kind} outlines on the {kind.upper()} layer", "checks": checks},
+            meta=meta,
             **common)
 
     if kind in FIXTURE_KINDS:

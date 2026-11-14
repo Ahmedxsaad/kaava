@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { api, type AskResult, type DrawingDetail, type Evidence, formatValue, headlineRun, type Run, type Stats } from "./api";
+import { api, type AskResult, type DrawingDetail, type Evidence, formatValue, headlineRun, places, type Run, type Stats } from "./api";
 import { type Stop, TOUR } from "./tour";
 import { type Direction, type Highlight, Viewer3D } from "./Viewer3D";
 
@@ -9,6 +9,7 @@ import { type Direction, type Highlight, Viewer3D } from "./Viewer3D";
 // question, asked when the page loads.
 
 const STOP = TOUR[0];
+const DOORS = "How many doors (interior doors and entrance doors together) are drawn on this floor plan?";
 // A scan, for the chapter where there is no geometry to read: the first example answered by a vision model.
 const SCAN = TOUR.find((stop) => stop.drawing.includes("cubicasa") && /window/i.test(stop.question)) ?? TOUR[7];
 const WINDOWS = "How many windows are drawn on this floor plan?";
@@ -65,7 +66,7 @@ export function Story({ stats, onOpen, onAsk, onBrowse, onBring, onTalk, canTalk
         api.ask(STOP.drawing, sum.question, false).then((answer) => alive && setArea(answer)).catch(() => undefined);
       }
     }).catch(() => undefined);
-    api.ask(STOP.drawing, STOP.question, false).then((answer) => alive && setDoors(answer)).catch(() => undefined);
+    api.ask(STOP.drawing, DOORS, false).then((answer) => alive && setDoors(answer)).catch(() => undefined);
     api.ask(STOP.drawing, WINDOWS, false).then((answer) => alive && setWindows(answer)).catch(() => undefined);
     Promise.all([api.drawing(SCAN.drawing), api.ask(SCAN.drawing, SCAN.question, false)])
       .then(([drawing, answer]) => alive && setScan({ drawing, answer })).catch(() => undefined);
@@ -104,9 +105,9 @@ export function Story({ stats, onOpen, onAsk, onBrowse, onBring, onTalk, canTalk
   const roomItems = useMemo(() => counted(area), [area]);
   const windowItems = useMemo(() => counted(windows), [windows]);
   const scenes = useMemo(() => [
-    { key: "doors", chip: "Count the doors", says: "How many doors are on this floor?", unit: "doors", result: doors, items: doorItems },
+    { key: "windows", chip: "Count the windows", says: "How many windows are on this floor?", unit: "windows", result: windows, items: windowItems },
     { key: "area", chip: `Measure apartment ${flat ?? ""}`.trim(), says: `What is the net area of apartment ${flat ?? "B"}?`, unit: "m²", result: area, items: roomItems },
-    { key: "windows", chip: "Count the windows", says: "How many windows are there?", unit: "windows", result: windows, items: windowItems },
+    { key: "doors", chip: "Count the doors", says: "How many doors are on this floor?", unit: "door outlines", result: doors, items: doorItems },
   ].filter((scene) => scene.result), [doors, area, windows, doorItems, roomItems, windowItems, flat]);
   const [sceneAt, setSceneAt] = useState(0);  // which question the opening is on
   const [sceneBegan, setSceneBegan] = useState(0);  // and when it began
@@ -168,9 +169,9 @@ export function Story({ stats, onOpen, onAsk, onBrowse, onBring, onTalk, canTalk
   const shown = opening ? sceneShown
     : act === "doors" ? Math.round(linear(AT[2] + 0.085, AT[3] - 0.03, p) * doorItems.length)
     : act === "area" ? Math.round(linear(AT[3] + 0.03, AT[4] - 0.035, p) * roomItems.length) : 0;
-  const highlights: Highlight[] = useMemo(() => items.flatMap((e) => {
+  const highlights: Highlight[] = useMemo(() => places(items).flatMap((e) => {  // one leaf per place
     const id = e.kind === "element" ? e.id : e.ref;
-    return id ? [{ id, n: e.n!, tone: e.kind === "polygon" ? "area" as const : "count" as const }] : [];
+    return id ? [{ id, n: e.n!, tone: e.kind === "polygon" ? "area" as const : "count" as const, times: e.times }] : [];
   }), [items]);
   const visible = useMemo(() => (shown ? new Set(items.slice(0, shown).map((e) => e.n!)) : NONE), [items, shown]);
   const doorsDone = act === "doors" && shown >= doorItems.length && doorItems.length > 0;
@@ -186,8 +187,8 @@ export function Story({ stats, onOpen, onAsk, onBrowse, onBring, onTalk, canTalk
   const ours = overall(headlineRun(runs, "system"));
   const engines = overall([...runs].reverse().find((r) => r.method === "router:v1" && r.split === "dev" && r.dataset === "junction-dataset")
     ?? [...runs].reverse().find((r) => r.method === "router:v1" && r.split === "dev"));
-  const guess = doors?.baseline ?? null;  // what a vision model alone said for the doors
-  const proof = doors?.verified_because;
+  const proof = area?.verified_because ?? windows?.verified_because;  // what "Verified" was measured on
+  const twice = doors?.coinciding ?? null;  // doors the file holds twice
 
   // ---- playing: the drawing tells its own story. Each chapter's line is spoken (ElevenLabs, when
   // the server has a key) while the page scrolls through that chapter in step with it.
@@ -200,8 +201,8 @@ export function Story({ stats, onOpen, onAsk, onBrowse, onBring, onTalk, canTalk
   const cheaper = ours?.eur_per_question != null && alone?.eur_per_question != null && ours.eur_per_question < alone.eur_per_question / 2;
   script.current = [
     "I am a floor plan. Ask me anything.",
-    `To a vision model I am only pixels${guess?.answer != null ? `. It looks, and guesses ${guess.answer} doors` : ""}.`,
-    doors ? `But I am made of geometry. Watch me stand up. I have ${doorItems.length} doors: each one counted, none of them guessed.` : "",
+    `To a vision model I am only pixels. It looks, and it guesses${alone?.accuracy != null ? `: right ${Math.round(100 * alone.accuracy)} percent of the time` : ""}.`,
+    doors ? `But I am made of geometry. Watch me stand up. My file holds ${doorItems.length} door outlines${twice ? `, in ${twice.distinct} places: ${twice.extra} are drawn twice, and I say so` : ", each one counted"}.` : "",
     area && typeof area.answer === "number" ? `Apartment ${flat ?? ""} measures ${area.answer.toFixed(1)} square metres. Every room is measured, then added up.` : "",
     scan ? `This one is only a scan, with no geometry to read. So Gemini points, and the code counts: ${boxes.length} windows. Check that one.` : "",
     "And I tell you how far to trust me. Verified, check this, or no number at all.",
@@ -344,7 +345,9 @@ export function Story({ stats, onOpen, onAsk, onBrowse, onBring, onTalk, canTalk
               <strong>{sceneFigure === null ? " " : formatValue(sceneFigure, scene?.key === "area" ? "m2" : "count")}</strong>
               <span className="unit">{scene?.unit}</span>
               <span className={`verdict ${scene?.result?.state ?? "check"}`}><i />{VERDICT[scene?.result?.state ?? "check"]}</span>
-              <em>{scene?.result?.engine ?? ""} · €0 · computed, not generated</em>
+              <em>{scene?.result?.coinciding
+                ? `${scene.result.coinciding.extra} are in the file twice: ${scene.result.coinciding.distinct} distinct doors`
+                : `${scene?.result?.engine ?? ""} · €0 · computed, not generated`}</em>
             </div>
             <div className="chips">
               <span>Try</span>
@@ -365,10 +368,10 @@ export function Story({ stats, onOpen, onAsk, onBrowse, onBring, onTalk, canTalk
           <article className={chapter === 1 ? "on" : ""}>
             <p className="step">01</p>
             <h2>To a vision model, a drawing is just pixels.</h2>
-            {guess?.answer != null && (
+            {alone?.accuracy != null && (
               <div className="guess">
-                <strong>{String(guess.answer)}</strong>
-                <span><b>doors, it says.</b> There are {doorItems.length}. Nothing on the screen shows which ones it missed.</span>
+                <strong>{pct(alone.accuracy)}</strong>
+                <span><b>right, answering alone</b> on {alone.n ?? 200} questions. Nothing on the screen shows which answers are the wrong ones.</span>
               </div>
             )}
             <p className="sub small">It looks at the picture and guesses. We read the drawing's own geometry instead: its walls, rooms and doors.</p>
@@ -381,12 +384,19 @@ export function Story({ stats, onOpen, onAsk, onBrowse, onBring, onTalk, canTalk
               <p className="said"><span>How many doors are on this floor?</span></p>
               <div className="reply">
                 <strong>{doors ? (act === "doors" ? shown : doorItems.length) : " "}</strong>
-                <span className="unit">doors</span>
+                <span className="unit">door outlines</span>
                 <span className={`verdict ${doors?.state ?? "check"}`}><i />{VERDICT[doors?.state ?? "check"]}</span>
               </div>
               <p className="how">{doors?.engine ?? "Geometry"} · €0 · counted from the drawing, not generated</p>
             </div>
-            <p className="sub small">Every door is an outline in the drawing. Each one opens as it is counted, numbered where you can check it.</p>
+            {twice ? (
+              <p className="sub small">
+                Every door is an outline in the drawing's file, and it opens as it is counted. This file holds <b>{twice.extra} doors twice</b>:
+                {" "}{twice.distinct} distinct doors. A guess would never notice. Here it is said, and the answer asks for a look.
+              </p>
+            ) : (
+              <p className="sub small">Every door is an outline in the drawing. Each one opens as it is counted, numbered where you can check it.</p>
+            )}
           </article>
 
           <article className={chapter === 3 ? "on" : ""}>

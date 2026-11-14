@@ -67,6 +67,22 @@ def test_counts_carry_one_box_per_counted_item(dev_swiss):
         assert ans.cost_usd == 0.0 and ans.state == CHECK
 
 
+def test_outlines_lying_on_one_another_are_counted_as_the_dataset_counts_and_marked_never_verified(dev_swiss):
+    """The file can hold the same door twice (a door between two units, listed for each).
+
+    The answer is the number of outlines, which is what the dataset counts. The engine says how many
+    distinct places that is, and marks the answer as one that is never Verified.
+    """
+    ds, questions = dev_swiss
+    doors = _ask(ds, questions, "How many doors (interior doors and entrance doors together) are drawn on this floor plan?")
+    places = len({tuple(e["bbox"]) for e in doors.evidence})
+    assert doors.answer == 36 and places == 29  # seven outlines lie exactly on another
+    assert "29 distinct places" in doors.explanation and "29 distinct places" in doors.meta["not_verifiable"]
+    assert doors.meta["checks"]["distinct door places (outlines lying exactly on another counted once)"] == 29
+    tubs = _ask(ds, questions, "How many bathtubs are drawn on this floor plan?")
+    assert len({tuple(e["bbox"]) for e in tubs.evidence}) == tubs.answer and "not_verifiable" not in tubs.meta
+
+
 def test_room_area_agrees_with_the_area_printed_in_the_room(dev_swiss):
     ds, questions = dev_swiss
     ans = _ask(ds, questions, "What is the net floor area of room 2.01 ('Zimmer') in m²?")

@@ -13,6 +13,12 @@ permissive level that passes does not inflate the error guarantee.
 
 A family with too few calibration answers, or with errors among its best-scored ones,
 gets no threshold: nothing in it is ever Verified. That is the intended behaviour.
+
+An engine can also mark an answer as one that is never Verified (meta["not_verifiable"]),
+for a reason the dataset cannot measure: the answer agrees with the dataset, yet a person
+could not use the number as it stands (a door that the drawing's file holds twice is counted
+twice by the dataset too). Such answers are left out of the calibration and are never
+Verified, whatever their score.
 """
 
 from __future__ import annotations
@@ -42,6 +48,8 @@ def calibrate(rows: Iterable[dict], alpha: float = ALPHA, confidence: float = BO
     """Per family, the lowest score level whose error bound on calibration data is <= alpha."""
     by_family: dict[str, list[tuple[float, bool]]] = defaultdict(list)
     for r in rows:
+        if (r.get("meta") or {}).get("not_verifiable"):
+            continue  # never Verified, so not part of what the bound is about
         if r["status"] in ("correct", "wrong") and r.get("confidence") is not None:
             by_family[family_of(r["method"], r["type"])].append((r["confidence"], r["status"] == "wrong"))
 
@@ -86,7 +94,7 @@ def load_thresholds(path: Path | None = None) -> dict:
 
 def apply(answer: Answer, thresholds: dict) -> Answer:
     """Mark an answer Verified when its family has a threshold and its score reaches it."""
-    if answer.answer is None or answer.confidence is None:
+    if answer.answer is None or answer.confidence is None or answer.meta.get("not_verifiable"):
         return answer
     kind = _UNIT_KIND.get(answer.unit or "")
     family = thresholds.get("families", {}).get(family_of(answer.method, kind)) if kind else None

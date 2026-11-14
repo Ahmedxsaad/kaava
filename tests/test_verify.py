@@ -56,6 +56,18 @@ def _thresholds():
     return verify.calibrate(_rows("dxf-engine:v1", "count", 0.9, 400), alpha=0.01)
 
 
+def test_an_answer_marked_never_verified_stays_out_of_the_bound_and_is_never_verified():
+    """Right by the dataset, but not usable as it stands: no score can make it Verified."""
+    box = [{"kind": "box", "bbox": [0, 0, 1, 1]}]
+    flagged = Answer(answer=32, unit="count", confidence=0.99, method="dxf-engine:v1", evidence=box,
+                     meta={"not_verifiable": "9 of the 32 outlines lie exactly on another: 23 distinct places"})
+    assert verify.apply(flagged, _thresholds()).state == CHECK
+    rows = _rows("dxf-engine:v1", "count", 0.9, 400) + [
+        {"method": "dxf-engine:v1", "type": "count", "confidence": 0.9, "status": "correct", "meta": {"not_verifiable": "x"}}] * 300
+    family = verify.calibrate(rows)["families"]["dxf-engine:v1/count"]
+    assert family["calibration_answers"] == 400  # the 300 marked answers are not part of the measurement
+
+
 def test_apply_marks_only_what_reaches_the_threshold():
     box = [{"kind": "box", "bbox": [0, 0, 1, 1]}]
     good = verify.apply(Answer(answer=7, unit="count", confidence=0.9, method="dxf-engine:v1", evidence=box), _thresholds())

@@ -1,8 +1,8 @@
 {
- "calibrated": "2026-11-14T07:37:21+00:00",
+ "calibrated": "2026-11-14T14:15:07+00:00",
  "dataset": "junction-dataset",
  "calibration_runs": [
-  "20261114-073656-router-v1-raw-a363",
+  "20261114-141439-router-v1-raw-d715",
   "20261114-114642-vlm-pointing-gemini-4-carbon-thinking-low-img-ultra_high-box-9e5e"
  ],
  "alpha": 0.01,
@@ -40,10 +40,10 @@
   },
   "dxf-engine:v1/count": {
    "threshold": 0.9,
-   "answers_at_threshold": 6354,
+   "answers_at_threshold": 5710,
    "errors_at_threshold": 8,
-   "upper_bound": 0.0024793139434781506,
-   "calibration_answers": 6354,
+   "upper_bound": 0.0027587521897256425,
+   "calibration_answers": 5710,
    "levels_tested": [
     {
      "score": 0.99,
@@ -54,9 +54,9 @@
     },
     {
      "score": 0.9,
-     "answers": 6354,
+     "answers": 5710,
      "errors": 8,
-     "upper_bound": 0.0024793139434781506,
+     "upper_bound": 0.0027587521897256425,
      "passed": true
     }
    ]
