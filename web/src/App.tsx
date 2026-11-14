@@ -435,7 +435,7 @@ export function App() {
         </div>
       </header>
 
-      {page === "home" && <Home onOpen={(stop) => void openStop(stop)} onBrowse={() => setPicking(true)} onNumbers={() => go("numbers")} onBring={(file) => void bring(file)} onTalk={talk} canTalk={canListen} />}
+      {page === "home" && <Home onOpen={(stop) => void openStop(stop)} onAsk={(drawing, words) => void open(drawing, words)} onBrowse={() => setPicking(true)} onNumbers={() => go("numbers")} onBring={(file) => void bring(file)} onTalk={talk} canTalk={canListen} />}
       {bringing && <div className="toast">Reading your drawing…</div>}
       {shared && shared !== "working" && <div className="toast">{shared}</div>}
       {page === "numbers" && <Numbers />}

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { CSS2DObject, CSS2DRenderer } from "three/examples/jsm/renderers/CSS2DRenderer.js";
+import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { api } from "./api";
 
 // The page can direct the model itself (a story told by scrolling): how far the walls have risen,
@@ -12,6 +13,8 @@ export interface Direction {
   tilt: number;  // how high it stands: about 1.5 looks straight down, 0.6 is a three-quarter view
   back: number;  // its distance, as a multiple of the distance that just fits the model
   sway?: number;  // while waiting: the walls breathe and the view drifts by about this much, on their own
+  shift?: number;  // the model stands this share of the width to the right of centre
+  drop?: number;  // and this share of the height below it
 }
 
 export interface Highlight {
@@ -146,11 +149,19 @@ interface BaseEntry {
   raise?: number;  // held this far above its place (a plan's room tints lie on the sheet)
 }
 
-// Where a door hangs: the end of its longest side, found from its own outline.
-function hingeOf(positions: Float32Array): { x: number; y: number } {
+// A plan draws a door as the opening it fills: a block as thick as the wall. In the model a door
+// is a thin leaf standing in that opening, hung at one end. This finds the opening's line from the
+// block's own outline: its middle, the way it runs, its width and its height.
+interface Leaf { x: number; y: number; angle: number; width: number; z0: number; z1: number }
+const LEAF_THICK = 0.05;
+
+function leafOf(positions: Float32Array): Leaf {
   const n = positions.length / 3;
-  let mx = 0, my = 0;
-  for (let k = 0; k < positions.length; k += 3) { mx += positions[k]; my += positions[k + 1]; }
+  let mx = 0, my = 0, z0 = Infinity, z1 = -Infinity;
+  for (let k = 0; k < positions.length; k += 3) {
+    mx += positions[k]; my += positions[k + 1];
+    z0 = Math.min(z0, positions[k + 2]); z1 = Math.max(z1, positions[k + 2]);
+  }
   mx /= n; my /= n;
   let sxx = 0, sxy = 0, syy = 0;
   for (let k = 0; k < positions.length; k += 3) {
@@ -159,14 +170,27 @@ function hingeOf(positions: Float32Array): { x: number; y: number } {
   }
   const angle = 0.5 * Math.atan2(2 * sxy, sxx - syy);
   const ax = Math.cos(angle), ay = Math.sin(angle);
-  let low = Infinity;
-  for (let k = 0; k < positions.length; k += 3) low = Math.min(low, (positions[k] - mx) * ax + (positions[k + 1] - my) * ay);
-  return { x: mx + low * ax, y: my + low * ay };
+  let low = Infinity, high = -Infinity;
+  for (let k = 0; k < positions.length; k += 3) {
+    const along = (positions[k] - mx) * ax + (positions[k + 1] - my) * ay;
+    low = Math.min(low, along); high = Math.max(high, along);
+  }
+  const mid = (low + high) / 2;
+  return { x: mx + mid * ax, y: my + mid * ay, angle, width: Math.max(0.2, high - low), z0, z1 };
+}
+
+// The leaf itself, hung at the origin and running along +x, standing from z0 to z1.
+function leafGeometry(leaf: Leaf): THREE.BufferGeometry {
+  const width = leaf.width * 0.94;
+  const geometry = new THREE.BoxGeometry(width, LEAF_THICK, leaf.z1 - leaf.z0);
+  geometry.translate(width / 2, 0, (leaf.z0 + leaf.z1) / 2);
+  return geometry;
 }
 
 interface Lit {
   node: THREE.Group;  // what is placed, lifted and shown; a door turns about it
   swing: number;  // how far a door opens when it is counted (radians), 0 for anything else
+  closed: number;  // the way a door's leaf runs when it is shut (radians)
   mesh: THREE.Mesh;
   label?: CSS2DObject;
   tone: "count" | "area";
@@ -233,7 +257,8 @@ export function Viewer3D({ meshUrl, groundUrl, imageUrl, highlights, visible, ho
     controls.enablePan = !bare;
     controls.enabled = !directed.current;
     // Where the directed camera is now. It starts far off and to one side, so the model glides in on arrival.
-    const now3 = { rise: directed.current?.rise ?? 1, turn: (directed.current?.turn ?? 0) - 0.55, tilt: directed.current?.tilt ?? 0.8, back: (directed.current?.back ?? 1) * 1.7 };
+    const now3 = { rise: directed.current?.rise ?? 1, turn: (directed.current?.turn ?? 0) - 0.55, tilt: directed.current?.tilt ?? 0.8, back: (directed.current?.back ?? 1) * 1.7,
+                   shift: directed.current?.shift ?? 0, drop: directed.current?.drop ?? 0 };
     const middle3 = new THREE.Vector3(), size3 = new THREE.Vector3();
     const frameView = (w: number, h: number) => {
       camera.aspect = w / h;
@@ -272,9 +297,9 @@ export function Viewer3D({ meshUrl, groundUrl, imageUrl, highlights, visible, ho
               tilt: want.tilt - sway * 1.6 * (0.5 + 0.5 * Math.sin(now / 1900)) }
           : want;
         if (sway > 0.001) moved = true;  // alive while it waits
-        for (const key of ["rise", "turn", "tilt", "back"] as const) {
-          const gap = aim[key] - now3[key];
-          if (Math.abs(gap) > 0.0004) { now3[key] += gap * 0.13; moved = true; } else now3[key] = aim[key];
+        for (const key of ["rise", "turn", "tilt", "back", "shift", "drop"] as const) {
+          const gap = (aim[key] ?? 0) - now3[key];
+          if (Math.abs(gap) > 0.0004) { now3[key] += gap * 0.13; moved = true; } else now3[key] = aim[key] ?? 0;
         }
         if (moved || dirty) {
           s.root.scale.z = Math.max(0.001, now3.rise);
@@ -290,6 +315,8 @@ export function Viewer3D({ meshUrl, groundUrl, imageUrl, highlights, visible, ho
           controls.target.set(middle3.x, 0, middle3.z);
           camera.near = Math.max(0.05, distance / 500);
           camera.far = distance * 40;
+          const w = el.clientWidth, h = Math.max(el.clientHeight, 1);
+          camera.setViewOffset(w, h, -now3.shift * w, -now3.drop * h, w, h);
           camera.updateProjectionMatrix();
           camera.lookAt(controls.target);
           // The sun keeps to the viewer's side, a little to the left: the faces in view stay lit and
@@ -338,7 +365,7 @@ export function Viewer3D({ meshUrl, groundUrl, imageUrl, highlights, visible, ho
           item.node.position.z = item.rest + lift;
           if (item.swing && item.node.visible) {  // a counted door swings open and stays open
             const turn = Math.min(1, Math.max(0, (now - item.born) / 760));
-            const angle = item.swing * (turn >= 1 ? 1 : easeOutBack(turn));
+            const angle = item.closed + item.swing * (turn >= 1 ? 1 : easeOutBack(turn));
             if (item.node.rotation.z !== angle) { item.node.rotation.z = angle; dirty = true; }
           }
           const age = (now - item.born) / 420;
@@ -410,10 +437,22 @@ export function Viewer3D({ meshUrl, groundUrl, imageUrl, highlights, visible, ho
           index.set(parsed.indices.subarray(element.i[0], element.i[0] + element.i[1]), at);
           at += element.i[1];
         }
-        const geometry = new THREE.BufferGeometry();
+        let geometry = new THREE.BufferGeometry();
         geometry.setAttribute("position", shared);
         if (group.style.kind === "floor") geometry.setAttribute("color", tinted);
         geometry.setIndex(new THREE.BufferAttribute(index, 1));
+        if (isPlan && group.style.kind === "door" && group.ranges.length) {
+          // A plan's doors stand as thin leaves, shut, in their openings.
+          const leaves = group.ranges.map((element) => {
+            const leaf = leafOf(parsed.positions.subarray(element.v[0] * 3, (element.v[0] + element.v[1]) * 3));
+            const one = leafGeometry(leaf);
+            one.translate(-leaf.width * 0.47, 0, 0);  // centred on the opening
+            one.rotateZ(leaf.angle);
+            one.translate(leaf.x, leaf.y, 0);
+            return one;
+          });
+          geometry = mergeGeometries(leaves) ?? geometry;
+        }
         const material = new THREE.MeshStandardMaterial({
           color: FACE[group.style.kind] ?? FACE.other, roughness: 0.9, metalness: 0, flatShading: true, side: THREE.DoubleSide,
           vertexColors: group.style.kind === "floor",
@@ -648,13 +687,16 @@ export function Viewer3D({ meshUrl, groundUrl, imageUrl, highlights, visible, ho
       if (storey != null) perStorey.set(storey, (perStorey.get(storey) ?? 0) + 1);
     }
     const only = perStorey.size === 1 ? [...perStorey.keys()][0] : null;
+    const doorsCounted = highlights.some((h) => h.tone === "count" && /door/i.test(s.byId.get(h.id)?.cls ?? ""));
     const level = only != null ? storeyList[only]?.z ?? null : null;
     for (const entry of s.base) {
       const z = entry.storey != null ? storeyList[entry.storey]?.z ?? null : null;
       const above = active && level != null && z != null && z > level + 0.2;
       const same = active && only != null && entry.storey === only;
       const wash = isPlan && !!s.ground && entry.style.kind === "floor";  // a plan's room tints on the paper
-      entry.mesh.visible = !entry.style.hidden && !above;
+      // While a plan's doors are being counted, each is shown by its own counted leaf: the plain ones step aside.
+      const replaced = isPlan && entry.style.kind === "door" && doorsCounted;
+      entry.mesh.visible = !entry.style.hidden && !above && !replaced;
       const material = entry.mesh.material as THREE.MeshStandardMaterial;
       // A plan is one storey: its walls stay solid, and the doors open out of them. In a building
       // model the answer's storey stays readable and the rest steps back so the answer shows through.
@@ -708,25 +750,31 @@ export function Viewer3D({ meshUrl, groundUrl, imageUrl, highlights, visible, ho
       const extent = geometry.boundingBox!.clone();  // in model coordinates, before centring
       const centre = extent.getCenter(new THREE.Vector3());
       geometry.translate(-centre.x, -centre.y, -centre.z);  // so it can swell around its own centre
+      // On a plan a counted door is its thin leaf, hung at one jamb, opening a little as it is counted.
+      const leaf = isPlan && h.tone === "count" && /door/i.test(element.cls) ? leafOf(positions) : null;
       const colour = h.tone === "area" ? lookNow.area : lookNow.count;
       // Drawn after the faded building, so the answer is never dimmed by a wall in front of it.
       const material = new THREE.MeshStandardMaterial({
         color: colour, emissive: colour, emissiveIntensity: 0.25, roughness: 0.7, flatShading: true,
         side: THREE.DoubleSide, transparent: true, opacity: h.tone === "area" ? 0.62 : 1, depthWrite: h.tone !== "area",
       });
-      const mesh = new THREE.Mesh(geometry, material);
+      const hung = leaf ? leafGeometry(leaf) : null;  // `positions` are about the centre by now, and so is the leaf
+      const mesh = new THREE.Mesh(hung ?? geometry, material);
+      if (hung) geometry.dispose();
       mesh.renderOrder = 2;
       mesh.castShadow = h.tone !== "area";
       const rest = centre.z + (isPlan && h.tone === "area" ? 0.035 : 0);  // a room plate sits just above the sheet
-      // A door hangs on its hinge, so that it can swing open when it is counted.
-      const isDoor = h.tone === "count" && /door/i.test(element.cls);
-      const hinge = isDoor ? hingeOf(positions) : { x: 0, y: 0 };  // relative to the centre (the geometry is centred)
       const node = new THREE.Group();
-      node.position.set(centre.x + hinge.x, centre.y + hinge.y, rest);
-      mesh.position.set(-hinge.x, -hinge.y, 0);
+      if (leaf) {  // the node is the hinge: the jamb at the low end of the opening
+        const half = leaf.width * 0.47;
+        node.position.set(centre.x + leaf.x - half * Math.cos(leaf.angle), centre.y + leaf.y - half * Math.sin(leaf.angle), rest);
+        node.rotation.z = leaf.angle;
+      } else {
+        node.position.set(centre.x, centre.y, rest);
+      }
       node.add(mesh);
       node.visible = false;
-      const outline = new THREE.LineSegments(new THREE.EdgesGeometry(geometry, 28),
+      const outline = new THREE.LineSegments(new THREE.EdgesGeometry(hung ?? geometry, 28),
         new THREE.LineBasicMaterial({ color: h.tone === "area" ? lookNow.areaEdge : lookNow.countEdge, transparent: true }));
       outline.renderOrder = 3;
       mesh.add(outline);
@@ -743,8 +791,8 @@ export function Viewer3D({ meshUrl, groundUrl, imageUrl, highlights, visible, ho
       const world = new THREE.Box3(
         new THREE.Vector3(extent.min.x, extent.min.z, -extent.max.y),
         new THREE.Vector3(extent.max.x, extent.max.z, -extent.min.y));
-      const swing = isDoor ? (h.n % 2 ? 1 : -1) * 1.12 : 0;
-      s.items.set(h.n, { node, swing, mesh, label, tone: h.tone, born: 0, storey: element.storey, rest, box: world });
+      const swing = leaf ? (h.n % 2 ? 1 : -1) * 0.56 : 0;  // about a third open: clear to see, and clear of its neighbours
+      s.items.set(h.n, { node, swing, closed: leaf?.angle ?? 0, mesh, label, tone: h.tone, born: 0, storey: element.storey, rest, box: world });
       const lift = element.storey != null ? s.offsets.get(element.storey)?.target ?? 0 : 0;
       box.union(world.clone().translate(new THREE.Vector3(0, lift, 0)));
     }
@@ -782,7 +830,7 @@ export function Viewer3D({ meshUrl, groundUrl, imageUrl, highlights, visible, ho
     const now = performance.now();
     for (const [n, item] of s.items) {
       const show = visible.has(n);
-      if (show && !item.node.visible) { item.born = now; item.node.rotation.z = 0; }
+      if (show && !item.node.visible) { item.born = now; item.node.rotation.z = item.closed; }
       item.node.visible = show;
       if (item.label) item.label.visible = show;
     }

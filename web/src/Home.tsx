@@ -5,6 +5,7 @@ import { type Stop, TOUR } from "./tour";
 
 interface Props {
   onOpen(stop: Stop): void;
+  onAsk(drawing: string, question: string): void;
   onBrowse(): void;
   onNumbers(): void;
   onBring(file: File): void;
@@ -17,7 +18,7 @@ const pct = (v: number | null | undefined) => (v == null ? "—" : `${(100 * v).
 
 const STATE_WORD = { verified: "Verified", check: "Check this", declined: "Can't answer" } as const;
 
-export function Home({ onOpen, onBrowse, onNumbers, onBring, onTalk, canTalk }: Props) {
+export function Home({ onOpen, onAsk, onBrowse, onNumbers, onBring, onTalk, canTalk }: Props) {
   const [stats, setStats] = useState<Stats | null>(null);
   useEffect(() => { api.stats().then(setStats).catch(() => undefined); }, []);
   const runs = stats?.runs ?? [];
@@ -29,7 +30,7 @@ export function Home({ onOpen, onBrowse, onNumbers, onBring, onTalk, canTalk }: 
 
   return (
     <main className="home">
-      <Story stats={stats} onOpen={onOpen} onBrowse={onBrowse} onBring={onBring} onTalk={onTalk} canTalk={canTalk} />
+      <Story stats={stats} onOpen={onOpen} onAsk={onAsk} onBrowse={onBrowse} onBring={onBring} onTalk={onTalk} canTalk={canTalk} />
       <div className="home-rest">
       <header className="try-head">
         <h2>Try it on real drawings</h2>

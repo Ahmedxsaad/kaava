@@ -153,15 +153,24 @@ def speak(text: str) -> bytes:
     if not key or os.environ.get("BLUEPRINTS_OFFLINE"):
         raise HTTPException(503, "no voice service is configured")
     voice = os.environ.get("ELEVENLABS_VOICE_ID", "21m00Tcm4TlvDq8ikWAM")
-    body = json.dumps({"text": text[:400], "model_id": os.environ.get("ELEVENLABS_MODEL_ID", "eleven_flash_v2_5")}).encode()
+    model = os.environ.get("ELEVENLABS_MODEL_ID", "eleven_flash_v2_5")
+    text = text[:400]
+    # A line is made once and kept: the same sentence costs nothing the second time.
+    kept = config.REPO_ROOT / "cache" / "speech" / f"{hashlib.sha1(f'{voice}|{model}|{text}'.encode()).hexdigest()[:20]}.mp3"
+    if kept.is_file():
+        return kept.read_bytes()
+    body = json.dumps({"text": text, "model_id": model}).encode()
     request = urllib.request.Request(
         f"https://api.elevenlabs.io/v1/text-to-speech/{voice}?output_format=mp3_44100_128", data=body,
         headers={"xi-api-key": key, "content-type": "application/json", "accept": "audio/mpeg"})
     try:
         with urllib.request.urlopen(request, timeout=30) as response:
-            return response.read()
+            audio = response.read()
     except Exception as exc:
         raise HTTPException(502, f"the voice service did not answer: {type(exc).__name__}") from None
+    kept.parent.mkdir(parents=True, exist_ok=True)
+    kept.write_bytes(audio)
+    return audio
 
 
 class Service:
