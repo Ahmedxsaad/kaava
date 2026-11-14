@@ -522,7 +522,7 @@ h1, h2 { font-family: var(--serif); font-weight: 400; letter-spacing: -0.015em; 
 /* ---------------------------------------------------------------- the story
    One pinned stage; the page's scroll directs the model and turns the chapters. */
 .story { position: relative; }
-.story-pin { position: sticky; top: 64px; height: calc(100vh - 64px); min-height: 600px; overflow: hidden; color: #f4f6f3;
+.story-pin { position: sticky; top: 0; height: 100vh; min-height: 600px; overflow: hidden; color: #f4f6f3;
   background: var(--tone); transition: background-color 0.9s ease; }
 .story-pin.tone-0 { --tone: #0a2c10; }
 .story-pin.tone-1 { --tone: #0e3a2f; }
@@ -670,3 +670,24 @@ h1, h2 { font-family: var(--serif); font-weight: 400; letter-spacing: -0.015em; 
 .example:nth-child(even) .thumb img { transform: rotate(1.6deg); }
 .example:hover .thumb { box-shadow: none; }
 .example:hover .thumb img { transform: rotate(0deg) scale(1.05); }
+
+/* On the landing page the top bar floats over the stage, and turns solid once the story is past. */
+.app.page-home { grid-template-rows: 0 minmax(0, 1fr); }
+.app.page-home .top { position: fixed; left: 0; right: 0; height: 64px; transition: background-color 0.35s, border-color 0.35s, color 0.35s; }
+html[data-on-stage] .app.page-home .top { background: transparent; border-bottom-color: transparent; }
+html[data-on-stage] .app.page-home .top .brand span { color: #fff; }
+html[data-on-stage] .app.page-home .top .brand svg { fill: #fff; }
+html[data-on-stage] .app.page-home .top nav button { color: rgb(255 255 255 / 0.7); }
+html[data-on-stage] .app.page-home .top nav button:hover, html[data-on-stage] .app.page-home .top nav button.on { color: #fff; }
+html[data-on-stage] .app.page-home .top .primary { background: #fff; color: var(--ink); }
+html[data-on-stage] .app.page-home .top .ghost { color: rgb(255 255 255 / 0.8); }
+.home-rest { padding-top: 110px; }
+
+/* The Numbers page opens on colour, like the story's last chapter */
+.numbers .n-page { padding-top: 0; }
+.n-head { margin: 0 calc(50% - 50vw) 8px; padding: 84px calc(50vw - 50% ) 150px; background: linear-gradient(160deg, #17306e 0%, #10214f 100%); color: #fff; }
+.n-head h1 { color: #fff; }
+.n-head p { color: rgb(255 255 255 / 0.8); }
+.n-head code { background: rgb(255 255 255 / 0.16); color: #fff; }
+.n-tiles { margin-top: -118px; background: linear-gradient(150deg, #14702a 0%, #0b4a1a 75%); box-shadow: 0 30px 60px -30px rgb(11 74 26 / 0.6); }
+.numbers { overflow-x: clip; }

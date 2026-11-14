@@ -17,7 +17,7 @@ for (const f of list.split(",").map(Number)) {
   await page.evaluate((share) => {
     const el = document.querySelector(".story");
     const span = el.getBoundingClientRect().height - window.innerHeight;
-    window.scrollTo(0, el.offsetTop + span * share - 64);
+    window.scrollTo(0, el.offsetTop + span * share);
   }, f);
   await page.waitForTimeout(2600);
   await page.screenshot({ path: `${out}/story-${String(Math.round(f * 100)).padStart(3, "0")}.png` });

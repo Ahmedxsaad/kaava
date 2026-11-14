@@ -51,7 +51,7 @@ The vision model in these runs is Gemini 4 Carbon at low thinking. Alone, it see
 
 ![The landing page: a real plan stands up as you scroll, and its doors open as they are counted](docs/screenshots/story-doors.png)
 
-The landing page is a story told by scrolling. A real drawing from the dataset lies flat, stands up into a painted model, opens its doors as they are counted and adds up an apartment's rooms, on a background that changes colour with each chapter. Every figure in it is the engine's answer to a real question, asked when the page loads.
+The landing page is a story told by scrolling. A real drawing from the dataset lies flat, stands up into a painted model, opens its doors as they are counted and adds up an apartment's rooms; then a scan appears and Gemini's boxes are drawn on it one by one. The background changes colour with each chapter, and the story ends on the three states and the measured results. Every figure in it is the engine's answer to a real question, asked when the page loads. "Play the story" scrolls it by itself at a steady pace, for showing or filming it.
 
 ![Thirty-two doors marked on the plan and in the model raised from it, Verified](docs/screenshots/doors-verified.png)
 

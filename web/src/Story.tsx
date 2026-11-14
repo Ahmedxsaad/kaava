@@ -71,20 +71,27 @@ export function Story({ stats, onOpen, onBrowse, onBring, onTalk, canTalk }: Pro
       const box = el.getBoundingClientRect();
       const span = box.height - window.innerHeight;
       setP(span > 0 ? clamp(-box.top / span) : 0);
+      document.documentElement.toggleAttribute("data-on-stage", box.bottom > 72);  // the top bar floats over the stage
     };
     const onScroll = () => { if (!frame) frame = requestAnimationFrame(read); };
     read();
     window.addEventListener("scroll", onScroll, { passive: true });
     window.addEventListener("resize", onScroll);
-    return () => { window.removeEventListener("scroll", onScroll); window.removeEventListener("resize", onScroll); cancelAnimationFrame(frame); };
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+      cancelAnimationFrame(frame);
+      document.documentElement.removeAttribute("data-on-stage");
+    };
   }, []);
 
   const chapter = Math.max(0, AT.findIndex((start, i) => p >= start && p < AT[i + 1]));
   const direction: Direction = useMemo(() => ({
     rise: smooth(0.06, 0.23, p),
-    tilt: 1.5 - 0.88 * smooth(0.04, 0.26, p),
-    turn: Math.PI / 2 + 0.55 * smooth(0.07, 0.29, p) + 1.3 * linear(0.26, 1, p),
-    back: 1.2 - 0.06 * smooth(0.09, 0.26, p) + 0.1 * smooth(0.76, 1, p),
+    tilt: 1.5 - 0.88 * smooth(0.04, 0.26, p) + 0.14 * smooth(0.7, 0.92, p),
+    // From square-on over the long side round to its far corner: the long side stays in view throughout.
+    turn: Math.PI / 2 + 0.5 * smooth(0.07, 0.29, p) + 0.72 * linear(0.26, 1, p),
+    back: 1.2 + 0.1 * smooth(0.2, 0.32, p),
     sway: 0.1 * (1 - smooth(0.01, 0.07, p)),  // before any scroll the walls breathe: it is a model, not a picture
   }), [p]);
 
@@ -95,7 +102,7 @@ export function Story({ stats, onOpen, onBrowse, onBring, onTalk, canTalk }: Pro
     const el = section.current;
     if (!el) return;
     const span = el.getBoundingClientRect().height - window.innerHeight;
-    const from = window.scrollY, to = el.offsetTop + span - 64;
+    const from = window.scrollY, to = el.offsetTop + span;
     const duration = Math.max(4000, 42000 * ((to - from) / span));
     const began = performance.now();
     let frame = 0;
@@ -150,7 +157,7 @@ export function Story({ stats, onOpen, onBrowse, onBring, onTalk, canTalk }: Pro
     const el = section.current;
     if (!el) return;
     const span = el.getBoundingClientRect().height - window.innerHeight;
-    window.scrollTo({ top: el.offsetTop + span * (AT[to] + 0.012) - 64, behavior: "smooth" });
+    window.scrollTo({ top: el.offsetTop + span * (AT[to] + 0.012), behavior: "smooth" });
   };
 
   return (

@@ -108,7 +108,7 @@ const PAPER = {
 const NIGHT: typeof PAPER = {
   ...PAPER, edge: 0x0c1f0e, edgeOpacity: 0.34, table: 0x174a1e, rim: 0x2c6a34,
   count: new THREE.Color(0xf07a14), area: new THREE.Color(0xf0903f), sheet: "#f4f6f1",
-  sky: 0xf2f6f2, bounce: 0x2c5a31, ambient: 2.0, sun: 2.7, fill: 0.42, shadow: 0.5,
+  sky: 0xffffff, bounce: 0x8fa894, ambient: 2.35, sun: 2.9, fill: 0.5, shadow: 0.46,
 };
 // A painted model: white walls, and one clear colour for each kind of thing.
 const FACE: Record<string, number> = {
