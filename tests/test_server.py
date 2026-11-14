@@ -178,3 +178,19 @@ def test_stats_come_from_the_run_log(client):
         logged = {line.split(",", 1)[0] for line in f.readlines()[1:]}
     assert {run["run_id"] for run in stats["runs"]} <= logged
     assert json.dumps(stats)  # serialisable as it is
+
+
+@needs_data
+def test_archive_drawings_with_dots_in_their_names_open(client):
+    """Archive scans have no questions and names like 'hka.1398.jpg': they still open and show their image."""
+    sources = {s["source"]: s for s in client.get("/api/sources").json()}
+    archive = next((name for name, s in sources.items() if s["archive"] and s["drawings"]), None)
+    if archive is None:
+        pytest.skip("this dataset has no archive drawings")
+    items = client.get("/api/drawings", params={"source": archive, "limit": 30}).json()["items"]
+    dotted = next((i for i in items if "." in i["title"]), items[0])
+    assert dotted["formats"]
+    detail = client.get("/api/drawing", params={"drawing": dotted["id"]}).json()
+    assert detail["view"]["kind"] in ("image", "page") and detail["view"]["width"] > 0
+    assert client.get(detail["view"]["url"]).status_code == 200
+    assert detail["suggested"] == []

@@ -120,11 +120,16 @@ class Service:
             return True
         if source_of(drawing) in ARCHIVE_SOURCES:
             return drawing in set(self.archive)
-        files = self.ds.formats(drawing)  # an IFC model that only its plans have questions about
+        files = self._files(drawing)  # an IFC model that only its plans have questions about
         return bool(files) and self.split.groups.get(self.ds.group_of(files[0])) == "dev"
 
+    def _files(self, drawing: str) -> list[str]:
+        """Every format of a drawing. `drawing` is already a path without its extension, and archive
+        names contain dots, so it must not be stripped a second time."""
+        return self.ds._by_drawing.get(drawing, [])
+
     def files_of(self, drawing: str) -> dict[str, str]:
-        return {PurePosixPath(f).suffix.lower(): f for f in self.ds.formats(drawing)}
+        return {PurePosixPath(f).suffix.lower(): f for f in self._files(drawing)}
 
     def model_of(self, drawing: str) -> str | None:
         """The IFC file behind a drawing: itself, or the model a plan was rendered from."""

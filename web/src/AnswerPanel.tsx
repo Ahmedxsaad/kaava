@@ -223,7 +223,12 @@ export function AnswerPanel(props: Props) {
 
       {result.can_use_model && (
         <section className="fallback">
-          <p>No exact engine covers this drawing. A vision model can point at each item for a fraction of a cent; its answer is always marked Check this.</p>
+          <p>
+            {result.answer === null
+              ? "No exact engine covers this question on a scan."
+              : "The printed labels alone are a weak source here."}{" "}
+            A vision model can point at each item for about a cent; its answer is always marked Check this.
+          </p>
           <button onClick={props.onUseModel} disabled={asking}>Ask the vision model</button>
         </section>
       )}
