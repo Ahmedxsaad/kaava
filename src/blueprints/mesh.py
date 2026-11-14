@@ -26,6 +26,10 @@ from . import config
 
 MESH_VERSION = 5
 MAX_TRIANGLES = 6_000_000  # a model beyond this is not sent to a browser
+# A model file beyond this is not meshed at all: opening it takes minutes and gigabytes of memory,
+# and it ends over the triangle limit anyway. Its questions are still answered; it has no 3D view.
+MAX_IFC_BYTES = 150 * 1024 * 1024
+TOO_LARGE_EXIT = 3  # how a build in a process of its own says "too large"
 SKIP_CLASSES = ("IfcOpeningElement", "IfcAnnotation", "IfcGrid", "IfcVirtualElement")
 WALL_HEIGHT = 2.6
 
@@ -123,7 +127,26 @@ def _too_large_note(ifc_path: Path) -> Path:
 
 def is_built(ifc_path: Path) -> bool:
     """Whether a model's mesh is settled: in the cache, or known to be too large (building one can take minutes)."""
-    return _cache_file(ifc_path, "ifc").is_file() or _too_large_note(ifc_path).is_file()
+    return (ifc_path.stat().st_size > MAX_IFC_BYTES or _cache_file(ifc_path, "ifc").is_file()
+            or _too_large_note(ifc_path).is_file())
+
+
+def build_apart(ifc_path: Path) -> None:
+    """Build a model's mesh in a process of its own, at low priority, and leave it in the cache.
+
+    Built inside a server, the work holds the interpreter (opening a large model is one long call):
+    every other request waits behind it for minutes. A process of its own keeps the server answering.
+    """
+    import subprocess
+    import sys
+
+    done = subprocess.run([sys.executable, "-I", "-m", "blueprints.mesh", str(ifc_path)],
+                          capture_output=True, text=True)
+    if done.returncode == TOO_LARGE_EXIT:
+        note = _too_large_note(ifc_path)
+        raise MeshTooLarge(note.read_text(encoding="utf-8") if note.is_file() else "too many triangles")
+    if done.returncode != 0:
+        raise RuntimeError(f"the model's mesh could not be built: {done.stderr.strip()[-300:]}")
 
 
 def ifc_mesh(ifc_path: Path) -> bytes:
@@ -133,6 +156,9 @@ def ifc_mesh(ifc_path: Path) -> bytes:
         return cache.read_bytes()
     if note.is_file():
         raise MeshTooLarge(note.read_text(encoding="utf-8"))
+    size = ifc_path.stat().st_size
+    if size > MAX_IFC_BYTES:
+        raise MeshTooLarge(f"the model file is {size / 1e6:.0f} MB")
     with _build_lock:
         if cache.is_file():
             return cache.read_bytes()
@@ -177,8 +203,9 @@ def _build_ifc_mesh(ifc_path: Path) -> bytes:
     positions, indices = array("f"), array("I")
     elements = []
     if products:
+        # Half the cores: the machine that builds a mesh is also answering questions.
         iterator = ifcopenshell.geom.iterator(
-            settings, model, max(1, multiprocessing.cpu_count() - 1), include=products)
+            settings, model, max(1, multiprocessing.cpu_count() // 2), include=products)
         if iterator.initialize():
             while True:
                 shape = iterator.get()
@@ -312,3 +339,17 @@ def _build_plan_mesh(dxf_path: Path) -> bytes:
               "vertices": len(positions) // 3, "triangles": len(indices) // 3,
               "offset": offset, "bbox": bbox, "wall_height": WALL_HEIGHT}
     return _pack(header, positions, indices)
+
+
+if __name__ == "__main__":  # python -m blueprints.mesh <model.ifc>: build one model's mesh into the cache
+    import os
+    import sys
+
+    try:
+        os.nice(10)
+    except OSError:
+        pass
+    try:
+        ifc_mesh(Path(sys.argv[1]))
+    except MeshTooLarge:
+        sys.exit(TOO_LARGE_EXIT)

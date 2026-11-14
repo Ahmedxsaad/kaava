@@ -439,3 +439,15 @@ def test_a_long_model_answer_is_worked_on_once_and_a_request_that_outlives_its_w
     again = app_state._model_fallback()(q, None)
     assert again.answer == 7 and again.cost_usd == 0.0                  # shown again from disk, paid for once
     assert calls == ["How many doors?"]
+
+
+def test_a_model_file_too_large_to_mesh_is_refused_without_being_opened(tmp_path, monkeypatch):
+    from blueprints import config, mesh
+
+    monkeypatch.setattr(config, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(mesh, "MAX_IFC_BYTES", 10)
+    big = tmp_path / "big.ifc"
+    big.write_text("not a model at all, and never read as one")
+    assert mesh.is_built(big)                      # settled: there is nothing to wait for
+    with pytest.raises(mesh.MeshTooLarge, match="the model file is"):
+        mesh.ifc_mesh(big)

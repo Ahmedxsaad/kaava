@@ -1497,7 +1497,7 @@ def create_app(dataset_root: Path | str | None = None) -> FastAPI:
 
                             def build(job=job, path=path):
                                 try:
-                                    mesh.ifc_mesh(path)
+                                    mesh.build_apart(path)  # in a process of its own: this one keeps answering
                                 except Exception as exc:
                                     job["failed"] = exc
                                 finally:

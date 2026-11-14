@@ -24,6 +24,9 @@ def get(url: str, timeout: float = 120.0) -> tuple[int, bytes]:
             return reply.status, reply.read()
     except urllib.error.HTTPError as exc:
         return exc.code, exc.read()
+    except (urllib.error.URLError, TimeoutError, ConnectionError) as exc:  # a busy server: ask again
+        time.sleep(5)
+        return 202, str(exc).encode()
 
 
 def main() -> None:
