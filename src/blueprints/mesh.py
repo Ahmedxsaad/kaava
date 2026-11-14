@@ -116,6 +116,11 @@ def _centre(positions: array, elements: list[dict]) -> tuple[list[float], list[f
 # ----------------------------------------------------------------- IFC
 
 
+def is_built(ifc_path: Path) -> bool:
+    """Whether a model's mesh is already in the cache (building one can take minutes)."""
+    return _cache_file(ifc_path, "ifc").is_file()
+
+
 def ifc_mesh(ifc_path: Path) -> bytes:
     """The whole model as one binary mesh, from cache when possible."""
     cache = _cache_file(ifc_path, "ifc")

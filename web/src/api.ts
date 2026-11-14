@@ -45,6 +45,7 @@ export interface DrawingDetail extends DrawingSummary {
     pages: number;
     aligned: boolean;
     note: string;
+    px_per_m: number | null;
     url: string | null;
   };
   rooms: Room[];

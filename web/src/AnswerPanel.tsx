@@ -9,6 +9,7 @@ interface Props {
   shown: number | string | null;  // the value while evidence is still landing
   settled: boolean;
   adjusted: number | null;  // the value after the reader removed items, if they did
+  marked: number;  // how many evidence items have been marked on the sheet so far
   excluded: Set<number>;
   hover: number | null;
   focus: number | null;
@@ -81,6 +82,59 @@ function why(result: AskResult): { title: string; text: React.ReactNode } {
     };
   }
   return { title: "Why there is no answer", text: result.reason || "The drawing does not support a reliable answer." };
+}
+
+// How the answer was worked out, step by step: the question as read, the method chosen and
+// why, the evidence marked, the checks run, and what the score allows.
+function Trace({ result, marked, settled }: { result: AskResult; marked: number; settled: boolean }) {
+  const method = result.method;
+  const route = method.startsWith("dxf") ? "This plan comes with a DXF, so its geometry answers the question exactly, at no cost."
+    : method.startsWith("ifc") ? "This drawing is a building model, or was rendered from one, so a query on the model answers exactly, at no cost."
+    : method.startsWith("raster-labels") ? "A scan with no vector data: the room labels printed on it are read by a local OCR model, at no cost."
+    : method.startsWith("vlm") ? "No exact engine covers this, so a vision model points at each item. This is the paid path."
+    : "No exact engine covers this kind of drawing.";
+  const total = result.evidence.filter((e) => e.kind !== "formula" && e.kind !== "context").length;
+  const formula = result.evidence.find((e) => e.kind === "formula");
+  const reason = why(result);
+  const steps: { title: string; body?: React.ReactNode; tone?: string }[] = [
+    { title: "Read the question", body: result.interpreted ? <code>{result.interpreted}</code> : method.startsWith("vlm") ? "Passed on as written, with the counting rules it states." : "Taken as written." },
+    { title: `Chose the method: ${result.engine}`, body: route },
+  ];
+  if (result.answer !== null) {
+    steps.push({
+      title: total ? `Marked the evidence: ${Math.min(marked, total)} of ${total}` : "Found nothing of this kind",
+      body: formula?.text ?? (total ? "Each item is drawn on the sheet and listed below; any of them can be left out." : undefined),
+    });
+    if (result.checks.length) {
+      steps.push({
+        title: "Ran the checks",
+        body: (
+          <ul className="checks">
+            {result.checks.map((c) => (
+              <li key={c.name}><span>{c.name}</span><b>{typeof c.value === "number" ? c.value.toLocaleString("en", { maximumFractionDigits: 2 }) : c.value}</b></li>
+            ))}
+          </ul>
+        ),
+      });
+    }
+  }
+  if (settled) steps.push({ title: reason.title, body: reason.text, tone: result.state });
+  return (
+    <section className="tb-cell trace">
+      <h3>How it was worked out</h3>
+      <ol>
+        {steps.map((step, i) => (
+          <li key={step.title.split(":")[0]} className={step.tone ?? ""} style={{ animationDelay: `${Math.min(i, 3) * 0.16}s` }}>
+            <i>{i + 1}</i>
+            <div>
+              <strong>{step.title}</strong>
+              {step.body && <div className="body">{step.body}</div>}
+            </div>
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
 }
 
 // One counted item, cut out of the drawing itself: a reviewer checks the whole count at a glance.
@@ -272,7 +326,6 @@ export function AnswerPanel(props: Props) {
   }
   const state = STATE[result.state];
   const unit = unitLabel(result.unit);
-  const reason = why(result);
   return (
     <aside className={`panel state-${result.state}${asking ? " stale" : ""}`}>
       <header className="verdict">
@@ -310,30 +363,17 @@ export function AnswerPanel(props: Props) {
         {result.explanation && <p className="explain">{result.explanation}</p>}
       </section>
 
-      <section className={`tb-cell why ${result.state}`}>
-        <h3>{reason.title}</h3>
-        <p>{reason.text}</p>
-        {result.can_use_model && (
-          <div className="fallback">
-            <p>
-              {result.answer === null ? "No exact engine covers this question on a scan." : "The printed labels alone are a weak source here."}{" "}
-              A vision model can point at each item for about a cent; its answer is always marked Check this.
-            </p>
-            <button onClick={props.onUseModel} disabled={asking}>Ask the vision model</button>
-          </div>
-        )}
-      </section>
-
       <Duel result={result} />
 
-      {result.checks.length > 0 && (
-        <section className="tb-cell checks">
-          <h3>Checks run</h3>
-          <ul>
-            {result.checks.map((c) => (
-              <li key={c.name}><span>{c.name}</span><b>{typeof c.value === "number" ? c.value.toLocaleString("en", { maximumFractionDigits: 2 }) : c.value}</b></li>
-            ))}
-          </ul>
+      <Trace result={result} marked={props.marked} settled={settled} />
+
+      {result.can_use_model && (
+        <section className="tb-cell fallback">
+          <p>
+            {result.answer === null ? "No exact engine covers this question on a scan." : "The printed labels alone are a weak source here."}{" "}
+            A vision model can point at each item for about a cent; its answer is always marked Check this.
+          </p>
+          <button onClick={props.onUseModel} disabled={asking}>Ask the vision model</button>
         </section>
       )}
 
@@ -349,12 +389,6 @@ export function AnswerPanel(props: Props) {
         onFocus={props.onFocus}
       />
 
-      {result.interpreted && (
-        <section className="tb-cell read-as">
-          <h3>Question read as</h3>
-          <p>{result.interpreted}</p>
-        </section>
-      )}
     </aside>
   );
 }

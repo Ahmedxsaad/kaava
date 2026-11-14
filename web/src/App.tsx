@@ -92,6 +92,7 @@ export function App() {
   const [focusKey, setFocusKey] = useState("");
   const [listening, setListening] = useState(false);
   const [speaking, setSpeaking] = useState(false);
+  const [playing, setPlaying] = useState(false);  // the examples play on their own, one after another
   // What this session's answers cost, and what the vision model alone costs for the same questions.
   const [meter, setMeter] = useState({ answers: 0, spent: 0, alone: 0 });
   const [aloneAverage, setAloneAverage] = useState<number | null>(null);
@@ -290,6 +291,16 @@ export function App() {
     return detail.rooms.filter((r) => r.outdoor && !used.has(r.ref) && flats.has(r.unit));
   }, [detail, result]);
 
+  // Playing: once an answer has landed and been on show for a while, move to the next example.
+  useEffect(() => {
+    if (!playing || asking || (result && !settled)) return;
+    const at = TOUR.findIndex((stop) => stop.drawing === detail?.id && stop.question === question);
+    const next = TOUR[(at + 1) % TOUR.length];
+    const dwell = !result || at === -1 ? 500 : TOUR[at].view ? 9500 : 6500;  // a 3D scene needs time to rise
+    const timer = window.setTimeout(() => void open(next.drawing, next.question, next.view), dwell);
+    return () => window.clearTimeout(timer);
+  }, [playing, asking, result, settled, detail, question, open]);
+
   // Keys. While inspecting: arrows step through the items, X leaves one out, Escape ends.
   // Otherwise the arrows step through the examples, for presenting.
   useEffect(() => {
@@ -297,6 +308,7 @@ export function App() {
       const target = e.target as HTMLElement | null;
       if (page !== "ask" || picking || e.altKey || e.ctrlKey || e.metaKey) return;
       if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) return;
+      if (e.key === "Escape" && playing) setPlaying(false);
       if (focus !== null) {
         const at = units.findIndex((u) => u.n === focus);
         if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
@@ -315,7 +327,7 @@ export function App() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [page, picking, detail, question, open, focus, units, toggle]);
+  }, [page, picking, detail, question, open, focus, units, toggle, playing]);
 
   // A few of the dataset's questions about this drawing to start from: one count, one area, one in another language.
   const starters = useMemo(() => {
@@ -402,6 +414,9 @@ export function App() {
                 <circle cx="7" cy="18" r="2.4" /><circle cx="17" cy="16" r="2.4" />
                 {!audible && <path d="M4 4l16 16" fill="none" strokeWidth="2.2" strokeLinecap="round" />}
               </svg>
+            </button>
+            <button className={`icon play${playing ? " on" : ""}`} onClick={() => setPlaying(!playing)} aria-pressed={playing} title={playing ? "Stop playing the examples" : "Play the examples one after another"}>
+              <svg viewBox="0 0 24 24" aria-hidden>{playing ? <path d="M7 5h4v14H7zM13 5h4v14h-4z" /> : <path d="M8 5v14l11-7z" />}</svg>
             </button>
             <div className="tour">
               <button onClick={() => setTouring(!touring)} aria-expanded={touring}>Examples</button>
@@ -547,6 +562,7 @@ export function App() {
             shown={shown}
             settled={settled}
             adjusted={adjusted}
+            marked={revealed}
             excluded={excluded}
             hover={hover}
             focus={focus}

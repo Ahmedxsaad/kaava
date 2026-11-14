@@ -227,3 +227,17 @@ def test_the_plan_image_is_placed_under_the_3d_model(client):
     (x0, y0, _), _, (x2, y2, _), _ = ground["corners"]
     assert x0 < x2 and y0 > y2
     assert client.get("/api/ground", params={"drawing": "data/cubicasa5k/high_quality_architectural-14441"}).status_code == 404
+
+
+@needs_data
+def test_the_sheet_scale_lets_a_reader_measure(client):
+    """Pixels per metre of the shown plan: a room's outline measured in pixels gives its area in m²."""
+    detail = client.get("/api/drawing", params={"drawing": SWISS}).json()
+    scale = detail["view"]["px_per_m"]
+    assert scale and scale > 10
+    room = max(detail["rooms"], key=lambda r: r["area_m2"])
+    pts = room["points"]
+    shoelace = abs(sum(x0 * y1 - x1 * y0 for (x0, y0), (x1, y1) in zip(pts, pts[1:] + pts[:1]))) / 2
+    assert shoelace / scale ** 2 == pytest.approx(room["area_m2"], rel=0.03)
+    scan = client.get("/api/drawing", params={"drawing": "data/cubicasa5k/high_quality_architectural-14441"}).json()
+    assert scan["view"]["px_per_m"] is None  # a scan has no known scale: nothing to measure with

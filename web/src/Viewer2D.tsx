@@ -20,6 +20,15 @@ interface Props {
   onToggle(n: number): void;
 }
 
+type Tool = "move" | "measure" | "loupe";
+
+interface Measure {
+  a: [number, number];
+  b: [number, number];
+}
+
+const LENS = 210;  // the loupe's diameter on screen
+
 interface Transform {
   k: number;
   x: number;
@@ -66,7 +75,18 @@ export function Viewer2D(props: Props) {
   const [loaded, setLoaded] = useState(false);
   const [tip, setTip] = useState<{ x: number; y: number; room: Room } | null>(null);
   const drag = useRef<{ x: number; y: number; moved: boolean } | null>(null);
+  const [tool, setTool] = useState<Tool>("move");
+  const [measures, setMeasures] = useState<Measure[]>([]);
+  const [drawing, setDrawing] = useState<Measure | null>(null);  // a measurement being drawn
+  const [lens, setLens] = useState<{ x: number; y: number } | null>(null);
   const { width, height, url } = detail.view;
+  const pxPerM = detail.view.px_per_m;
+  // Screen position -> image pixels.
+  const toImage = (e: { clientX: number; clientY: number }): [number, number] => {
+    const rect = frame.current!.getBoundingClientRect();
+    return [(e.clientX - rect.left - t.x) / t.k, (e.clientY - rect.top - t.y) / t.k];
+  };
+  useEffect(() => { setMeasures([]); setDrawing(null); setTool("move"); }, [detail.id]);
 
   const fitTo = useCallback(
     (box: Box | null, pad = 0.9): Transform => {
@@ -158,10 +178,23 @@ export function Viewer2D(props: Props) {
       className={`viewer2d theme-${theme}`}
       onPointerDown={(e) => {
         if (e.button !== 0) return;
-        drag.current = { x: e.clientX, y: e.clientY, moved: false };
         (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+        if (tool === "measure") {
+          const at = toImage(e);
+          setDrawing({ a: at, b: at });
+          return;
+        }
+        drag.current = { x: e.clientX, y: e.clientY, moved: false };
       }}
       onPointerMove={(e) => {
+        if (tool === "loupe") {
+          const rect = frame.current!.getBoundingClientRect();
+          setLens({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+        }
+        if (drawing) {
+          setDrawing({ a: drawing.a, b: toImage(e) });
+          return;
+        }
         const d = drag.current;
         if (!d) return;
         const dx = e.clientX - d.x, dy = e.clientY - d.y;
@@ -172,8 +205,17 @@ export function Viewer2D(props: Props) {
         setTip(null);
         setT((prev) => ({ ...prev, x: prev.x + dx, y: prev.y + dy }));
       }}
-      onPointerUp={() => { window.setTimeout(() => (drag.current = null), 0); }}
-      onDoubleClick={() => glide(fitTo(null))}
+      onPointerUp={() => {
+        if (drawing) {
+          if (Math.hypot(drawing.b[0] - drawing.a[0], drawing.b[1] - drawing.a[1]) * t.k > 6) setMeasures((list) => [...list, drawing]);
+          setDrawing(null);
+          return;
+        }
+        window.setTimeout(() => (drag.current = null), 0);
+      }}
+      onPointerLeave={() => setLens(null)}
+      onDoubleClick={() => tool === "move" && glide(fitTo(null))}
+      data-tool={tool}
     >
       <div
         className={`sheet${gliding ? " gliding" : ""}${loaded ? " loaded" : ""}`}
@@ -288,6 +330,46 @@ export function Viewer2D(props: Props) {
             );
           })}
 
+          {/* One measured room: its overall width and depth written beside it, as on a dimensioned drawing. */}
+          {pxPerM && shown.filter((e) => e.points).length === 1 && evidence.filter((e) => e.points).length === 1 && (() => {
+            const room = shown.find((e) => e.points)!;
+            const xs = room.points!.map((q) => q[0]), ys = room.points!.map((q) => q[1]);
+            const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+            const gap = 16 * u, tick = 5 * u;
+            return (
+              <g className="mark dims">
+                <path className="ink draw" pathLength={1} strokeWidth={1.6 * u}
+                  d={`M${x0} ${y0 - gap}H${x1}M${x0} ${y0 - gap - tick}v${2 * tick}M${x1} ${y0 - gap - tick}v${2 * tick}` +
+                     `M${x0 - gap} ${y0}V${y1}M${x0 - gap - tick} ${y0}h${2 * tick}M${x0 - gap - tick} ${y1}h${2 * tick}`} />
+                <g transform={`translate(${(x0 + x1) / 2},${y0 - gap}) scale(${u})`}>
+                  <text className="hand note" textAnchor="middle" y={-7}>{((x1 - x0) / pxPerM).toFixed(2)} m overall</text>
+                </g>
+                <g transform={`translate(${x0 - gap},${(y0 + y1) / 2}) scale(${u}) rotate(-90)`}>
+                  <text className="hand note" textAnchor="middle" y={-7}>{((y1 - y0) / pxPerM).toFixed(2)} m overall</text>
+                </g>
+              </g>
+            );
+          })()}
+
+          {/* The reader's own tape measure. */}
+          {pxPerM && [...measures, ...(drawing ? [drawing] : [])].map((m, i) => {
+            const dx = m.b[0] - m.a[0], dy = m.b[1] - m.a[1];
+            const length = Math.hypot(dx, dy);
+            if (length < 1e-6) return null;
+            const nx = (-dy / length) * 6 * u, ny = (dx / length) * 6 * u;
+            let angle = (Math.atan2(dy, dx) * 180) / Math.PI;
+            if (angle > 90 || angle < -90) angle += 180;
+            return (
+              <g key={`tape-${i}`} className="mark tape">
+                <path className="ink" strokeWidth={1.8 * u}
+                  d={`M${m.a[0]} ${m.a[1]}L${m.b[0]} ${m.b[1]}M${m.a[0] - nx} ${m.a[1] - ny}L${m.a[0] + nx} ${m.a[1] + ny}M${m.b[0] - nx} ${m.b[1] - ny}L${m.b[0] + nx} ${m.b[1] + ny}`} />
+                <g transform={`translate(${(m.a[0] + m.b[0]) / 2},${(m.a[1] + m.b[1]) / 2}) scale(${u}) rotate(${angle})`}>
+                  <text className="hand figure" textAnchor="middle" y={-8} style={{ fontSize: 18 }}>{(length / pxPerM).toFixed(2)} m</text>
+                </g>
+              </g>
+            );
+          })}
+
           {/* The reading line that sweeps the sheet while items are marked. */}
           {sweepAt !== null && (
             <g className="sweep" transform={`translate(${sweepAt},0)`}>
@@ -305,7 +387,29 @@ export function Viewer2D(props: Props) {
         </div>
       )}
 
-      <div className="viewer-tools" onPointerDown={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
+      {/* A loupe that shows the drawing as it came, enlarged, whatever the sheet looks like around it. */}
+      {tool === "loupe" && lens && url && (
+        <div
+          className="loupe"
+          style={{
+            left: lens.x - LENS / 2, top: lens.y - LENS / 2, width: LENS, height: LENS,
+            backgroundImage: `url(${url})`,
+            backgroundSize: `${width * t.k * 2.4}px ${height * t.k * 2.4}px`,
+            backgroundPosition: `${LENS / 2 - ((lens.x - t.x) / t.k) * t.k * 2.4}px ${LENS / 2 - ((lens.y - t.y) / t.k) * t.k * 2.4}px`,
+          }}
+        />
+      )}
+
+      <div className="viewer-tools" onPointerDown={(e) => e.stopPropagation()} onPointerMove={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
+        {pxPerM && (
+          <button className={`wide${tool === "measure" ? " on" : ""}`} onClick={() => setTool(tool === "measure" ? "move" : "measure")} title="Drag on the sheet to measure a length">
+            Measure
+          </button>
+        )}
+        {measures.length > 0 && <button className="wide" onClick={() => setMeasures([])}>Clear</button>}
+        <button className={`wide${tool === "loupe" ? " on" : ""}`} onClick={() => { setTool(tool === "loupe" ? "move" : "loupe"); setLens(null); }} title="A loupe on the original drawing">
+          Loupe
+        </button>
         <button onClick={() => zoomBy(1.5)} aria-label="Zoom in">+</button>
         <button onClick={() => zoomBy(1 / 1.5)} aria-label="Zoom out">−</button>
         <button onClick={() => glide(fitTo(null))} aria-label="Fit the sheet" className="wide">Fit</button>

@@ -409,6 +409,22 @@ class Service:
                         "unit": room.get("unit")})
         return out
 
+    def px_per_metre(self, drawing: str, view: View) -> float | None:
+        """How many pixels of the shown image make one metre, where the drawing's scale is known.
+
+        A Swiss plan is lined up with its DXF (in metres); an IFC plan with its model. Lets the
+        reader measure on the sheet. For an IFC plan the model's mesh must already be built.
+        """
+        if view.kind == "plan" and view.transform:
+            return round(view.transform["scale"] * view.zoom, 4)
+        model = self.model_of(drawing) if view.kind == "page" else None
+        if model and (drawing in self._plan_fits or mesh.is_built(self.ds.abspath(model))):
+            fit = self.plan_fit(drawing)
+            if fit:
+                (a, d), (b, e), _ = fit["coef"]
+                return round(abs(a * e - b * d) ** 0.5 * view.zoom, 4)
+        return None
+
     def detail(self, drawing: str, page: int = 0) -> dict:
         view = self.view(drawing, page)
         seen: dict[str, dict] = {}
@@ -420,6 +436,7 @@ class Service:
             "credit": CREDITS.get(source_of(drawing), ""),
             "view": {"kind": view.kind, "width": view.width, "height": view.height, "page": view.page,
                      "pages": view.pages, "aligned": view.aligned, "note": view.note,
+                     "px_per_m": self.px_per_metre(drawing, view),
                      "url": None if view.kind == "none" else f"/api/image?drawing={_quote(drawing)}&page={view.page}"},
             "rooms": self.rooms_layer(drawing, view),
             "mesh": (f"/api/mesh?drawing={_quote(drawing)}" if self.engine_of(drawing) else None),
