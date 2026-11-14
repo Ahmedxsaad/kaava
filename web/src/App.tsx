@@ -39,7 +39,7 @@ function writeRoute(route: Route) {
 
 // Evidence that stands for one unit of the answer (a counted item or a measured part).
 function countable(evidence: Evidence[]): Evidence[] {
-  return evidence.filter((e) => e.kind !== "formula");
+  return evidence.filter((e) => e.kind !== "formula" && e.kind !== "context");
 }
 
 function measureOf(item: Evidence): number | null {
@@ -201,7 +201,8 @@ export function App() {
     });
   }, []);
 
-  const drawable = useMemo(() => (result ? result.evidence.filter((e) => e.bbox || e.points || e.x !== undefined) : []), [result]);
+  const drawable = useMemo(() => (result ? result.evidence.filter((e) => e.kind !== "context" && (e.bbox || e.points || e.x !== undefined)) : []), [result]);
+  const context = useMemo(() => (result ? result.evidence.filter((e) => e.kind === "context" && e.bbox) : []), [result]);
   const highlights: Highlight[] = useMemo(() => {
     if (!result) return [];
     return units.flatMap((e) => {
@@ -378,6 +379,7 @@ export function App() {
                 <Viewer2D
                   detail={detail}
                   evidence={drawable}
+                  context={settled ? context : []}
                   revealed={revealed}
                   excluded={excluded}
                   hover={hover}

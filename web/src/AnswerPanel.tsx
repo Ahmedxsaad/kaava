@@ -34,6 +34,18 @@ function pct(value: number): string {
   return `${(100 * value).toFixed(value < 0.01 ? 2 : 1)}%`;
 }
 
+// Why a measured kind of answer is still not Verified: say what was measured.
+function notVerified(result: AskResult): string {
+  const levels = [...(result.family?.levels ?? [])].sort((a, b) => b.score - a.score);
+  const level = levels.filter((l) => result.confidence == null || l.score <= result.confidence + 1e-9)[0] ?? levels[levels.length - 1];
+  if (!level) return "This kind of answer has not been measured on held-back drawings yet.";
+  const rate = level.answers ? level.errors / level.answers : 0;
+  const few = rate <= 0.01;
+  return `On held-back drawings, answers of this kind with these checks were wrong ${level.errors.toLocaleString("en")} times in ${level.answers.toLocaleString("en")}. ` +
+    (few ? "That is too few answers to prove fewer than 1% are wrong, so it is not marked Verified yet."
+         : `That is ${(100 * rate).toFixed(1)}%, above our 1% bar, so it is never marked Verified.`);
+}
+
 function Why({ result }: { result: AskResult }) {
   const v = result.verified_because;
   if (result.state === "verified" && v) {
@@ -58,7 +70,7 @@ function Why({ result }: { result: AskResult }) {
           {bar != null && result.confidence != null
             ? `Its checks score ${result.confidence.toFixed(2)}; answers of this kind are Verified from ${bar.toFixed(2)}.`
             : family
-              ? "Answers of this kind are not marked Verified yet: there are too few held-back answers to prove fewer than 1% are wrong."
+              ? notVerified(result)
               : result.method.startsWith("vlm")
                 ? `A vision model read this from pixels. Its items are drawn so you can check each one; it is never marked Verified.${
                     result.confidence != null ? ` The model's own estimate that its list is exactly right: ${Math.round(100 * result.confidence)}%.` : ""}`
@@ -83,10 +95,11 @@ function EvidenceList({ items, excluded, hover, onHover, onToggle }: {
   onToggle(n: number): void;
 }) {
   const [all, setAll] = useState(false);
-  const countable = items.filter((e) => e.kind !== "formula");
+  const countable = items.filter((e) => e.kind !== "formula" && e.kind !== "context");
+  const context = items.filter((e) => e.kind === "context");
   const formula = items.find((e) => e.kind === "formula");
   const measured = countable.some((e) => e.area_m2 != null || e.volume_m3 != null || e.length_m != null);
-  if (!countable.length && !formula) return null;
+  if (!countable.length && !formula && !context.length) return null;
   const limit = measured ? 14 : 90;
   const visible = all ? countable : countable.slice(0, limit);
   return (
@@ -134,6 +147,16 @@ function EvidenceList({ items, excluded, hover, onHover, onToggle }: {
         </button>
       )}
       {formula && <p className="formula">{formula.text}</p>}
+      {context.length > 0 && (
+        <ul className="context">
+          {context.map((e, i) => (
+            <li key={i} className={e.role === "not counted" ? "doubt" : "support"}>
+              <b>{e.label}</b>
+              <span>{e.role === "not counted" ? `read but not counted${e.why ? `: ${e.why}` : ""}` : e.role}</span>
+            </li>
+          ))}
+        </ul>
+      )}
     </section>
   );
 }

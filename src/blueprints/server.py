@@ -32,7 +32,7 @@ from pydantic import BaseModel
 from . import config, mesh, overlay, verify
 from .answer import Answer
 from .data import Dataset, Question, drawing_of, question_id, source_of
-from .engines import dxf, dxf_index, ifc, router
+from .engines import dxf, dxf_index, ifc, raster_labels, router
 from .harness import FatalEngineError
 from .scoring import score_answer
 from .split import Split
@@ -55,6 +55,7 @@ CREDITS = {
 ENGINE_LABELS = {
     ifc.METHOD: "IFC model query",
     dxf.METHOD: "DXF geometry",
+    raster_labels.METHOD: "Printed room labels (local OCR)",
     router.METHOD: "Router",
 }
 
@@ -414,7 +415,9 @@ class Service:
         t0 = time.perf_counter()
         replayed = None
         ans = router.make(self.thresholds)(asked, self.ds)
-        if router.route(asked, self.ds) is None:
+        exact = router.route(asked, self.ds) in ("ifc", "dxf")
+        # Scans: no exact engine. A weak or missing label reading gives way to a vision model.
+        if not exact and (ans.answer is None or router.is_weak(ans)):
             logged = self.logged["pointing"].get(asked.qid)
             if logged and logged.get("pred") is not None:  # already paid for: show it again, free
                 ans = _answer_from_row(logged)
@@ -444,11 +447,12 @@ class Service:
             "latency_ms": round(latency, 1),
             "replayed_from": replayed,
             "interpreted": ans.meta.get("interpreted"),
-            "checks": [{"name": k, "value": v} for k, v in (ans.meta.get("checks") or {}).items()],
+            "checks": _checks(ans),
             "verified_because": ans.meta.get("verified_because"),
             "family": self._family_stats(ans),
             "evidence": self._evidence(ans, view, drawing),
-            "can_use_model": router.route(asked, self.ds) is None and ans.answer is None,
+            "can_use_model": not exact and not ans.method.startswith("vlm")
+                             and (ans.answer is None or router.is_weak(ans)),
             "reference": None,
             "baseline": None,
         }
@@ -536,10 +540,17 @@ class Service:
             elif space == "image_px" and kind == "point":
                 n += 1
                 out.append({"kind": "point", "n": n, "x": item["x"], "y": item["y"], "label": item.get("label", "")})
+            elif space == "image_px" and kind == "box" and item.get("role"):
+                # Read on the plan and used as a check, not a counted item (the apartment's type line).
+                out.append({"kind": "context", "role": item["role"], "bbox": item["bbox"],
+                            "label": item.get("label", "")})
             elif space == "image_px" and kind == "box":
                 n += 1
                 out.append({"kind": "box", "n": n, "bbox": item["bbox"], "label": item.get("label", ""),
                             "score": item.get("score")})
+        for item in ans.meta.get("doubtful") or []:  # labels the engine looked at and did not count
+            out.append({"kind": "context", "role": "not counted", "bbox": item["bbox"],
+                        "label": item.get("label", ""), "why": item.get("why", "")})
         return out
 
     # ---- numbers for the pitch, straight from the run log
@@ -571,6 +582,21 @@ class Service:
                 "full_set_mix": [{"source": s, "type": t, "questions": n}
                                  for (s, t), n in sorted(config.FULL_SET_MIX.items())],
                 "model_budget_eur": self.budget_eur, "model_spent_eur": round(self.spent_eur, 4)}
+
+
+def _checks(ans: Answer) -> list[dict]:
+    """The independent checks behind an answer, as name and value."""
+    checks = [{"name": k, "value": v} for k, v in (ans.meta.get("checks") or {}).items()]
+    if ans.method == raster_labels.METHOD and ans.answer is not None:
+        source = ans.meta.get("source")
+        if source in ("labels", "labels+type"):
+            checks.append({"name": "room labels of this kind read on the plan", "value": ans.answer})
+        if source in ("type", "labels+type"):
+            checks.append({"name": "the apartment's type line on the plan",
+                           "value": "states the same" if source == "labels+type" else "the only source"})
+        if ans.meta.get("known_labels") is not None:
+            checks.append({"name": "labels read on the plan in all", "value": ans.meta["known_labels"]})
+    return checks
 
 
 def _fit_affine(pairs: list) -> dict | None:

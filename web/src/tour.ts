@@ -59,6 +59,13 @@ export const TOUR: Stop[] = [
     view: "both",
   },
   {
+    label: "Bedrooms on a scan, read from its labels",
+    note: "Local OCR · two printed sources agree · free",
+    state: "check",
+    drawing: "data/cubicasa5k/high_quality_architectural-14441",
+    question: "How many bedrooms (makuuhuone, usually marked MH) are on this floor plan?",
+  },
+  {
     label: "Windows on a scanned Finnish plan",
     note: "No vector data: a vision model points, the code counts",
     state: "check",

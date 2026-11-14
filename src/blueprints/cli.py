@@ -258,7 +258,7 @@ def cmd_floor(args: argparse.Namespace) -> int:
     return 0
 
 
-ENGINE_NAMES = ("ifc", "dxf", "router", "pointing")
+ENGINE_NAMES = ("ifc", "dxf", "router", "pointing", "raster")
 
 
 def _engines(args: argparse.Namespace | None = None) -> dict:
@@ -271,6 +271,10 @@ def _engines(args: argparse.Namespace | None = None) -> dict:
                "dxf": (dxf.METHOD, dxf.answer, ("swiss_dwellings",)),
                # The whole system: route, answer, then mark Verified where calibration allows.
                "router": (router.METHOD, router.make(verify.load_thresholds()), every_source)}
+    if args is not None and getattr(args, "engine", None) == "raster":
+        from .engines import raster_labels  # imports lazily: the OCR model is only loaded when used
+
+        engines["raster"] = (raster_labels.METHOD, raster_labels.answer, ("cubicasa5k",))
     if args is not None and getattr(args, "engine", None) == "pointing":
         from dotenv import load_dotenv
 

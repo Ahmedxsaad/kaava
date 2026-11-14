@@ -4,6 +4,7 @@ import type { DrawingDetail, Evidence, Room } from "./api";
 interface Props {
   detail: DrawingDetail;
   evidence: Evidence[];
+  context: Evidence[];
   revealed: number;
   excluded: Set<number>;
   hover: number | null;
@@ -60,7 +61,7 @@ function boundsOf(items: Evidence[]): [number, number, number, number] | null {
   return Number.isFinite(x0) ? [x0, y0, x1, y1] : null;
 }
 
-export function Viewer2D({ detail, evidence, revealed, excluded, hover, leftOut, focusKey, onHover, onToggle }: Props) {
+export function Viewer2D({ detail, evidence, context, revealed, excluded, hover, leftOut, focusKey, onHover, onToggle }: Props) {
   const frame = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [t, setT] = useState<Transform>({ k: 1, x: 0, y: 0 });
@@ -229,6 +230,21 @@ export function Viewer2D({ detail, evidence, revealed, excluded, hover, leftOut,
                     <rect x={-w / 2} y={-11} width={w} height={22} rx={4} />
                     <text textAnchor="middle" y={4.5}>{label}</text>
                   </g>
+                </g>
+              </g>
+            );
+          })}
+
+          {/* Text the engine read and did not count: the type line it checked against, and doubtful labels. */}
+          {context.map((item, i) => {
+            const [x0, y0, x1, y1] = item.bbox!;
+            const pad = 4 * inverse;
+            const doubt = item.role === "not counted";
+            return (
+              <g key={`ctx-${i}`} className={`ev-context${doubt ? " doubt" : ""}`}>
+                <rect x={x0 - pad} y={y0 - pad} width={x1 - x0 + 2 * pad} height={y1 - y0 + 2 * pad} rx={3 * inverse} />
+                <g transform={`translate(${(x0 + x1) / 2},${y0 - pad}) scale(${inverse})`}>
+                  <text textAnchor="middle" y={-5}>{doubt ? "not counted" : item.role}</text>
                 </g>
               </g>
             );

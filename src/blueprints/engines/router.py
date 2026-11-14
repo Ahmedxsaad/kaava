@@ -1,12 +1,16 @@
 """Router: send each question to the cheapest engine that can answer it exactly.
 
-    an IFC model, or a plan rendered from one   ->  IFC engine   (EUR 0)
-    a floor plan that comes with a DXF          ->  DXF engine   (EUR 0)
-    anything else                               ->  declined for now
+    an IFC model, or a plan rendered from one   ->  IFC engine     (EUR 0)
+    a floor plan that comes with a DXF          ->  DXF engine     (EUR 0)
+    a scan, asked to count labelled rooms       ->  label engine   (EUR 0, local OCR)
+    anything else                               ->  declined, or the fallback (a vision model)
 
-Raster-only plans (CubiCasa) and free-text questions have no engine yet, so they are
-declined with the reason rather than guessed. After the engine answers, the verifier
-turns its score into Verified where the calibrated threshold allows it.
+On scans the label engine reads the room labels printed on the plan. Where its two
+sources agree (score 0.9 and up, about 94% right on held-out plans) its answer stands;
+below that it is no better than a vision model, so the fallback answers if there is
+one. Symbol counts on scans and free-text questions have no exact engine yet. After an
+engine answers, the verifier turns its score into Verified where the calibrated
+threshold allows it.
 """
 
 from __future__ import annotations
@@ -16,9 +20,13 @@ from pathlib import PurePosixPath
 from .. import verify
 from ..answer import Answer
 from ..data import Dataset, Question
-from . import dxf, ifc
+from . import dxf, ifc, raster_labels
 
 METHOD = "router:v1"
+RASTER = (".png", ".jpg", ".jpeg")
+# The label engine's answer stands from this score; measured on held-out plans:
+# 94% right at 0.9 and up, 79% at the level below (about what a vision model gets).
+LABELS_STAND_FROM = 0.9
 
 
 def route(q: Question, dataset: Dataset) -> str | None:
@@ -26,7 +34,14 @@ def route(q: Question, dataset: Dataset) -> str | None:
         return "ifc"
     if any(PurePosixPath(f).suffix.lower() == ".dxf" for f in dataset.formats(q.path)):
         return "dxf"
+    if q.path.lower().endswith(RASTER) and raster_labels.room_kind_in(q.question):
+        return "labels"
     return None
+
+
+def is_weak(ans: Answer) -> bool:
+    """A label-engine answer the fallback should replace: none, or one whose sources do not agree."""
+    return ans.method == raster_labels.METHOD and (ans.answer is None or (ans.confidence or 0.0) < LABELS_STAND_FROM)
 
 
 def make(thresholds: dict | None, fallback=None):
@@ -42,7 +57,16 @@ def make(thresholds: dict | None, fallback=None):
             if fallback is not None:
                 return fallback(q, dataset)
             return Answer.decline("no exact engine for this kind of drawing yet", method=METHOD, cost_usd=0.0)
-        ans = (ifc if engine == "ifc" else dxf).answer(q, dataset)
+        if engine == "labels":
+            ans = raster_labels.answer(q, dataset)
+            if is_weak(ans) and fallback is not None:
+                other = fallback(q, dataset)
+                if other.answer is not None or ans.answer is None:
+                    # Keep what the labels said next to the model's answer: agreement is evidence.
+                    other.meta = {**other.meta, "labels_said": ans.answer, "labels_score": ans.confidence}
+                    return other
+        else:
+            ans = (ifc if engine == "ifc" else dxf).answer(q, dataset)
         return verify.apply(ans, thresholds) if thresholds else ans
 
     return answer

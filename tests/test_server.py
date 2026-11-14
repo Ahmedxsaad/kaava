@@ -142,8 +142,11 @@ def test_demo_tour_returns_the_states_it_promises(client):
         assert answer["state"] == state, (drawing, question, answer["state"], answer["reason"])
         if state != "declined":
             assert any(e["kind"] != "formula" for e in answer["evidence"]), (drawing, question)
-        if "cubicasa" in drawing:  # scans are shown from the run log: opening the demo costs nothing
-            assert answer["replayed_from"] and answer["method"].startswith("vlm-pointing")
+        if "cubicasa" in drawing:  # scans: read locally, or shown from the run log. The demo costs nothing.
+            if answer["method"].startswith("vlm"):
+                assert answer["replayed_from"]
+            else:
+                assert answer["cost_eur"] == 0 and any(e["kind"] == "box" for e in answer["evidence"])
 
 
 @needs_data

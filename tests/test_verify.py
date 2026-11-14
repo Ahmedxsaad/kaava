@@ -96,3 +96,81 @@ def test_router_picks_the_engine_by_what_the_drawing_comes_with(tiny):
     assert router.route(by_path["data/ifc_models/col-duplex_duplex-a_plan-01-level-1.pdf"], tiny) == "ifc"
     assert router.route(by_path["data/swiss_dwellings/site0_bldg0_floor1.pdf"], tiny) == "dxf"
     assert router.route(next(q for q in tiny.questions if q.source == "cubicasa5k"), tiny) is None
+
+
+# ---------------------------------------------------------------- label engine in the router
+
+
+def _room_question(tiny):
+    from dataclasses import replace
+
+    q = next(q for q in tiny.questions if q.source == "cubicasa5k")
+    return replace(q, question="How many bedrooms (makuuhuone, usually marked MH) are on this floor plan?")
+
+
+def _labels(monkeypatch, answer, score):
+    """Stand in for the OCR: the label engine returns this answer with this score."""
+    from blueprints.answer import Answer
+    from blueprints.engines import raster_labels
+
+    def fake(q, dataset):
+        if answer is None:
+            return Answer.decline("no readable labels", method=raster_labels.METHOD, cost_usd=0.0)
+        return Answer(answer=answer, unit="count", confidence=score, method=raster_labels.METHOD, cost_usd=0.0,
+                      evidence=[{"kind": "box", "space": "image_px", "bbox": [1, 2, 3, 4], "label": "MH"}])
+
+    monkeypatch.setattr(raster_labels, "answer", fake)
+
+
+def _model(answer):
+    from blueprints.answer import Answer
+
+    calls = []
+
+    def fallback(q, dataset):
+        calls.append(q.qid)
+        if answer is None:
+            return Answer.decline("could not tell", method="vlm-pointing:x", cost_usd=0.004)
+        return Answer(answer=answer, unit="count", confidence=0.7, method="vlm-pointing:x", cost_usd=0.004)
+
+    return fallback, calls
+
+
+def test_scans_route_to_the_label_engine_only_for_labelled_rooms(tiny):
+    from dataclasses import replace
+
+    q = _room_question(tiny)
+    assert router.route(q, tiny) == "labels"
+    assert router.route(replace(q, question="How many windows are shown on this floor plan?"), tiny) is None
+    assert router.route(replace(q, question="Kuinka monta saunaa pohjapiirustuksessa on?"), tiny) == "labels"
+
+
+def test_agreeing_labels_stand_and_cost_nothing(tiny, monkeypatch):
+    _labels(monkeypatch, 3, 0.9)
+    fallback, calls = _model(2)
+    ans = router.make(_thresholds(), fallback=fallback)(_room_question(tiny), tiny)
+    assert ans.answer == 3 and ans.cost_usd == 0.0 and ans.state == CHECK
+    assert calls == []  # the paid model is not asked
+
+
+def test_weak_labels_give_way_to_the_model_and_are_kept_as_a_second_opinion(tiny, monkeypatch):
+    _labels(monkeypatch, 3, 0.6)
+    fallback, calls = _model(2)
+    ans = router.make(_thresholds(), fallback=fallback)(_room_question(tiny), tiny)
+    assert ans.answer == 2 and ans.method == "vlm-pointing:x" and len(calls) == 1
+    assert ans.meta["labels_said"] == 3 and ans.meta["labels_score"] == 0.6
+
+
+def test_weak_labels_still_answer_when_there_is_no_model_or_it_declines(tiny, monkeypatch):
+    _labels(monkeypatch, 3, 0.6)
+    assert router.make(_thresholds())(_room_question(tiny), tiny).answer == 3
+    fallback, _ = _model(None)
+    ans = router.make(_thresholds(), fallback=fallback)(_room_question(tiny), tiny)
+    assert ans.answer == 3 and ans.state == CHECK
+
+
+def test_unreadable_labels_fall_through_to_the_model(tiny, monkeypatch):
+    _labels(monkeypatch, None, None)
+    fallback, _ = _model(1)
+    assert router.make(_thresholds(), fallback=fallback)(_room_question(tiny), tiny).answer == 1
+    assert router.make(_thresholds())(_room_question(tiny), tiny).answer is None

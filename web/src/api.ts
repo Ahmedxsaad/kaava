@@ -56,7 +56,9 @@ export interface DrawingDetail extends DrawingSummary {
 }
 
 export interface Evidence {
-  kind: "box" | "polygon" | "point" | "element" | "formula";
+  kind: "box" | "polygon" | "point" | "element" | "formula" | "context";
+  role?: string;
+  why?: string;
   n?: number;
   ref?: string | null;
   label?: string;
