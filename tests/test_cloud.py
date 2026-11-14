@@ -1,4 +1,4 @@
-"""Cloudinary preparation: which steps a brought drawing goes through (no network)."""
+"""Cloudinary: the steps of the preparation that was measured, and when anything is sent (no network)."""
 
 from blueprints import cloud
 

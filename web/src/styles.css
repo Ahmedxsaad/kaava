@@ -260,6 +260,8 @@ h1, h2 { font-family: var(--serif); font-weight: 400; letter-spacing: -0.015em; 
 .sheet.gliding { transition: transform 0.75s cubic-bezier(0.3, 0.7, 0.15, 1); }
 .sheet img { display: block; opacity: 0; transition: opacity 0.3s; }
 .sheet.loaded img { opacity: 1; }
+.sheet img.sharp { position: absolute; left: 0; top: 0; opacity: 0; transition: opacity 0.5s; }
+.sheet img.sharp.in { opacity: 1; }
 .sheet svg { position: absolute; left: 0; top: 0; overflow: visible; }
 
 .room-hit { fill: transparent; stroke: transparent; }

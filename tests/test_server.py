@@ -268,7 +268,7 @@ def test_a_brought_drawing_opens_and_can_be_shared(client):
         assert summary["source"] == "uploads" and summary["title"] == "site sketch"
         detail = client.get("/api/drawing", params={"drawing": summary["id"]}).json()
         assert detail["view"]["kind"] == "image" and (detail["view"]["width"], detail["view"]["height"]) == (900, 600)
-        assert detail["suggested"] and detail["prepared"] is None  # offline: read as it came
+        assert detail["suggested"] and detail["can_enhance"] is False  # offline: no enlarged view
         assert client.get(detail["view"]["url"]).status_code == 200
         assert any(s["source"] == "uploads" for s in client.get("/api/sources").json())
         shared = client.post("/api/share", json={"drawing": summary["id"], "question": "How many windows are shown on this floor plan?"}).json()
@@ -278,6 +278,47 @@ def test_a_brought_drawing_opens_and_can_be_shared(client):
         assert client.post("/api/upload", params={"name": "x.txt"}, content=b"not a drawing").status_code == 415
     finally:
         ident = summary["id"].split("/")[-1]
+        for suffix in (".png", ".json"):
+            (UPLOADS_DIR / f"{ident}{suffix}").unlink(missing_ok=True)
+
+
+@needs_data
+def test_a_small_scan_is_read_as_it_came_and_only_shown_enlarged(client, monkeypatch):
+    """With Cloudinary on, a brought scan is stored untouched; the enlarged copy is a separate view of it."""
+    import io
+
+    from PIL import Image, ImageDraw
+
+    from blueprints import cloud
+    from blueprints.server import UPLOADS_DIR
+
+    def never(*_args, **_kwargs):
+        raise AssertionError("a brought drawing must not be replaced by a prepared copy")
+
+    asked = []
+    monkeypatch.setattr(cloud, "configured", lambda: True)
+    monkeypatch.setattr(cloud, "prepare", never)
+    monkeypatch.setattr(cloud, "enhance", lambda image, ident: asked.append(image) or {"public_id": "x", "url": "https://example.test/enlarged"})
+    picture = Image.new("RGB", (700, 500), "white")
+    ImageDraw.Draw(picture).rectangle([60, 60, 640, 440], outline="black", width=5)
+    buffer = io.BytesIO()
+    picture.save(buffer, format="PNG")
+    made = client.post("/api/upload", params={"name": "small scan.png"}, content=buffer.getvalue())
+    assert made.status_code == 200, made.text
+    drawing = made.json()["id"]
+    ident = drawing.split("/")[-1]
+    try:
+        detail = client.get("/api/drawing", params={"drawing": drawing}).json()
+        assert (detail["view"]["width"], detail["view"]["height"]) == (700, 500) and detail["can_enhance"] is True
+        with Image.open(UPLOADS_DIR / f"{ident}.png") as stored:
+            assert stored.size == (700, 500)
+        for _ in range(2):  # asked for twice, enlarged once
+            assert client.get("/api/enhanced", params={"drawing": drawing}).json()["url"] == "https://example.test/enlarged"
+        assert len(asked) == 1 and asked[0] == UPLOADS_DIR / f"{ident}.png"
+        # a full-size drawing has no enlarged view
+        assert client.get("/api/drawing", params={"drawing": SWISS}).json()["can_enhance"] is False
+        assert client.get("/api/enhanced", params={"drawing": SWISS}).status_code == 409
+    finally:
         for suffix in (".png", ".json"):
             (UPLOADS_DIR / f"{ident}{suffix}").unlink(missing_ok=True)
 

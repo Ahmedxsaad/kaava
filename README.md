@@ -50,8 +50,8 @@ Quiet and light, in the spirit of Stoa's own site. The answer reads like a short
 - **The answer column:** the question, the state, the figure, why it can be trusted or needs a look, this system beside a vision model alone (answer, cost, time), how it was worked out step by step, and every counted item cut out of the drawing.
 - **On the sheet:** a fine ring and a numbered dot on each counted item, a tint and an area plate on each measured room. They appear as a reading line crosses the sheet, and the figure climbs with them. Select any mark to leave it out; the answer follows.
 - **In 3D:** a white model with the plan as its floor. A Swiss plan is raised from its DXF; an IFC model is cut open at the storey; an answer spread over several storeys lifts them apart and tallies each one.
-- **Checking tools:** inspect the items one by one, measure on the sheet where its scale is known, and enlarge the drawing under a loupe.
-- **Bring your own drawing:** an image or a PDF opens like any other. **Share** makes one image of an answer with its evidence marked.
+- **Checking tools:** inspect the items one by one, measure on the sheet where its scale is known, enlarge the drawing under a loupe, and see a small scan sharper with **Enhance**.
+- **Bring your own drawing:** an image or a PDF opens like any other and is read as it came. **Share** makes one image of an answer with its evidence marked.
 
 | | |
 | --- | --- |
@@ -67,9 +67,11 @@ Each of these is optional and switches on when its key is in `.env` (see `.env.e
 | Partner | What it does here | Status |
 | --- | --- | --- |
 | Google Gemini | The vision model for scans, and the language model that restates a free-form question so an exact engine can read it. The number still comes from geometry, and such an answer is never Verified. | Built; runs on Claude Sonnet until a Gemini key is set |
-| Cloudinary | Prepares a drawing someone brings before it is read: limits its size, evens out colour and contrast, and enlarges a small scan with AI super-resolution. Hosts the evidence sheets people share. | Built; not yet run against a Cloudinary account |
-| ElevenLabs | Reads the answer aloud with a natural voice; the browser's own voice is the fallback. | Built; not yet run against an ElevenLabs account |
+| Cloudinary | **Enhance:** a small scan is shown enlarged with AI super-resolution, loaded straight from Cloudinary in the format that suits the browser and laid over the original so every mark keeps its place. **Share:** hosts the evidence sheet of an answer and delivers it in the format and quality that suit whoever opens it. | In use, checked against a Cloudinary account |
+| ElevenLabs | Reads the answer aloud with a natural voice; the browser's own voice is the fallback. | Built; the key at hand lacks the Text to Speech permission, so the browser's voice speaks for now |
 | Anthropic Claude | The stand-in vision and language model in the measurements above. | In use |
+
+**The enlarged scan is for the reader, never for the engine.** The first idea was to enlarge a small scan before the label engine reads it. Measured on 40 small development scans (348 questions, both runs in `results/`, reproduced by `scripts/eval_prepared_scans.py`): read as they came, the engine gave 236 right answers and 28 wrong; read after enlargement, 228 right and 34 wrong. At the score levels the router lets stand on their own, the wrong answers went from 2 to 6 with no more right ones. Super-resolution draws plausible detail, and a plausible label is not evidence. So the engines read every drawing as it came, which is what their error rates were measured on, and the enlarged view carries a note saying what it is.
 
 ## Run it
 
@@ -119,8 +121,9 @@ Leave out `--env-file .env` to run without a vision model. The first time a larg
 | `src/blueprints/verify.py` | Calibrated Verified thresholds |
 | `src/blueprints/harness.py`, `scoring.py`, `split.py` | Evaluation harness, Stoa's scoring rule, the frozen split by drawing |
 | `src/blueprints/server.py`, `mesh.py` | API for the app; 3D meshes from IFC models and DXF plans |
-| `src/blueprints/interpret.py`, `cloud.py`, `sheet.py` | Question restating by a language model; Cloudinary preparation and hosting; evidence sheets |
+| `src/blueprints/interpret.py`, `cloud.py`, `sheet.py` | Question restating by a language model; Cloudinary enlarged view and hosting; evidence sheets |
 | `web/` | The verification app (React, Three.js) |
+| `scripts/` | One-off measurements, each logged in `results/` |
 | `results/` | Log of every evaluation run |
 | `splits/` | The split, the fixed samples and the Verified thresholds |
 | `CLAUDE.md`, `01-challenge/` to `04-research/` | Challenge brief, dataset notes, strategy and research |

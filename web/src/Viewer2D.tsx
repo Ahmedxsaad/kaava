@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { DrawingDetail, Evidence, Room } from "./api";
+import { api, type DrawingDetail, type Evidence, type Room } from "./api";
 import { type Box, centroid, pointList } from "./geometry";
 
 interface Props {
@@ -83,8 +83,28 @@ export function Viewer2D(props: Props) {
   const [measures, setMeasures] = useState<Measure[]>([]);
   const [drawing, setDrawing] = useState<Measure | null>(null);  // a measurement being drawn
   const [lens, setLens] = useState<{ x: number; y: number } | null>(null);
-  const { width, height, url } = detail.view;
+  const { width, height } = detail.view;
   const pxPerM = detail.view.px_per_m;
+  // A small scan can be swapped for Cloudinary's AI-enlarged copy: the same picture, sharper.
+  // The marks keep their place, because the engines read (and measure on) the original.
+  const [enlarged, setEnlarged] = useState<{ url: string } | "working" | null>(null);
+  const [sharp, setSharp] = useState<string | null>(null);  // the enlarged copy that has finished loading
+  const [attempt, setAttempt] = useState(0);  // Cloudinary can answer "still working" for a format it has not made yet
+  const url = detail.view.url;
+  const sharpUrl = enlarged && enlarged !== "working" ? enlarged.url : null;
+  useEffect(() => { setEnlarged(null); setSharp(null); setAttempt(0); }, [detail.id]);
+  const retry = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(retry.current), [detail.id, sharpUrl]);
+  const enlargedFailed = () => {
+    if (attempt >= 12) return setEnlarged(null);  // give up quietly: the scan as it came stays on screen
+    retry.current = window.setTimeout(() => setAttempt((n) => n + 1), 2000);
+  };
+  const enlarge = () => {
+    if (enlarged) return setEnlarged(null);
+    setAttempt(0);
+    setEnlarged("working");
+    api.enhanced(detail.id).then(setEnlarged).catch(() => setEnlarged(null));
+  };
 
   // Screen position -> image pixels.
   const toImage = (e: { clientX: number; clientY: number }): [number, number] => {
@@ -227,6 +247,10 @@ export function Viewer2D(props: Props) {
         style={{ width, height, transform: `translate(${t.x}px, ${t.y}px) scale(${t.k})` }}
       >
         {url && <img src={url} width={width} height={height} alt="" draggable={false} onLoad={() => setLoaded(true)} />}
+        {sharpUrl && (
+          <img key={attempt} className={`sharp${sharp === sharpUrl ? " in" : ""}`} src={sharpUrl} width={width} height={height} alt="" draggable={false}
+            onLoad={() => setSharp(sharpUrl)} onError={enlargedFailed} />
+        )}
         <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
           <defs>
             <pattern id="hatch" width={9 * u} height={9 * u} patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
@@ -384,7 +408,7 @@ export function Viewer2D(props: Props) {
           className="loupe"
           style={{
             left: lens.x - LENS / 2, top: lens.y - LENS / 2, width: LENS, height: LENS,
-            backgroundImage: `url(${url})`,
+            backgroundImage: `url(${sharp && sharp === sharpUrl ? sharpUrl : url})`,
             backgroundSize: `${width * t.k * 2.4}px ${height * t.k * 2.4}px`,
             backgroundPosition: `${LENS / 2 - (lens.x - t.x) * 2.4}px ${LENS / 2 - (lens.y - t.y) * 2.4}px`,
           }}
@@ -398,6 +422,12 @@ export function Viewer2D(props: Props) {
           </button>
         )}
         {measures.length > 0 && <button onClick={() => setMeasures([])}>Clear</button>}
+        {detail.can_enhance && (
+          <button className={sharpUrl && sharp === sharpUrl ? "on" : ""} onClick={enlarge} disabled={enlarged === "working" || (!!sharpUrl && sharp !== sharpUrl)}
+            title="Show the scan enlarged with Cloudinary's AI super-resolution. The engine still reads the original.">
+            {enlarged === "working" || (sharpUrl && sharp !== sharpUrl) ? "Enhancing…" : "Enhance"}
+          </button>
+        )}
         <button className={tool === "loupe" ? "on" : ""} onClick={() => { setTool(tool === "loupe" ? "move" : "loupe"); setLens(null); setTip(null); }} title="Enlarge the drawing under the pointer">
           Loupe
         </button>
@@ -407,6 +437,9 @@ export function Viewer2D(props: Props) {
         <button onClick={() => glide(fitTo(null))} aria-label="Fit the sheet">Fit</button>
       </div>
       {detail.view.note && <div className="viewer-note">{detail.view.note}</div>}
+      {sharpUrl && sharp === sharpUrl && (
+        <div className="viewer-note">Enlarged by AI for viewing. Fine detail can differ from the scan; answers are read from the original.</div>
+      )}
     </div>
   );
 }

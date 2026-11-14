@@ -186,6 +186,7 @@ class Service:
         self._meshes: dict[str, tuple] = {}
         self._plan_fits: dict[str, dict | None] = {}
         self._restated: dict[tuple[str, str], interpret.Restated] = {}  # a question is only restated once
+        self._enhanced: dict[str, dict] = {}  # drawing -> its enlarged view on Cloudinary
         self.logged = self._load_logged_runs()
 
     # ---- which drawings may be shown
@@ -522,7 +523,7 @@ class Service:
             "suggested": list(seen.values()) or (
                 [{"question": q, "type": "count", "unit": "count"} for q in GENERIC_QUESTIONS]
                 if view.kind == "image" else []),
-            "prepared": self.ds.notes.get(drawing, {}).get("cloudinary"),
+            "can_enhance": self.can_enhance(view),
             "paper_scale": (round(view.transform["paper_scale"]) if view.transform else None),
         }
 
@@ -591,22 +592,33 @@ class Service:
         if max(picture.size) > 6000:
             picture.thumbnail((6000, 6000), Image.Resampling.LANCZOS)
         picture.save(image_path)
-        note: dict = {"title": PurePosixPath(name or "drawing").stem[:80] or "drawing",
-                      "size": list(picture.size), "cloudinary": None}
-        if cloud.configured():  # normalise, even out and, for a small scan, enlarge it before it is read
-            try:
-                prepared, info = cloud.prepare(image_path, ident, *picture.size)
-                with Image.open(io.BytesIO(prepared)) as better:
-                    better.convert("RGB").save(image_path)
-                    info["size"] = list(better.size)
-                note["cloudinary"] = info
-            except Exception as exc:  # the drawing still opens, as it came
-                note["cloudinary"] = {"error": f"{type(exc).__name__}: {str(exc)[:160]}"}
+        # The drawing is read as it came. Enlarging a scan with AI before reading it was measured
+        # (scripts/eval_prepared_scans.py) and made the label engine worse where it is trusted most,
+        # so the enlarged copy is only ever shown to the reader (see `enhanced`).
+        note: dict = {"title": PurePosixPath(name or "drawing").stem[:80] or "drawing", "size": list(picture.size)}
         (UPLOADS_DIR / f"{ident}.json").write_text(json.dumps(note, ensure_ascii=False), encoding="utf-8")
         drawing = self.ds.add(image_path, note)
         for key in [k for k in self._views if k[0] == drawing]:
             del self._views[key]
         return self.summary(drawing)
+
+    def can_enhance(self, view: View) -> bool:
+        """A small scan can be shown enlarged by Cloudinary's super-resolution."""
+        return view.kind == "image" and max(view.width, view.height) < cloud.SMALL_EDGE and cloud.configured()
+
+    def enhanced(self, drawing: str) -> dict:
+        """The scan enlarged for viewing. Evidence keeps its place: the picture is only sharper."""
+        view = self.view(drawing)
+        if not self.can_enhance(view):
+            raise HTTPException(409, "this drawing has no enlarged view")
+        if drawing not in self._enhanced:
+            source = self.ds.abspath(view.source_file)
+            ident = hashlib.sha1(source.read_bytes()).hexdigest()[:14]
+            try:
+                self._enhanced[drawing] = cloud.enhance(source, ident)
+            except Exception as exc:
+                raise HTTPException(502, f"Cloudinary could not enlarge it: {type(exc).__name__}: {str(exc)[:120]}") from None
+        return self._enhanced[drawing]
 
     def share(self, req: AskRequest) -> dict:
         """An evidence sheet for one answer: the drawing with its evidence marked, hosted to share."""
@@ -1121,6 +1133,10 @@ def create_app(dataset_root: Path | str | None = None) -> FastAPI:
     @app.post("/api/upload")
     async def upload(request: Request, name: str = "drawing") -> dict:
         return service.upload(name, await request.body())
+
+    @app.get("/api/enhanced")
+    def enhanced(drawing: str) -> dict:
+        return service.enhanced(need(drawing))
 
     @app.post("/api/share")
     def share(req: AskRequest) -> dict:

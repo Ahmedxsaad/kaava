@@ -54,7 +54,7 @@ export interface DrawingDetail extends DrawingSummary {
   model_file: string | null;
   suggested: Suggested[];
   paper_scale: number | null;
-  prepared: { public_id?: string; url?: string; upscaled?: boolean; steps?: string[]; size?: number[]; error?: string } | null;
+  can_enhance: boolean;
 }
 
 export interface Evidence {
@@ -233,6 +233,7 @@ export const api = {
     if (!res.ok) throw new Error(await message(res));
     return res.json();
   },
+  enhanced: (drawing: string) => get<{ url: string }>(`/api/enhanced?drawing=${encodeURIComponent(drawing)}`),
   partners: () => get<{ gemini: boolean; claude: boolean; cloudinary: boolean; elevenlabs: boolean }>("/api/partners"),
   async mesh(url: string): Promise<ArrayBuffer> {
     const res = await fetch(url);
