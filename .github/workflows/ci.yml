@@ -27,6 +27,8 @@ jobs:
       - uses: astral-sh/setup-uv@v5
       - name: Install
         run: uv venv --python 3.12 && uv pip install -e ".[dev]"
+      - name: Lint (unused and undefined names)
+        run: uvx ruff check --select F src scripts tests
       - name: Test
         run: .venv/bin/python -m pytest -q
         env:

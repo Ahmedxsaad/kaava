@@ -13,7 +13,7 @@ const browser = await chromium.launch({ executablePath: process.env.CHROME ?? "/
 const page = await browser.newPage({ viewport: { width: 1600, height: 900 }, deviceScaleFactor: 1 });
 await page.goto(pathToFileURL(path.join(here, "deck.html")).href, { waitUntil: "networkidle" });
 await page.evaluate(() => document.fonts.ready);
-await page.pdf({ path: path.join(here, "blueprints-talk-deck.pdf"), width: "1600px", height: "900px", printBackground: true });
+await page.pdf({ path: path.join(here, "kaava-deck.pdf"), width: "1600px", height: "900px", printBackground: true });
 
 const out = path.join(here, "preview");
 fs.mkdirSync(out, { recursive: true });
@@ -21,5 +21,5 @@ const slides = await page.locator(".slide").count();
 for (let i = 0; i < slides; i++) {
   await page.locator(".slide").nth(i).screenshot({ path: path.join(out, `slide-${i + 1}.png`) });
 }
-console.log(`${slides} slides -> pitch/blueprints-talk-deck.pdf`);
+console.log(`${slides} slides -> pitch/kaava-deck.pdf`);
 await browser.close();

@@ -220,7 +220,7 @@ def run(query: Query, index: dict, dxf, common: dict) -> Answer:
 
 
 def _run(query: Query, rooms: list[dict], index: dict, dxf, words: str, common: dict) -> Answer:
-    from shapely.geometry import Polygon, box
+    from shapely.geometry import Polygon
 
     if query.measure == "count_items":
         return _items_of(query, rooms, index, dxf, words, common)

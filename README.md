@@ -133,7 +133,7 @@ Scans get the same treatment, and a 3D view of their own: the walls are found in
 | [What it answers](docs/diagrams/05-what-it-answers.png) | the kinds of question by kind of drawing, and when it says no |
 | [How it is built](docs/diagrams/06-system.png) | browser, app, engines, the one outside model, what is kept on disk |
 | [Where the scale comes from](docs/diagrams/07-scale.png) | scale bar, printed dimension, doors as a standard; the door check; estimates said as estimates |
-| [Tech partners](docs/diagrams/08-partners.png) | what goes to Gemini, Cloudinary and ElevenLabs, and what never does |
+| [Tech partners](docs/diagrams/08-partners.png) | what each of the six partner technologies does, and that the number never comes from any of them |
 
 Each diagram is in `docs/diagrams/` as a spec, an editable Excalidraw scene, PNG, SVG and an animated SVG that reveals it step by step.
 
@@ -148,7 +148,7 @@ Stoa said the final evaluation uses unreleased drawings and posted four sample s
 | Linear metres of baseboard | Finds the hall's walls in the pixels, reads the scale bar (20 m = 1,010 px), leaves out 8 door openings | 2 × (17.80 + 13.76) − 12.73 = 50.4 m |
 | Floor areas | The same measurement for area; or, where the sheet prints a table, the table's entries added up | 245 m² · 914 + 913 + 1,403 + 1,240 = 4,470 ft² |
 | Counts of doors | 8 tiles of the sheet at full size, each door boxed, in two independent passes | 118 doors boxed in both passes; 5 more boxed in one pass only are drawn as doubtful and not counted |
-| Slab area by type | The 150 mm slab's printed dimensions, each read again by OCR, worked out twice | 6200 × 9950 mm = 61.69 m² |
+| Slab area by type | The 150 mm slab's printed dimensions, each read again by OCR, worked out twice; then the two trenches cut into it, found by the examiners and measured on the drawing | 6200 × 9950 mm = 61.69 m², less 2.41 m² of trenches = 59.28 m² |
 | Piping plans | Equipment found by its printed tags; sizes read from callouts | 5 pumps (FP-1 to FP-5) · 16" suction header |
 
 All of these are "Check this": which figures matter is the model's judgement, and the working is there to be checked.
@@ -167,7 +167,7 @@ What else is measured, and what is not:
 - On the dataset's own US drawing sets (door and finish schedules as PDF), every count and area question of the development split: **31 of 31 right** (22 counts, 9 areas) at €0.046 per question, each worked out once (measured before the second working was added). On the 19 of them that Gemini had answered alone it got 15. Counting rows of a schedule is where the text list pays.
 - The measured rooms and the tiled door count have no key. The hall's rectangle and the door boxes were checked by eye against the drawing. The door count differed between runs (124, 129) before it was done in two passes; now only doors both passes box are counted.
 - The slab with D16 bars gave slightly different workings on different runs (217.11 to 218.64 m²): the model chose different figures for a stair landing. That is what the second working is for.
-- Limits: only rectangular rooms on plans with solid walls and a graphic scale bar are measured; anything else gets no number.
+- Limits: a room is measured on plans whose walls are drawn solid; a room open to the one next to it gets no number. Without a scale bar or a printed dimension the scale rests on door widths, and the answer is an estimate with its range. A part to take out is measured only when it is drawn as a rectangle in solid lines.
 
 | | |
 | --- | --- |
@@ -198,7 +198,7 @@ These figures are scored against the dataset's answers, which count a door betwe
 - Scans, everything else: Gemini draws a box around each item the question asks about and the code counts the boxes, so the number is still a count of things you can see. That is right about nine times in ten and never Verified.
 - A scan read once (measured, not adopted as it stands). The dataset asks about 17 questions of each scan, and the picture is what costs. One model call that marks every countable kind at once answers them all: on 44 development scans (764 questions) that is 84.0% right at €0.0009 per question, against about 90% at €0.0064 when each question is asked on its own. It reads rooms and storeys well (92 to 100% of counts right) and openings badly (windows 55%, doors 70%); splitting it into four calls did not help (84.7% on 22 scans). So each question is still asked on its own for now; reading rooms and storeys once per scan is the next step, not yet in use.
 - Scans read twice. We tested whether "the labels and Gemini give the same count" could be Verified, on 800 calibration answers where the label engine was confident. The labels alone were right 94.5% of the time, Gemini 98.3%. They agreed on 762 answers, of which 10 were wrong: 1.3%, better than either alone but above the 1% bar, so it stays Check this. Where they differed (38 answers) Gemini was right 34 times, so its count is shown and the difference is flagged. The second reading is paid for only where it helps: the label engine's strictest answers (labels and type line agree, 97.0% right) stand alone and free; its other confident answers (93.0% right alone) are also counted by Gemini.
-- Not solved yet: nothing on a scan is Verified, and scans are two thirds of the dataset's questions; IFC answers are not Verified yet because too few were held out to prove 1%; free-text questions about IFC models and the US door schedules have no engine.
+- Not solved yet: nothing on a scan is Verified, and scans are two thirds of the dataset's questions; IFC answers are not Verified yet because too few were held out to prove 1%; questions whose answer is a text about an IFC model (the IFC-Bench set) have no engine; a scan whose walls are hatched or hairlines has no 3D view.
 
 Two cheaper settings were measured on the same 100 fresh scan questions and not adopted: Gemini 4 Hydrogen (85 right against Carbon's 90, and dearer per question because it thinks longer), and half the image budget for Carbon (89 right, 20% cheaper: a fair trade where cost matters more than one answer in a hundred; set `BLUEPRINTS_GEMINI_RESOLUTION=high`).
 
@@ -215,7 +215,7 @@ The landing page opens by itself: a real drawing from the dataset answers one qu
 - **The answer card:** the number stands on the colour of its state: green for Verified, amber for Check this, red for Can't answer reliably. Under it: why it can be trusted or needs a look, this system beside a vision model alone (answer, cost, time), how it was worked out step by step, and every counted item cut out of the drawing.
 - **On the sheet:** a fine ring and a numbered dot on each counted item, a tint and an area plate on each measured room. They appear as a reading line crosses the sheet, and the figure climbs with them. Click any mark to leave it out; the answer follows.
 - **In 3D:** a painted model in sunlight, standing on the plan as its floor. Rooms are tinted by their use, read from the names printed in them; glass, doors and fixtures have their own colours. A plan's doors stand as thin leaves in their openings, and each opens a little as it is counted. An IFC model is cut open at the storey; an answer spread over several storeys lifts them apart and tallies each one.
-- **By voice:** ask aloud, and the drawing answers aloud in the first person ("I count thirty-two doors. Verified.").
+- **By voice:** ask aloud, and the drawing answers aloud in the first person ("I count twelve windows. Verified.").
 - **Checking tools:** inspect the items one by one, measure on the sheet where its scale is known, enlarge the drawing under a loupe, and see a small scan sharper with **Enhance**.
 - **Bring your own drawing:** an image or a PDF opens like any other and is read as it came. **Share** makes one image of an answer with its evidence marked.
 
@@ -235,6 +235,9 @@ Each of these is optional and switches on when its key is in `.env` (see `.env.e
 | Google Gemini | **On sheets:** Gemini 4 Carbon names the printed figures, rows and rooms that answer a question, working from the image and the list of texts a program read at full size; it boxes small symbols tile by tile. It never states the number. **On questions in your own words:** it reads the question as a query over the drawing's own rooms and items, twice, and both readings must agree. **As examiners:** two independent calls look inside a computed area for what must be taken out (a trench, a pit) and point at a printed dimension so the program can measure it. **On scans:** Gemini 4 Carbon boxes each counted item in its native detection format (`[ymin, xmin, ymax, xmax]` on a 0 to 1000 grid); the code counts the boxes and draws them on the sheet, so the number never comes from the model and every item can be checked or left out. **For free-form questions:** Gemini 4 Hydrogen restates the question so an exact engine can read it (about €0.003); the number still comes from geometry, and such an answer is never Verified. | In use; all figures above are measured on it |
 | Cloudinary | **Enhance:** a small scan is shown enlarged with AI super-resolution, loaded straight from Cloudinary in the format that suits the browser and laid over the original so every mark keeps its place. **Share:** hosts the evidence sheet of an answer and delivers it in the format and quality that suit whoever opens it. | In use, checked against a Cloudinary account |
 | ElevenLabs | Reads the answer aloud with a natural voice (Flash v2.5, about half a second per answer), for hands-busy checking on site; the browser's own voice is the fallback. | In use, checked against an ElevenLabs account |
+| Gemma (Google DeepMind) | Gemma 4 31B, through the Gemini API, reads a question in your own words the second time, beside Gemini: only two readings that agree are run. Measured on 50 questions with known readings: right on every reading whose call went through, never agreeing with Gemini on a wrong one; Gemini takes the second reading when Gemma cannot be reached (`scripts/bench_readers.py`). | In use |
+| Aiven for PostgreSQL | The log of every question asked on the demo (what was asked, how it ended, the method, the cost; never who asked), read back as live figures on the Numbers page. The app's login owns one schema and nothing else. | In use on the public demo |
+| CRACI | CI on every push: the test suite, the web build and the accuracy regression of the exact engines (`scripts/ci_regression.py`). | Workflow in place; runs on CRACI's runners once their GitHub App is installed on the repository |
 | Anthropic Claude | The vision and language model when no Gemini key is set, and the model of the earlier measurements. | Fallback |
 
 **The enlarged scan is for the reader, never for the engine.** The first idea was to enlarge a small scan before the label engine reads it. Measured on 40 small development scans (348 questions, both runs in `results/`, reproduced by `scripts/eval_prepared_scans.py`): read as they came, the engine gave 236 right answers and 28 wrong; read after enlargement, 228 right and 34 wrong. At the score levels the router lets stand on their own, the wrong answers went from 2 to 6 with no more right ones. Super-resolution draws plausible detail, and a plausible label is not evidence. So the engines read every drawing as it came, which is what their error rates were measured on, and the enlarged view carries a note saying what it is.
@@ -257,7 +260,7 @@ cd web && npm install && npm run build && cd ..
 ./bp serve
 ```
 
-The exact engines need no API key. Keys for the optional services go in `.env` (see `.env.example` and Partner technology above). The app spends at most €1 on model calls per server start (`BLUEPRINTS_UI_BUDGET_EUR`).
+The exact engines need no API key. Keys for the optional services go in `.env` (see `.env.example` and Tech partners above). The app spends at most €1 on model calls per server start (`BLUEPRINTS_UI_BUDGET_EUR`).
 
 Other commands:
 
@@ -319,7 +322,7 @@ Leave out `--env-file .env` to run without a vision model. The first time a larg
 | `tests/` | The test suite (`pytest`) |
 | `results/` | Log of every evaluation run |
 | `splits/` | The split, the fixed samples and the Verified thresholds |
-| `pitch/` | An earlier pitch deck and narrated video, built by script |
+| `pitch/` | The submission text (`submission.md`), and an earlier pitch deck and narrated video, built by script |
 | `CLAUDE.md`, `01-challenge/` to `04-research/` | Challenge brief, dataset notes, strategy and research |
 
 ## Data and licences

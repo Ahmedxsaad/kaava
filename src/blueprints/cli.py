@@ -29,7 +29,7 @@ from .data import Dataset
 from .harness import (FatalEngineError, finalize_run, format_table, make_row, new_run_id,
                       run_eval)
 from .sample import load_sample, save_sample, stratified_sample
-from .scoring import CHECK, DECLINED, STATES, summarize
+from .scoring import CHECK, DECLINED, STATES
 from .split import SPLITS, Split, SplitLocked, describe, make_split
 
 

@@ -5,8 +5,7 @@ import pytest
 
 from blueprints.data import Dataset, drawing_of, question_id, question_template, source_of
 from blueprints.sample import allocate, load_sample, save_sample, stratified_sample
-from blueprints.split import (FRACTIONS, SPLITS, Split, SplitLocked, assign, build_units,
-                              find_links, make_split)
+from blueprints.split import (FRACTIONS, SPLITS, Split, SplitLocked, find_links, make_split)
 
 from conftest import build_dataset
 

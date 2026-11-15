@@ -220,16 +220,16 @@ class Service:
         """The example sheets (examples/*/sheets.json), each taken in once; returns their drawing ids."""
         out = []
         for listing in sorted(EXAMPLES_DIR.glob("*/sheets.json")):
-            for sheet in json.loads(listing.read_text(encoding="utf-8")):
-                file = listing.parent / sheet["file"]
+            for entry in json.loads(listing.read_text(encoding="utf-8")):
+                file = listing.parent / entry["file"]
                 if not file.is_file():
                     continue
                 data = file.read_bytes()
                 drawing = drawing_of(f"uploads/{hashlib.sha1(data).hexdigest()[:12]}.png")
-                extra = {"title": sheet["title"], "credit": sheet.get("credit", ""),
-                         "questions": sheet.get("questions", []), "example": True}
+                extra = {"title": entry["title"], "credit": entry.get("credit", ""),
+                         "questions": entry.get("questions", []), "example": True}
                 if drawing not in self.ds.notes:
-                    self.upload(sheet["file"], data)
+                    self.upload(entry["file"], data)
                 note_file = UPLOADS_DIR / f"{PurePosixPath(drawing).name}.json"
                 note = {**self.ds.notes[drawing], **extra}
                 if note != self.ds.notes[drawing]:

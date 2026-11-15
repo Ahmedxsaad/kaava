@@ -22,7 +22,7 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable, Iterable, Sequence
+from typing import Callable, Sequence
 
 from . import config
 from .answer import Answer

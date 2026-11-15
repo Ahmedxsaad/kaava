@@ -204,7 +204,6 @@ def answer(q: Question, dataset: Dataset) -> Answer:
     pdf = pdf_labels.labels_for(dataset.abspath(pdf_rel) if pdf_rel else None)
     rooms = index["rooms"]
     numbered = [r for r in rooms if r["number"]]
-    unnamed = [r for r in numbered if not r["name"]]
     quoted = quoted_strings(q.question)
     label = quoted[0] if quoted else None
 

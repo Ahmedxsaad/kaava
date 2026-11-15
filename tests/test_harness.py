@@ -7,7 +7,7 @@ from PIL import Image
 
 from blueprints import baseline, config
 from blueprints.answer import Answer
-from blueprints.harness import FatalEngineError, finalize_run, make_row, new_run_id, run_eval
+from blueprints.harness import FatalEngineError, finalize_run, new_run_id, run_eval
 from blueprints.render import can_render, fit_size, render, visual_tokens
 from blueprints.scoring import CHECK, DECLINED, VERIFIED
 from blueprints.split import make_split

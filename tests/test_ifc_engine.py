@@ -66,7 +66,6 @@ def test_room_area_is_cross_checked_by_two_independent_outlines(dev_ifc):
 
 
 def test_same_answer_in_english_and_estonian(dev_ifc):
-    from blueprints.engines import ifc
 
     ds, questions = dev_ifc
     pairs = [("How many doors are shown on the floor plan of '2.korrus'?", "Mitu ust on näidatud korruse „2.korrus“ plaanil?"),

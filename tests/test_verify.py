@@ -1,6 +1,5 @@
 """Verified thresholds: set from calibration answers, never handed out on thin evidence."""
 
-import pytest
 
 from blueprints import verify
 from blueprints.answer import Answer
