@@ -80,9 +80,11 @@ Only the exact engines can be Verified, and only where a second, independent sou
 | `cache/dxf`, `cache/ifc`, `cache/sheet_text`, `cache/ocr` | indexes of drawings | parsed once |
 | `cache/mesh`, `cache/scan_plan` | 3D meshes, a scan's walls | built once, keyed by the file's content |
 | `cache/readings` | the two readings of a free-form question | a paid reading is asked once; the count is redone each time |
-| `cache/answers`, `examples/answers` | answers a model took part in | shown again at no cost |
+| `cache/answers`, `examples/answers` | answers a model took part in, each with what its inference cost and where that figure comes from | shown again at no further cost; the answer card still shows the inference cost, never the zero of the replay |
+| `cache/blind` | blind trials in progress: a person's locked key, one run of each system, the timed checks ([BLIND-TRIAL.md](BLIND-TRIAL.md)) | exported to `results/blind/` when done |
+| `uploads/` | what people bring: a sheet's picture (an image, or one page of a PDF with that page kept beside it), or an IFC model | a brought file is a drawing like any other |
 | `results/` | every evaluation run | see [EVALUATION.md](EVALUATION.md) |
-| PostgreSQL (`ledger.py`, Aiven on the public demo) | every question asked: the drawing, the question, how it ended, the cost; never who asked | the live figures on the Numbers page |
+| PostgreSQL (`ledger.py`, Aiven on the public demo) | every question asked: the drawing, the question, how it ended, what the request spent and what the inference cost; never who asked | the live figures on the Numbers page |
 
 ## Module map
 
@@ -95,3 +97,5 @@ Only the exact engines can be Verified, and only where a second, independent sou
 | `verify.py`, `scoring.py`, `harness.py`, `split.py` | thresholds, the scoring rule, runs, the split |
 | `vlm.py`, `pointing.py`, `interpret.py` | the model adapters (Gemini, Claude, a mock) and what they are asked |
 | `server.py`, `mesh.py`, `cloud.py`, `sheet.py` | the API, 3D, Cloudinary, the evidence sheet |
+| `blind.py`, `blind_page.html` | the blind trial: a person's key first, one run each, timed checks |
+| `ledger.py` | the log of questions asked |
