@@ -50,7 +50,7 @@ Python (FastAPI, IfcOpenShell, ezdxf, Shapely, PyMuPDF, OpenCV, RapidOCR), React
 - **Best Use of Cloudinary:** AI super-resolution for viewing small scans, and hosting of shareable evidence sheets. Their rules also ask for their survey (https://cld.media/hackathon-survey).
 - **Best Use of ElevenLabs:** answers read aloud in the app.
 - **Aiven:** every question asked on the demo is logged in Aiven for PostgreSQL (never who asked) and read back as live figures on the Numbers page.
-- **Best use of CRACI:** tests, the web build and an accuracy regression on every push. Tick this one only once the workflow runs on CRACI's runners (their GitHub App installed, repository variable `CI_RUNNER` set to `craci`).
+- **Best use of CRACI:** tests, the web build and an accuracy regression of the exact engines on every push, on CRACI's runners (`.github/workflows/ci.yml`).
 
 ## Video and deck
 

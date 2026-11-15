@@ -1,10 +1,10 @@
 # Every push is checked three ways: the test suite, the web app's build, and an accuracy regression
 # (the exact engines on the dataset's preview must stay as right as they are, with no wrong Verified answer).
 #
-# The jobs run on CRACI's runners (https://craci.com, a Junction 2026 tech partner) once the repository
-# variable CI_RUNNER is set to "craci": CRACI records every dependency a build pulls in and produces a
-# CycloneDX SBOM of it. Until then they run on GitHub's own runners. To switch:
-#   gh variable set CI_RUNNER --body craci
+# The jobs run on CRACI's runners (https://craci.com, a Junction 2026 tech partner): CRACI records every
+# dependency a build pulls in and produces a CycloneDX SBOM of it. Each job asks for CRACI's ubuntu-24.04
+# image, the software set the jobs were written against. CRACI's GitHub App must be installed on the
+# repository, or the jobs wait for a runner that never comes.
 name: CI
 
 on:
@@ -20,9 +20,12 @@ concurrency:
 jobs:
   tests:
     name: Tests
-    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    runs-on: craci
     timeout-minutes: 25
     steps:
+      - uses: cracicorp/setup@v1
+        with:
+          image: ubuntu-24.04
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
       - name: Install
@@ -36,12 +39,15 @@ jobs:
 
   web:
     name: Web app
-    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    runs-on: craci
     timeout-minutes: 15
     defaults:
       run:
         working-directory: web
     steps:
+      - uses: cracicorp/setup@v1
+        with:
+          image: ubuntu-24.04
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
@@ -54,9 +60,12 @@ jobs:
 
   accuracy:
     name: Accuracy regression
-    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    runs-on: craci
     timeout-minutes: 30
     steps:
+      - uses: cracicorp/setup@v1
+        with:
+          image: ubuntu-24.04
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
       - name: Install

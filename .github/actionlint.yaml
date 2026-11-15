@@ -1,0 +1,4 @@
+# CRACI runners are asked for by the label "craci" (https://docs.craci.com); actionlint does not know it otherwise.
+self-hosted-runner:
+  labels:
+    - craci

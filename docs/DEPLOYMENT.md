@@ -65,4 +65,4 @@ cd web && npx tsc --noEmit -p . && npm run build
 
 ## CI
 
-`.github/workflows/ci.yml` runs on every push: the test suite, the web app's build, and an accuracy regression (`scripts/ci_regression.py`: the exact engines on the dataset's preview, 1,803 questions; a drop below 99% right, or one wrong Verified answer, fails the build). The jobs run on [CRACI](https://craci.com)'s GitHub Actions-compatible runners once the repository variable `CI_RUNNER` is `craci` (`gh variable set CI_RUNNER --body craci`, after CRACI's GitHub App is installed on the repository), and on GitHub's own runners until then.
+`.github/workflows/ci.yml` runs on every push: the test suite, the web app's build, and an accuracy regression (`scripts/ci_regression.py`: the exact engines on the dataset's preview, 1,803 questions; a drop below 99% right, or one wrong Verified answer, fails the build). The jobs run on [CRACI](https://craci.com)'s GitHub Actions-compatible runners (`runs-on: craci`, with CRACI's `ubuntu-24.04` image), which record every dependency a build pulls in. CRACI's GitHub App must be installed on the repository.
