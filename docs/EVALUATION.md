@@ -69,11 +69,47 @@ The key holds questions whose answer a person can read off the sheet in a minute
 
 | Shown in the demo | What we know | What we do not know |
 | --- | --- | --- |
-| Every door on the school plan | The kept answer is 118, with 5 more boxed in one pass only and drawn as doubtful. A fresh run of the same question on 15 Nov 2026 gave 122. It is marked Check this. | The true count. Two runs of the system differ by four. |
+| Every door on the school plan | The kept answer is 118, with 5 more boxed in one pass only and drawn as doubtful. Four fresh runs of the same question on 15 Nov 2026 gave 122, 113, 124 and 118. It is marked Check this. | The true count. The system's own runs spread over 113 to 124, about 5% either side of the middle. |
 | The Multi-Purpose Hall's floor area, measured on the sheet | 245.0 m², and the same again on a fresh run; 244.14 m² when only a door's width is given as the ruler. | Whether 245 m² is right: no figure for it is printed on the sheet. |
 | The hall's baseboard length | 50.4 m, and the same again on a fresh run. | The same. |
 
 The fresh runs are in `results/kept_costs/` (they were made to measure what each kept answer costs to work out: `scripts/kept_costs.py`). Repeating an answer shows it is stable, not that it is right. The test that settles it is a blind trial: a person makes the key before the system answers, the system and the vision model alone then answer once each, and three people who do not know the system check its answer against the clock. The rig is built into the app (`/blind`) and described in [BLIND-TRIAL.md](BLIND-TRIAL.md). **No trial has been run by people yet**, so nothing is claimed from it.
+
+### The hard cases, asked live and filmed
+
+`examples/hard_cases.json` lists twelve questions of the kinds Stoa named (one size given and the rest worked out, baseboards, slab areas by type with their holes taken out, door counts, piping) with what each answer is held against. `scripts/hard_cases.mjs` asks them in the app one after another against a server started with `KAAVA_FRESH=1`, so that every answer is worked out during the run and none is a kept answer shown again; it writes `results/hard_cases/<time>.json` and films the run. The video is [hard-cases.mp4](hard-cases.mp4) (3 min 15 s; waiting is shown faster, with the real time on screen).
+
+The run in the video (15 Nov 2026, 03:33 UTC, `results/hard_cases/20261115-033313.json`):
+
+| | Stoa asked for | The case | Answer | Held against | State | Inference | Time |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | One size given, the rest worked out | A door is 1.7 m wide: the hall's floor area | 244.14 m² | 0.35% under the scale bar's own measurement (245.0 m²) | Check this | €0.016 | 15 s |
+| 2 | The same | The same door: metres of baseboard | 50.31 m | 0.18% under the scale bar's (50.4 m) | Check this | €0.017 | 24 s |
+| 3 | Refuse instead of guessing | "The hall is 25 m long" (it is 17.8 m by the scale bar) | refused | a refusal is due: the size given is 29% off the sheet's scale | no number | €0.016 | 10 s |
+| 4 | Linear metres for baseboards | The hall's baseboard, from the scale bar | 50.40 m | no key | Check this | €0.016 | 9 s |
+| 5 | Counts of doors | Every door of the school, tile by tile | 118 | no key | Check this | €0.245 | 44 s |
+| 6 | Slab area by type, holes taken out | The 150 mm slab less its two trenches | 59.28 m² | 0.02% over our key (59.27 m²) | Check this | €0.091 | 88 s |
+| 7 | Slab area by type (thickness and bars) | The 300 mm slab with D16 bars | refused | no key. Two workings came to 217.69 and 215.85 m²: they differ, so no number | no number | €0.127 | 185 s |
+| 8 | Floor areas | Circulation area, added from the sheet's table | 4,470 ft² | equals our key | Check this | €0.025 | 21 s |
+| 9 | Piping plans | Fueling pumps, by their tags | 5 | equals our key | Check this | €0.023 | 10 s |
+| 10 | Piping plans | The suction header's diameter | 16 in | equals our key | Check this | €0.022 | 8 s |
+| 11 | An area with a hole in it | A corridor around a lift (DXF) | 13.99 m² | equals the dataset's answer | Verified | €0 | 1 s |
+| 12 | A question in your own words | "how many toilets are there in the bagno rooms" (DXF, two readers) | 5 | no key | Check this | €0.0035 | 16 s |
+
+**8 of the 8 cases that have something to be held against came out as it says** (cases 1 and 2 are held against the system's own scale-bar measurement, which is a consistency check, not an independent key). Four have no key, so nothing is claimed for their numbers. All twelve: €0.60 of model calls, 7 minutes of answering.
+
+This was the third run. All of them are in `results/hard_cases/`, as they came:
+
+- **Run 1** (02:38 UTC, all twelve): the same eight right. The door count was 113. The D16 slab got no number: its first model call ran past the 150 s limit.
+- **Run 2** (about 03:08 UTC, stopped after seven): the first six as in the table, the door count 124. The D16 slab had no answer after seven minutes, and the run was stopped.
+- **Run 3** is the table above.
+
+What the runs showed, beyond the table:
+
+- **The door count is not stable.** 113, 124 and 118 in three runs an hour apart, 122 earlier the same morning. Each run boxes the doors twice and counts only those both passes box, and the count still moves by about 5%. It is marked Check this, with the doubtful boxes drawn; a hand count is needed to say which is right ([BLIND-TRIAL.md](BLIND-TRIAL.md)).
+- **The D16 slab has no stable answer.** Its workings, across that day's attempts, range from 215.85 to 220.14 m² (the model reads a stair landing's dimensions differently each time). When two workings of one run differ the system refuses and shows both, which is what it is built to do; when they agree it answers (217.81 m² in one attempt). The answer kept with the app (218.61 m², from 14 Nov) is one of these workings, not a settled figure.
+- **A fault was found and fixed.** In about half the calls for that slab question (8 of 15 measured) the model thought in circles until its output cap and wrote nothing. At the cap of 16,000 tokens that took about 170 s, longer than a call may take, so it surfaced as a time-out and a bare "engine error". Now a reply holds at most 8,000 tokens, the first attempts 3,000 (a spiral ends in about 35 s), a call that brings nothing back is asked again up to three times, a second working lost this way is not counted as a disagreement, and a refusal for this cause says that the model did not answer, not that the drawing cannot (`vlm.MAX_OUTPUT_TOKENS`, `sheet_reading.asked_again`). The longest useful reply in the logged runs is 2,257 tokens. A call that timed out was not billed in our figures, so run 1's cost for that case (€0) understates what Google charged.
+- The cases that measure against a size given in the question, the scale bar or printed dimensions gave the same number in every run (244.14, 50.31, 50.40, 59.28).
 
 ### What an answer costs, and what showing it again costs
 

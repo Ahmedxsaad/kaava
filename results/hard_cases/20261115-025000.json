@@ -1,0 +1,47 @@
+{
+ "what": "The hard cases (examples/hard_cases.json), asked in the app one after another (scripts/hard_cases.mjs)",
+ "when": "2026-11-15T02:50:00.572Z",
+ "commit": "40139db",
+ "server": "http://127.0.0.1:8011",
+ "fresh": true,
+ "rule": "a count must equal the key, a measure must be within 2% of it, a refusal is right where one is due; 'no key' means nobody worked the answer out by hand",
+ "video": null,
+ "summary": {
+  "cases": 1,
+  "with_a_key": 0,
+  "as_the_key_says": 0,
+  "not_as_the_key_says": 0,
+  "without_a_key": 1,
+  "shown_again": 0,
+  "inference_eur": 0,
+  "seconds": 304
+ },
+ "rows": [
+  {
+   "id": "slab-300-d16",
+   "asked": "Slab area by type (thickness and bars)",
+   "label": "The 300 mm slab reinforced with D16 bars",
+   "drawing": "uploads/10dd368cb9f8",
+   "question": "What is the area of the 300 mm slab-on-grade reinforced with D16 bars, in m²?",
+   "expect": {
+    "kind": "none",
+    "basis": "no key. Earlier runs gave between 217.11 and 218.64 m²"
+   },
+   "answer": null,
+   "unit": null,
+   "state": "declined",
+   "engine": "Printed figures and rows, computed",
+   "method": "sheet-working:gemini-4-carbon:thinking=low:img=ultra_high:p7",
+   "cost_eur": 0,
+   "spent_now_eur": 0,
+   "replayed": false,
+   "latency_ms": 301639,
+   "wall_s": 304.1,
+   "evidence_items": 0,
+   "reason": "The vision model did not answer (network error: APITimeoutError: Request timed out. This is a client-side timeout. You can increase the timeout by setting the `timeout` argument on your request), also when asked a second time. Nothing was computed, so no number is given. Asking again usually works.",
+   "ok": null,
+   "verdict": "gave no number"
+  }
+ ],
+ "note": "The D16 slab question alone, with a failed call asked once more: both calls ran past the 150 s limit."
+}

@@ -1,0 +1,79 @@
+{
+ "what": "The hard cases (examples/hard_cases.json), asked in the app one after another (scripts/hard_cases.mjs)",
+ "when": "2026-11-15T03:08Z (approximate: the run was stopped before it wrote its own log; this file is made from what it printed)",
+ "note": "Second filmed run, stopped. Reply cap at 8,000 tokens, failed calls asked again up to twice. The D16 slab question had no answer after 420 s (repeated thinking spirals, each ending only at the cap). The script then could not ask the next question, because the app takes one question at a time and was still waiting, so the run was stopped. No video kept. Cases 8 to 12 were not asked.",
+ "fresh": true,
+ "video": null,
+ "rows": [
+  {
+   "id": "given-door-area",
+   "answer": 244.14,
+   "unit": "m2",
+   "state": "check",
+   "cost_eur": 0.017,
+   "wall_s": 15.0,
+   "ok": true,
+   "verdict": "-0.35% from 245 m²"
+  },
+  {
+   "id": "given-door-baseboard",
+   "answer": 50.31,
+   "unit": "m",
+   "state": "check",
+   "cost_eur": 0.016,
+   "wall_s": 29.3,
+   "ok": true,
+   "verdict": "-0.18% from 50.40 m"
+  },
+  {
+   "id": "given-wrong-size",
+   "answer": null,
+   "unit": null,
+   "state": "declined",
+   "cost_eur": 0.016,
+   "wall_s": 8.5,
+   "ok": true,
+   "verdict": "refused, as it should"
+  },
+  {
+   "id": "baseboard",
+   "answer": 50.4,
+   "unit": "m",
+   "state": "check",
+   "cost_eur": 0.016,
+   "wall_s": 30.7,
+   "ok": null,
+   "verdict": "no key to hold it against"
+  },
+  {
+   "id": "doors-school",
+   "answer": 124,
+   "unit": "count",
+   "state": "check",
+   "cost_eur": 0.243,
+   "wall_s": 43.4,
+   "ok": null,
+   "verdict": "no key to hold it against"
+  },
+  {
+   "id": "slab-150-holes",
+   "answer": 59.28,
+   "unit": "m2",
+   "state": "check",
+   "cost_eur": 0.135,
+   "wall_s": 142.7,
+   "ok": true,
+   "verdict": "0.02% from 59.27 m²"
+  },
+  {
+   "id": "slab-300-d16",
+   "answer": null,
+   "unit": null,
+   "state": null,
+   "cost_eur": null,
+   "wall_s": 420.5,
+   "ok": false,
+   "verdict": "no answer came back within 420 s"
+  }
+ ]
+}

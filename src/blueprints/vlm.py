@@ -34,6 +34,7 @@ class VLMReply:
     request_id: str | None = None
     no_answer: str = ""  # the model produced nothing usable (refusal, cut off): why
     error: str | None = None  # the call itself failed (network, rate limit, bad request)
+    thought_tokens: int = 0  # of the output tokens, how many were thinking (a reply cut off while thinking is a spiral)
 
     def usage(self) -> dict:
         return {
@@ -172,6 +173,13 @@ class AnthropicVLM:
 
 
 CALL_TIMEOUT_MS = 150_000  # one model call may take this long, then it fails (a call that hangs must not hang the app)
+# The most a reply may hold, thinking included. Now and then the model thinks in circles until this cap
+# and then writes nothing: measured on 15 Nov 2026 on one slab question, where 8 of 15 calls did so, and
+# on 7 of 208 calls of the image-only baseline. At the earlier cap of 16,000 such a reply took about
+# 170 s (longer than a call may take, so it showed up as a time-out) and cost about EUR 0.15; at this
+# cap it ends in about 85 s for about EUR 0.07, and the question is asked again (sheet_reading.py).
+# The longest useful reply in the logged runs is 2,257 tokens.
+MAX_OUTPUT_TOKENS = 8000
 
 
 class GeminiVLM:
@@ -187,7 +195,7 @@ class GeminiVLM:
     IMAGE_TOKENS = {"low": 280, "medium": 560, "high": 1120, "ultra_high": 2240}
 
     def __init__(self, model: str = "gemini-4-carbon", effort: str = "high",
-                 resolution: str | None = None, max_output_tokens: int = 16000, attempts: int = 6):
+                 resolution: str | None = None, max_output_tokens: int = MAX_OUTPUT_TOKENS, attempts: int = 6):
         from google import genai
         from google.genai import errors, types
 
@@ -299,6 +307,7 @@ class GeminiVLM:
             input_tokens=tokens("total_input_tokens") - cached,
             # Thinking tokens are billed as output; the API reports them separately.
             output_tokens=tokens("total_output_tokens") + thought,
+            thought_tokens=thought,
             cache_read_tokens=cached,
             latency_ms=latency_ms,
             stop_reason=str(getattr(interaction, "status", "") or ""),

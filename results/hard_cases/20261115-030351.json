@@ -1,0 +1,48 @@
+{
+ "what": "The hard cases (examples/hard_cases.json), asked in the app one after another (scripts/hard_cases.mjs)",
+ "when": "2026-11-15T03:03:51.594Z",
+ "commit": "40139db",
+ "server": "http://127.0.0.1:8011",
+ "fresh": true,
+ "rule": "a count must equal the key, a measure must be within 2% of it, a refusal is right where one is due; 'no key' means nobody worked the answer out by hand",
+ "video": null,
+ "summary": {
+  "cases": 1,
+  "with_a_key": 0,
+  "as_the_key_says": 0,
+  "not_as_the_key_says": 0,
+  "without_a_key": 1,
+  "shown_again": 0,
+  "inference_eur": 0.1587,
+  "seconds": 143
+ },
+ "rows": [
+  {
+   "id": "slab-300-d16",
+   "asked": "Slab area by type (thickness and bars)",
+   "label": "The 300 mm slab reinforced with D16 bars",
+   "drawing": "uploads/10dd368cb9f8",
+   "question": "What is the area of the 300 mm slab-on-grade reinforced with D16 bars, in m²?",
+   "expect": {
+    "kind": "none",
+    "basis": "no key. Earlier runs gave between 217.11 and 218.64 m²"
+   },
+   "answer": 217.81,
+   "unit": "m2",
+   "state": "check",
+   "engine": "Printed figures and rows, computed",
+   "method": "sheet-working:gemini-4-carbon:thinking=low:img=ultra_high:p7",
+   "cost_eur": 0.158734,
+   "spent_now_eur": 0.158734,
+   "replayed": false,
+   "failed": false,
+   "latency_ms": 99180.1,
+   "wall_s": 143,
+   "evidence_items": 17,
+   "reason": "((5800 + 7400 + 6300) × (5500 + 5500) + 1750 × (550 + 2200 + 150 - 600)) - (1750 × 200) - (600 × 600) = 217,815,000 mm² = 217.81 m². The dimensions alone give 218.52 m²; inside it: take out PIPE TRENCH; take out SUMP 600 X 600 X 300 DEEP. Both examiners made the same correction, from figures printed on the sheet that the program read again.",
+   "ok": null,
+   "verdict": "no key to hold it against"
+  }
+ ],
+ "note": "The D16 slab question alone, with the reply cap at 8,000 tokens and up to two further attempts: answered."
+}

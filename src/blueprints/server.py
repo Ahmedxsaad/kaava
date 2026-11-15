@@ -57,6 +57,13 @@ UPLOADS_DIR = config.REPO_ROOT / "uploads"
 # Sheets that come with the app as examples: taken in at start like a drawing someone brings.
 EXAMPLES_DIR = config.REPO_ROOT / "examples"
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024
+# KAAVA_FRESH=1, for measuring or recording a run: answers and readings kept before this server started
+# are not used, so each question is worked out again once (and that fresh answer is kept from then on).
+FRESH_SINCE = time.time() if os.environ.get("KAAVA_FRESH", "").strip() not in ("", "0") else None
+
+
+def _too_old(file: Path) -> bool:
+    return FRESH_SINCE is not None and file.stat().st_mtime < FRESH_SINCE
 # What a brought file is kept as: a sheet's picture (an image, or one page of a PDF), or an IFC model.
 BROUGHT_KINDS = (".png", ".ifc")
 # What can be brought, said wherever a file is refused. A DXF is answered from the catalogue only: the
@@ -1182,6 +1189,11 @@ class Service:
                 ans = verify.apply(router.confirmed(ans, other), self.thresholds)
                 can_confirm = False
         latency = ans.latency_ms if ans.latency_ms else (time.perf_counter() - t0) * 1000
+        if ans.error and ans.answer is None and ans.reason == "engine error":
+            # Not a judgement about the drawing: a model call failed (hung until its time limit, was cut off,
+            # was refused by the service). Said as what it is, so nobody reads it as "this cannot be answered".
+            ans.reason = (f"The vision model did not answer ({str(ans.error)[:160]}), also when asked again. "
+                          f"Nothing was computed, so no number is given. Asking once more usually works.")
         # Two different sums of money. `first`: what working this answer out cost (the inference), whenever
         # that was. `now`: what this request added. An answer shown again adds nothing, and its inference
         # cost is still the figure to set beside another system's; None where it was never recorded.
@@ -1211,6 +1223,8 @@ class Service:
             "spent_now_eur": round(config.usd_to_eur(now_usd), 6),
             "replayed": again,
             "cost_note": cost_note,
+            # True when a model call failed and nothing was computed: not a judgement that the drawing cannot answer.
+            "failed": bool(ans.error),
             "latency_ms": round(latency, 1),
             "replayed_from": replayed,
             "interpreted": ans.meta.get("interpreted"),
@@ -1413,7 +1427,8 @@ class Service:
                                  for (s, t), n in sorted(config.FULL_SET_MIX.items())],
                 "sheets_bench": _sheets_bench(),
                 "live": ledger.summary(),  # questions asked of this app, from its log (Aiven for PostgreSQL)
-                "model_budget_eur": self.budget_eur, "model_spent_eur": round(self.spent_eur, 4)}
+                "model_budget_eur": self.budget_eur, "model_spent_eur": round(self.spent_eur, 4),
+                "fresh_mode": FRESH_SINCE is not None}  # kept answers are being ignored (KAAVA_FRESH)
 
 
 def _second_opinion(ans: Answer, labels: Answer) -> None:
@@ -1547,7 +1562,7 @@ def _readings_file(module, drawing: str, question: str, listing: str) -> Path:
 
 def _kept_readings(module, drawing: str, question: str, listing: str):
     store = _readings_file(module, drawing, question, listing)
-    if not store.is_file():
+    if not store.is_file() or _too_old(store):
         return None
     try:
         first, second = json.loads(store.read_text(encoding="utf-8"))
@@ -1579,7 +1594,7 @@ def _kept_answer(q: Question) -> Answer | None:
     """
     store = _kept_file(q)
     for kept_file in (EXAMPLES_DIR / "answers" / store.name, store):
-        if kept_file.is_file():
+        if kept_file.is_file() and not _too_old(kept_file):
             kept = json.loads(kept_file.read_text(encoding="utf-8"))
             first, note = kept.pop("cost_usd", None), kept.pop("cost_note", None)
             return Answer(**{**kept, "cost_usd": 0.0,

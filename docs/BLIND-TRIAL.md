@@ -18,7 +18,7 @@ It leaves out the three answers the demo shows off:
 
 So for those three we know what Kaava says and what it shows as evidence. We do not know, from an independent source, whether it is right. A blind trial is how we find out for one question on one sheet.
 
-The door count needs it most. Kaava marks that answer Check this, and its own runs do not agree: the answer kept with the app is 118 doors, with 5 more boxed in only one of its two passes and drawn as doubtful; a fresh run of the same question on 15 November 2026 gave 122 (`results/kept_costs/`). The true count is somewhere near; only a count made by hand says where. The hall area and the baseboard length came out the same on a fresh run (245.0 m² and 50.4 m), which shows they are repeatable, not that they are right.
+The door count needs it most. Kaava marks that answer Check this, and its own runs do not agree: the answer kept with the app is 118 doors, with 5 more boxed in only one of its two passes and drawn as doubtful; four fresh runs of the same question on 15 November 2026 gave 122, 113, 124 and 118 (`results/kept_costs/`, `results/hard_cases/`). The true count is somewhere near; only a count made by hand says where. The hall area and the baseboard length came out the same on a fresh run (245.0 m² and 50.4 m), which shows they are repeatable, not that they are right.
 
 ## Who is needed
 

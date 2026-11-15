@@ -554,3 +554,28 @@ def test_an_answer_shown_again_spends_nothing_and_still_says_what_its_inference_
     assert again.meta["first_cost_usd"] == 0.2677 and again.meta["first_cost_note"] == "when it was first worked out"
     old = server._kept_answer(unpriced)
     assert old.cost_usd == 0.0 and old.meta["first_cost_usd"] is None and old.meta["first_cost_note"] is None   # not guessed
+
+
+def test_in_fresh_mode_an_answer_kept_before_the_server_started_is_worked_out_again(monkeypatch, tmp_path):
+    """KAAVA_FRESH, for measuring or filming a run: what was kept earlier is not used; what is kept now is."""
+    import os
+    import time
+
+    from blueprints import server
+    from blueprints.data import Question
+
+    monkeypatch.setattr(server.config, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(server, "EXAMPLES_DIR", tmp_path / "examples")
+    q = Question(qid="a", path="uploads/abc.png", question="How many doors?", answer=None, unit=None, type="",
+                 source="uploads", drawing="uploads/abc", group="uploads")
+    store = server._kept_file(q)
+    store.parent.mkdir(parents=True)
+    store.write_text(json.dumps({"answer": 118, "unit": "count", "state": "check", "confidence": 0.6, "method": "m", "evidence": [],
+                                 "explanation": "", "reason": "", "latency_ms": 1.0, "meta": {}}))
+    old = time.time() - 3600
+    os.utime(store, (old, old))
+    assert server._kept_answer(q).answer == 118                      # the usual way: shown again
+    monkeypatch.setattr(server, "FRESH_SINCE", time.time() - 60)     # a server started a minute ago, in fresh mode
+    assert server._kept_answer(q) is None                            # kept an hour ago: to be worked out again
+    os.utime(store, None)                                            # ... and once it has been, that answer is kept
+    assert server._kept_answer(q).answer == 118

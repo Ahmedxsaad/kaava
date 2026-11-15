@@ -210,3 +210,40 @@ def test_a_pdf_page_is_turned_into_pixels_and_back(tmp_path, monkeypatch):
     image = tmp_path / "plan.png"
     image.write_bytes(b"x")
     assert sr.as_pixels(image, index) == (image, 1.0, index)                   # an image is itself
+
+
+def test_a_call_that_brings_nothing_back_is_asked_again_and_only_so_many_times(sheet):
+    """A call that failed, or thought in circles until its reply was cut off, is not the end of the question."""
+    working = dict(figures=[figure("a", 0, "6200", 6200, "mm"), figure("b", 1, "4975", 4975, "mm")], expression="a + b", result_unit="mm")
+    vlm = Reader(working, fails=True)                       # the first call fails, the ones after it answer
+    ans = sheet(vlm, "How long is the slab in mm?")
+    assert ans.answer == 11175 and ans.error is None and len(vlm.seen) >= 2
+    never = Reader({"fails": True}, {"fails": True}, {"fails": True}, fails=True)   # the service is down: every call fails
+    gone = sheet(never, "How long is the slab in mm?")
+    assert gone.answer is None and gone.error == "the call failed" and len(never.seen) == 1 + sr.ASK_AGAIN
+
+
+def test_a_spiral_is_asked_again_with_the_small_cap_and_a_long_reply_with_the_full_one(sheet):
+    """Cut off while thinking: the same small cap again. Cut off while writing: the reply is long, so the full cap."""
+    working = dict(figures=[figure("a", 0, "6200", 6200, "mm")], expression="a", result_unit="mm")
+    cut = "reply cut off (max_output_tokens)"
+
+    class Capped(MockVLM):
+        def __init__(self, first):
+            super().__init__()
+            self.max_output_tokens, self.first, self.caps = 8000, first, []   # a copy of the adapter shares `caps`
+
+        def ask(self, system, images, text, schema):
+            self.caps.append(self.max_output_tokens)
+            if len(self.caps) == 1:
+                return self.first
+            return VLMReply(data={**EMPTY, **working}, model="mock", cost_usd=0.02, latency_ms=5.0)
+
+    spiral = Capped(VLMReply(data=None, model="mock", cost_usd=0.03, latency_ms=35000.0, output_tokens=3000,
+                             thought_tokens=2997, no_answer=cut))
+    ans = sheet(spiral, "How long is the slab in mm?")
+    assert ans.answer == 6200 and spiral.caps[:2] == [sr.QUICK_TOKENS, sr.QUICK_TOKENS]
+    assert ans.cost_usd == pytest.approx(0.05) and ans.latency_ms == pytest.approx(35005.0)   # the lost attempt is counted
+    long = Capped(VLMReply(data=None, model="mock", cost_usd=0.03, latency_ms=30000.0, output_tokens=3000,
+                           thought_tokens=0, no_answer=cut))
+    assert sheet(long, "How long is the slab in mm?").answer == 6200 and long.caps[:2] == [sr.QUICK_TOKENS, 8000]

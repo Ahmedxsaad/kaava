@@ -1,0 +1,110 @@
+[
+  {
+    "id": "given-door-area",
+    "asked": "Given one size only, work out the rest",
+    "label": "Only a door's width is given: the hall's floor area",
+    "drawing": "uploads/072d5e992c68",
+    "view": "plan",
+    "question": "The double door between the Multi-Purpose Hall and the Store is 1.7 m wide. Using only that as the scale, what is the floor area of the Multi-Purpose Hall, in m²?",
+    "expect": {"kind": "value", "value": 245.0, "unit": "m2", "basis": "the same hall measured against the sheet's scale bar (245.0 m²). Not an independent key: no figure for the hall is printed on the sheet"}
+  },
+  {
+    "id": "given-door-baseboard",
+    "asked": "Given one size only, work out the rest",
+    "label": "The same door as the ruler: metres of baseboard",
+    "drawing": "uploads/072d5e992c68",
+    "view": "plan",
+    "question": "The double door between the Multi-Purpose Hall and the Store is 1.7 m wide. Using only that, how many metres of baseboard does the Multi-Purpose Hall need?",
+    "expect": {"kind": "value", "value": 50.4, "unit": "m", "basis": "the same baseboard measured against the sheet's scale bar (50.4 m). Not an independent key"}
+  },
+  {
+    "id": "given-wrong-size",
+    "asked": "Refuse instead of guessing",
+    "label": "A size that contradicts the sheet: it must refuse",
+    "drawing": "uploads/072d5e992c68",
+    "view": "plan",
+    "question": "The Multi-Purpose Hall is 25 m long. Using only that, what is its floor area in m²?",
+    "expect": {"kind": "refusal", "basis": "by the sheet's own scale bar the hall is about 17.8 m long; a stated size more than 5% away from the sheet's scale is refused"}
+  },
+  {
+    "id": "baseboard",
+    "asked": "Linear metres for baseboards",
+    "label": "Baseboards of a hall, measured on the sheet",
+    "drawing": "uploads/072d5e992c68",
+    "view": "plan",
+    "question": "How many linear metres of baseboard are needed in the Multi-Purpose Hall?",
+    "expect": {"kind": "none", "basis": "no key: nobody measured the hall by hand. Earlier runs gave 50.4 m twice"}
+  },
+  {
+    "id": "doors-school",
+    "asked": "Counts of doors and windows",
+    "label": "Every door of a school, boxed tile by tile",
+    "drawing": "uploads/072d5e992c68",
+    "view": "plan",
+    "question": "How many doors are shown on this floor plan?",
+    "expect": {"kind": "none", "basis": "no key: nobody counted the doors by hand. Earlier runs gave 118 (5 more doubtful) and 122"}
+  },
+  {
+    "id": "slab-150-holes",
+    "asked": "Slab area by type, holes taken out",
+    "label": "The 150 mm slab, less the trenches cut into it",
+    "drawing": "uploads/10dd368cb9f8",
+    "view": "plan",
+    "question": "What is the area of the 150 mm slab-on-grade in m²?",
+    "expect": {"kind": "value", "value": 59.27, "unit": "m2", "basis": "our key: 6200 × 9950 mm by the printed dimensions, less the two trenches drawn inside the slab"}
+  },
+  {
+    "id": "slab-300-d16",
+    "asked": "Slab area by type (thickness and bars)",
+    "label": "The 300 mm slab reinforced with D16 bars",
+    "drawing": "uploads/10dd368cb9f8",
+    "view": "plan",
+    "question": "What is the area of the 300 mm slab-on-grade reinforced with D16 bars, in m²?",
+    "expect": {"kind": "none", "basis": "no key. Earlier runs gave between 217.11 and 218.64 m²"}
+  },
+  {
+    "id": "areas-table",
+    "asked": "Floor areas of different areas",
+    "label": "Circulation area, added up from the sheet's table",
+    "drawing": "uploads/780f0c0b245d",
+    "view": "plan",
+    "question": "What is the total circulation area on the second floor, in square feet?",
+    "expect": {"kind": "value", "value": 4470, "unit": "ft2", "basis": "our key: 914 + 913 + 1,403 + 1,240 SF, added by hand from the sheet's table"}
+  },
+  {
+    "id": "piping-pumps",
+    "asked": "Piping plans",
+    "label": "Pumps on a piping plan, found by their tags",
+    "drawing": "uploads/9266efe87dc9",
+    "view": "plan",
+    "question": "How many fueling pumps (FP) are shown on this piping plan?",
+    "expect": {"kind": "value", "value": 5, "unit": "count", "basis": "our key: tags FP-1 to FP-5"}
+  },
+  {
+    "id": "piping-header",
+    "asked": "Piping plans",
+    "label": "The size of a header, read off the piping plan",
+    "drawing": "uploads/9266efe87dc9",
+    "view": "plan",
+    "question": "What is the diameter of the suction header, in inches?",
+    "expect": {"kind": "value", "value": 16, "unit": "in", "basis": "our key: the printed callout 16\" SUCTION HEADER"}
+  },
+  {
+    "id": "room-with-hole",
+    "asked": "An area with a hole in it",
+    "label": "A corridor around a lift: the lift is cut out",
+    "drawing": "data/swiss_dwellings/site3565_bldg5449_floor23802",
+    "view": "plan",
+    "question": "What is the net floor area of room 4.15 ('Korridor') in m²?",
+    "expect": {"kind": "dataset", "basis": "the dataset's own answer for this question"}
+  },
+  {
+    "id": "own-words",
+    "asked": "A question in your own words",
+    "label": "Asked loosely: read by two models, counted by geometry",
+    "drawing": "data/swiss_dwellings/site294_bldg554_floor2233",
+    "view": "plan",
+    "question": "how many toilets are there in the bagno rooms",
+    "expect": {"kind": "none", "basis": "no key for this wording. The count is the geometry's, in the rooms both readers chose"}
+  }
+]

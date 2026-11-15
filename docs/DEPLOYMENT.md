@@ -30,6 +30,7 @@ The exact engines need no key. Optional services switch on when their key is in 
 | `BLUEPRINTS_WORKINGS` | 2 | how many independent workings a sheet question gets |
 | `BLUEPRINTS_EXAMINERS` | 2 | how many examiners look inside a computed area; 0 turns them off |
 | `KAAVA_SECOND_READER` | `gemma-4-31b-it` | the different model that reads a free-form question the second time; `same` lets the first model read it twice |
+| `KAAVA_FRESH` | unset | `1`, for measuring or filming a run (`scripts/hard_cases.mjs`): answers and readings kept before the server started are not used, so each question is worked out again once. Not for the public copy |
 | `BLUEPRINTS_WAIT_S` | 50 | how long a request waits for a model before answering "still working" (the page asks again) |
 | `BLUEPRINTS_GEMINI_RESOLUTION` | `ultra_high` | the image resolution Gemini is sent |
 | `BLUEPRINTS_OFFLINE` | unset | never reach an outside service (tests, air-gapped demos) |

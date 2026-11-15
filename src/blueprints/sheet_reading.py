@@ -325,6 +325,44 @@ def _fmt(value: float) -> str:
     return f"{value:,.2f}".rstrip("0").rstrip(".") if abs(value) < 1e15 else f"{value:.6g}"
 
 
+# A call that failed, or whose reply was cut off, is asked again this many times. Seen on 15 Nov 2026: on
+# one slab question about half the calls (8 of 15) came back with nothing, the model having thought in circles
+# until its output cap, while the others answered in 15 seconds. So the first attempts get a small cap
+# (QUICK_TOKENS: a spiral then ends in about 35 s for under 3 cents, where the full cap takes 85 s), and
+# only a reply that was cut off while *writing* (a long list, not a spiral) is asked again at the full cap.
+# The longest useful reply in the logged runs is 2,257 tokens. When every attempt fails, the reason says so.
+ASK_AGAIN = 3
+QUICK_TOKENS = 3000
+
+
+def asked_again(vlm, image, prompt: str, qid: str | None = None, attempts: int | None = None):
+    """One reply of the model to the sheet and the question, asked again when nothing usable came back
+    because the call failed or the reply was cut off. What the lost attempts cost and took is counted."""
+    import copy
+
+    full = getattr(vlm, "max_output_tokens", None)
+    quick = vlm
+    if isinstance(full, int) and full > QUICK_TOKENS:  # the same model and client, with a smaller cap on one reply
+        quick = copy.copy(vlm)
+        quick.max_output_tokens = QUICK_TOKENS
+    spent = waited = 0.0
+    asking = quick
+    attempts = 1 + ASK_AGAIN if attempts is None else attempts
+    for attempt in range(attempts):
+        reply = asking.ask(SYSTEM, [image], prompt, SCHEMA)
+        spent += reply.cost_usd or 0.0
+        waited += reply.latency_ms or 0.0
+        cut = "cut off" in (reply.no_answer or "")
+        if not reply.error and not cut:
+            break
+        if cut and getattr(reply, "thought_tokens", 0) < 0.5 * (reply.output_tokens or 1):
+            asking = vlm  # cut off while writing, not while thinking: the reply is long, so it gets the full cap
+        if attempt < attempts - 1 and qid:
+            progress.say(qid, "The model's reply did not come through. Asking it again")
+    reply.cost_usd, reply.latency_ms = spent, waited
+    return reply
+
+
 def make_engine(vlm) -> Callable[[Question, Dataset], Answer]:
     method = method_name(vlm)
 
@@ -339,14 +377,15 @@ def make_engine(vlm) -> Callable[[Question, Dataset], Answer]:
         how_read = "the PDF's own text layer" if index["source"] == "pdf" else "the local OCR at full size"
         prompt = f"Texts printed on the sheet ({how_read}):\n{listing}\n\nQuestion: {q.question}"
         progress.say(q.qid, f"{len(index['items'])} texts read. The model is choosing what to read, count or measure")
-        replies = [vlm.ask(SYSTEM, [image], prompt, SCHEMA)]
+        replies = [asked_again(vlm, image, prompt, q.qid)]
         # Where there is something to work out (arithmetic over several figures, a long list to count),
         # the question is worked out a second time, independently. One printed figure, which the
         # program reads again itself, is looked up once.
         if WORKINGS > 1 and replies[0].data and worth_working_twice(replies[0].data):
             progress.say(q.qid, "Working it out a second time, independently, to see that both come to the same result")
             with ThreadPoolExecutor(max_workers=WORKINGS - 1) as pool:
-                replies += list(pool.map(lambda _: vlm.ask(SYSTEM, [image], prompt, SCHEMA), range(WORKINGS - 1)))
+                # The second working is a check, not the answer: it gets two attempts, and the answer says so when it has none.
+                replies += list(pool.map(lambda _: asked_again(vlm, image, prompt, attempts=2), range(WORKINGS - 1)))
         progress.say(q.qid, "Counting, computing and checking each figure against the sheet")
         read = (f"{len(index['items'])} texts, from {how_read}" + (" (the list was cut short)" if cut else ""))
         # Many small symbols are boxed tile by tile: that is done once, whichever working asks for it.
@@ -371,6 +410,11 @@ def make_engine(vlm) -> Callable[[Question, Dataset], Answer]:
         common = dict(method=method, cost_usd=reply.cost_usd, latency_ms=reply.latency_ms, meta=meta)
         if reply.error:
             return Answer.failed(reply.error, **common)
+        if reply.data is None and "cut off" in (reply.no_answer or ""):
+            # Nothing came back because the reply ran into its cap (the model thinking in circles): a call
+            # that failed, not a working that found the sheet cannot answer. A second working lost this way
+            # leaves one working, and the answer says so; it is not counted as a disagreement.
+            return Answer.failed("the model's reply was cut off before it wrote anything, each time it was asked", **common)
         if reply.data is None:
             return Answer.decline(reply.no_answer or "no usable reply", **common)
         data = reply.data

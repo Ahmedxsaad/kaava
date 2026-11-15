@@ -1,0 +1,48 @@
+{
+ "what": "The hard cases (examples/hard_cases.json), asked in the app one after another (scripts/hard_cases.mjs)",
+ "when": "2026-11-15T03:30:54.366Z",
+ "commit": "40139db",
+ "server": "http://127.0.0.1:8011",
+ "fresh": true,
+ "rule": "a count must equal the key, a measure must be within 2% of it, a refusal is right where one is due; 'no key' means nobody worked the answer out by hand",
+ "video": null,
+ "summary": {
+  "cases": 1,
+  "with_a_key": 0,
+  "as_the_key_says": 0,
+  "not_as_the_key_says": 0,
+  "without_a_key": 1,
+  "shown_again": 0,
+  "inference_eur": 0.0923,
+  "seconds": 108
+ },
+ "rows": [
+  {
+   "id": "slab-300-d16",
+   "asked": "Slab area by type (thickness and bars)",
+   "label": "The 300 mm slab reinforced with D16 bars",
+   "drawing": "uploads/10dd368cb9f8",
+   "question": "What is the area of the 300 mm slab-on-grade reinforced with D16 bars, in m²?",
+   "expect": {
+    "kind": "none",
+    "basis": "no key. Earlier runs gave between 217.11 and 218.64 m²"
+   },
+   "answer": null,
+   "unit": null,
+   "state": "declined",
+   "engine": "Printed figures and rows, computed",
+   "method": "sheet-working:gemini-4-carbon:thinking=low:img=ultra_high:p7",
+   "cost_eur": 0.092347,
+   "spent_now_eur": 0.092347,
+   "replayed": false,
+   "failed": false,
+   "latency_ms": 54930.9,
+   "wall_s": 107.7,
+   "evidence_items": 0,
+   "reason": "Two independent workings gave different results: 220.14 m² ((5800 + 7400 + 6300) × (5500 + 5500) + (2200 + 150) × (1800 + 600) = 220,140,000 mm² = 220.14 m²) and 218.61 m² ((5800 + 7400 + 6300) × (5500 + 5500) + (2200 + 150) × 1750 = 218,612,500 mm² = 218.61 m²). No number is given.",
+   "ok": null,
+   "verdict": "gave no number"
+  }
+ ],
+ "note": "The D16 slab question alone, as the code now stands: both workings came back and differed, so it refused and showed both."
+}

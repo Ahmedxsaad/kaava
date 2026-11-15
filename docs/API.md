@@ -29,6 +29,7 @@ The app is a FastAPI server (`src/blueprints/server.py`); the page in `web/` is 
 | `spent_now_eur`, `replayed` | what this request added: `0` and `true` when a kept or logged answer is shown again |
 | `cost_note`, `replayed_from` | where the inference figure comes from (the first asking, a benchmark run, a fresh run made to measure it), and where the answer was kept |
 | `latency_ms` | how long the answer took to work out |
+| `failed` | `true` when a model call failed and nothing was computed (the reason then says so): not a judgement that the drawing cannot answer |
 | `restated` | for a free-form question: how the model read it, and that it was read twice |
 | `estimate` | when the scale was not printed: the range the answer may lie in, and what the scale was taken from |
 | `caveat`, `bound` | what examiners found inside the thing measured and could not take into account; `at most` or `at least` |
