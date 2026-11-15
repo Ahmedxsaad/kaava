@@ -3,6 +3,7 @@
 #
 #   scripts/deploy_vm.sh update    send the last commit, rebuild the image on the VM, restart the app
 #   scripts/deploy_vm.sh cache     copy this machine's cache to the VM (indexes, 3D meshes, kept answers)
+#   scripts/deploy_vm.sh env       copy .env to the VM and restart the app
 #   scripts/deploy_vm.sh status    what runs there, and whether the public address answers
 #   scripts/deploy_vm.sh logs      the app's last lines
 #
@@ -37,7 +38,7 @@ sudo docker rm -f blueprints-public >/dev/null 2>&1 || true
 sudo docker run -d --name blueprints-public --restart unless-stopped --user "$(id -u):$(id -g)" \
   -p 127.0.0.1:8000:8000 -v "$HOME/stoa/data:/app/data:ro" -v "$HOME/stoa/cache:/app/cache" \
   -v "$HOME/stoa/uploads-public:/app/uploads" --env-file "$HOME/stoa/.env" \
-  -e BLUEPRINTS_UI_BUDGET_EUR="$BUDGET" -e HOME=/tmp blueprints-talk >/dev/null
+  -e BLUEPRINTS_UI_BUDGET_EUR="$BUDGET" -e KAAVA_BUILD="$COMMIT" -e HOME=/tmp blueprints-talk >/dev/null
 for i in $(seq 1 40); do
   [ "$(curl -s -o /dev/null --max-time 5 -w '%{http_code}' http://127.0.0.1:8000/api/stats)" = 200 ] && break
   sleep 3
@@ -46,10 +47,14 @@ echo "commit: $COMMIT" > .deployed
 sudo docker image prune -f >/dev/null 2>&1 || true
 REMOTE
     status ;;
+  env)
+    # The keys and addresses in .env (never shown): copied to the VM, then the app is restarted to read them.
+    scp -i "$STOA_VM_KEY" -o BatchMode=yes -q .env "$STOA_VM:stoa/.env"
+    "${SSH[@]}" 'chmod 600 ~/stoa/.env && sudo docker restart blueprints-public >/dev/null && echo ".env copied, app restarted"' ;;
   cache)
     rsync -az --partial --exclude 'tunnel.*' --exclude 'watch.log' -e "ssh -i $STOA_VM_KEY -o BatchMode=yes" cache/ "$STOA_VM:stoa/cache/"
     echo "cache copied" ;;
   status) status ;;
   logs) "${SSH[@]}" 'sudo docker logs --tail 40 blueprints-public 2>&1' ;;
-  *) echo "usage: $0 update|cache|status|logs" >&2; exit 2 ;;
+  *) echo "usage: $0 update|cache|env|status|logs" >&2; exit 2 ;;
 esac

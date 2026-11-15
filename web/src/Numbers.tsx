@@ -248,6 +248,40 @@ export function Numbers() {
           </div>
         </section>
 
+        {stats.live && stats.live.asked > 0 && (
+          <section className="n-card">
+            <h2>Asked on this demo, live</h2>
+            <p>
+              Every question put to this app is logged in {stats.live.kept_in}: what was asked and how it ended, never who asked.
+              These figures are read from that log{stats.live.since ? `, kept since ${new Date(stats.live.since).toLocaleString()}` : ""}.
+            </p>
+            <div className="n-tiles">
+              <div className="n-tile">
+                <span>Questions asked</span>
+                <strong>{int(stats.live.asked)}</strong>
+                <em>on <b>{int(stats.live.drawings)}</b> drawings</em>
+              </div>
+              <div className="n-tile">
+                <span>How they ended</span>
+                <strong>{int(stats.live.verified)}</strong>
+                <em>Verified · <b>{int(stats.live.check)}</b> Check this · <b>{int(stats.live.declined)}</b> no number</em>
+              </div>
+              <div className="n-tile">
+                <span>Answered at no cost</span>
+                <strong>{pct(stats.live.free / stats.live.asked)}</strong>
+                <em><b>{int(stats.live.free)}</b> of {int(stats.live.asked)}: exact engines, or an answer already paid for</em>
+              </div>
+              <div className="n-tile">
+                <span>Spent on model calls</span>
+                <strong>€{stats.live.spent_eur.toFixed(2)}</strong>
+                <em>{stats.live.compared > 0
+                  ? <>on the {int(stats.live.compared)} also put to the model alone: <b>€{stats.live.spent_compared_eur.toFixed(3)}</b> against €{stats.live.alone_eur.toFixed(3)}</>
+                  : "in all, since the log began"}</em>
+              </div>
+            </div>
+          </section>
+        )}
+
         <section className="n-card">
           <h2>Accuracy by kind of question</h2>
           <p>

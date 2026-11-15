@@ -1,6 +1,6 @@
 {
   "title": "Kaava: the tech partners, and what each one does",
-  "subtitle": "Three Junction partner technologies around one rule: the number is computed by Kaava's own code, never by a partner's model",
+  "subtitle": "Six Junction partner technologies around one rule: the number is computed by Kaava's own code, never by a partner's model",
   "destination": "slide",
   "theme": "sketch",
   "zones": [
@@ -11,8 +11,13 @@
     },
     {
       "id": "partners",
-      "label": "Junction tech partners",
+      "label": "Models: they point and read, never compute",
       "color": "ai"
+    },
+    {
+      "id": "services",
+      "label": "Services around the answer",
+      "color": "infra"
     },
     {
       "id": "out",
@@ -39,23 +44,44 @@
     {
       "id": "gemini",
       "label": "Google Gemini API",
-      "sub": "points: boxes, figures",
+      "sub": "boxes, figures, examiners",
       "zone": "partners",
       "icon": "brands:Google Gemini"
+    },
+    {
+      "id": "gemma",
+      "label": "Gemma 4",
+      "sub": "the second reader",
+      "zone": "partners",
+      "icon": "brands:Google"
     },
     {
       "id": "cloudinary",
       "label": "Cloudinary",
       "sub": "enhance a scan · share",
-      "zone": "partners",
+      "zone": "services",
       "icon": "brands:Cloudinary"
     },
     {
       "id": "eleven",
       "label": "ElevenLabs",
       "sub": "reads the answer aloud",
-      "zone": "partners",
+      "zone": "services",
       "icon": "brands:ElevenLabs"
+    },
+    {
+      "id": "aiven",
+      "label": "Aiven for PostgreSQL",
+      "sub": "log of questions asked",
+      "zone": "services",
+      "icon": "flowchart:Database"
+    },
+    {
+      "id": "craci",
+      "label": "CRACI",
+      "sub": "CI: tests + accuracy",
+      "zone": "services",
+      "icon": "it:Server"
     },
     {
       "id": "number",
@@ -66,20 +92,12 @@
       "icon": "ui:Check mark"
     },
     {
-      "id": "evidence",
-      "label": "Evidence sheet",
-      "sub": "a link anyone can open",
+      "id": "extras",
+      "label": "Evidence, voice, live figures",
+      "sub": "a link · aloud · on Numbers",
       "zone": "out",
       "color": "output",
       "icon": "it:Document"
-    },
-    {
-      "id": "voice",
-      "label": "Spoken answer",
-      "sub": "hands busy on site",
-      "zone": "out",
-      "color": "output",
-      "icon": "it:Speaker"
     }
   ],
   "edges": [
@@ -93,38 +111,58 @@
       "from": "kaava",
       "to": "gemini",
       "step": 2,
-      "label": "Gemini points; it has no answer field",
+      "label": "Gemini points; no answer field",
+      "both": true
+    },
+    {
+      "from": "kaava",
+      "to": "gemma",
+      "step": 3,
+      "label": "Gemma reads the question too",
       "both": true
     },
     {
       "from": "kaava",
       "to": "number",
-      "step": 3,
+      "step": 4,
       "label": "Kaava's code computes the number"
     },
     {
       "from": "kaava",
-      "to": "cloudinary",
-      "step": 4,
-      "label": "Cloudinary enlarges and hosts"
-    },
-    {
-      "from": "cloudinary",
-      "to": "evidence"
+      "to": "cloudinary"
     },
     {
       "from": "kaava",
-      "to": "eleven",
+      "to": "eleven"
+    },
+    {
+      "from": "kaava",
+      "to": "aiven",
       "step": 5,
-      "label": "ElevenLabs speaks the answer"
+      "label": "Each question is logged, not who asked"
+    },
+    {
+      "from": "craci",
+      "to": "kaava",
+      "style": "dashed",
+      "label": "every push"
+    },
+    {
+      "from": "cloudinary",
+      "to": "extras"
     },
     {
       "from": "eleven",
-      "to": "voice"
+      "to": "extras"
+    },
+    {
+      "from": "aiven",
+      "to": "extras"
     }
   ],
   "legend": {
     "highlight": "the only place a number is made",
-    "client": "the person asking"
+    "client": "the person asking",
+    "dashed": "checks every push before it ships"
   }
 }

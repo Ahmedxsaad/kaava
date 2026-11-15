@@ -141,3 +141,24 @@ def test_two_readings_already_paid_for_are_kept_and_a_changed_list_of_rooms_read
     # room ids are places in the list the model was shown: another list, another reading
     assert server._kept_readings(plan_query, "plans/a", "windows in stanza", "rooms: 0, 1") is None
     assert server._kept_readings(plan_query, "plans/a", "doors in stanza", "rooms: 0, 1, 2") is None
+
+
+def test_the_second_reading_is_by_a_different_model_and_falls_back_when_it_cannot_be_reached():
+    class Says(MockVLM):
+        def __init__(self, name, fails=False):
+            super().__init__()
+            self.name, self.fails, self.asked = name, fails, 0
+
+        def ask(self, system, images, text, schema):
+            self.asked += 1
+            if self.fails:
+                return VLMReply(data=None, model=self.name, error="rate limited")
+            return VLMReply(data={"measure": "count_items", "item": "window", "rooms": [0, 1], "combine": "sum", "cannot": False,
+                                  "reading": "windows of the Stanza rooms"}, model=self.name, cost_usd=0.001)
+
+    first, other = Says("gemini"), Says("gemma")
+    a, b = plan_query.ask_twice("windows in stanza", PLAN, first, dxf.is_outdoor, other=other)
+    assert (a.model, b.model) == ("gemini", "gemma") and plan_query.same_reading(a, b) and (first.asked, other.asked) == (1, 1)
+    first, down = Says("gemini"), Says("gemma", fails=True)
+    a, b = plan_query.ask_twice("windows in stanza", PLAN, first, dxf.is_outdoor, other=down)
+    assert (a.model, b.model) == ("gemini", "gemini") and not b.error and first.asked == 2    # the first model read it twice instead

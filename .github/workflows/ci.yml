@@ -1,0 +1,72 @@
+# Every push is checked three ways: the test suite, the web app's build, and an accuracy regression
+# (the exact engines on the dataset's preview must stay as right as they are, with no wrong Verified answer).
+#
+# The jobs run on CRACI's runners (https://craci.com, a Junction 2026 tech partner) once the repository
+# variable CI_RUNNER is set to "craci": CRACI records every dependency a build pulls in and produces a
+# CycloneDX SBOM of it. Until then they run on GitHub's own runners. To switch:
+#   gh variable set CI_RUNNER --body craci
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    name: Tests
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Install
+        run: uv venv --python 3.12 && uv pip install -e ".[dev]"
+      - name: Test
+        run: .venv/bin/python -m pytest -q
+        env:
+          BLUEPRINTS_OFFLINE: "1"   # no outside service is reached from a test
+
+  web:
+    name: Web app
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npx tsc --noEmit -p .
+      - run: npm run build
+
+  accuracy:
+    name: Accuracy regression
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Install
+        run: uv venv --python 3.12 && uv pip install -e ".[dev]"
+      - name: The dataset's preview (0.5 GB, kept between runs)
+        id: preview
+        uses: actions/cache@v4
+        with:
+          path: data/junction-dataset-preview
+          key: dataset-preview-v1
+      - name: Download the preview
+        if: steps.preview.outputs.cache-hit != 'true'
+        run: bash 02-dataset/download.sh preview && rm -f data/junction-dataset-preview.zip
+      - name: Exact engines on the preview's development drawings
+        run: .venv/bin/python scripts/ci_regression.py

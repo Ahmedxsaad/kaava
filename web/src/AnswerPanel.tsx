@@ -100,7 +100,7 @@ function why(result: AskResult): { title: string; text: React.ReactNode } {
       return {
         title: "Why it needs a look",
         text: result.restated.twice
-          ? `A language model (${result.restated.model}) read the question twice, independently, and both readings asked for the same thing. The number is computed from the drawing as usual, but an answer that rests on a model's reading of the question is never marked Verified.`
+          ? `${result.restated.readers && result.restated.readers[0] !== result.restated.readers[1] ? `Two different language models (${result.restated.readers.join(" and ")}) read the question` : `A language model (${result.restated.model}) read the question twice`}, independently, and both readings asked for the same thing. The number is computed from the drawing as usual, but an answer that rests on a model's reading of the question is never marked Verified.`
           : `The question was restated by a language model (${result.restated.model}) before the engine could read it. The number is computed from the drawing as usual, but an answer that rests on a model's reading of the question is never marked Verified.`,
       };
     }
@@ -168,7 +168,9 @@ function Steps({ result, marked }: { result: AskResult; marked: number }) {
     {
       title: "Read the question",
       body: result.restated?.question && result.restated.twice
-        ? <>Read by {result.restated.model} twice, independently, as: “{result.restated.question}”. Both readings matched, so the engine ran it.</>
+        ? (result.restated.readers && result.restated.readers[0] !== result.restated.readers[1]
+          ? <>Read by two different models, {result.restated.readers[0]} and {result.restated.readers[1]}, independently, as: “{result.restated.question}”. Both readings matched, so the engine ran it.</>
+          : <>Read by {result.restated.model} twice, independently, as: “{result.restated.question}”. Both readings matched, so the engine ran it.</>)
         : result.restated?.question
         ? <>Restated by {result.restated.model} as “{result.restated.question}”{result.interpreted ? <>, then read as: {result.interpreted}</> : null}</>
         : result.restated?.twice

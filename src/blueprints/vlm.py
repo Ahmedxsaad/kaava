@@ -331,6 +331,78 @@ class GeminiVLM:
                         latency_ms=(time.perf_counter() - t0) * 1000)
 
 
+class GemmaVLM:
+    """Gemma, Google's open model, asked through the Gemini API (generateContent). Text in, one JSON object out.
+
+    Used as a second, different reader of a question: two readings by two unrelated models that come
+    to the same query are stronger evidence than one model agreeing with itself. It reads text only.
+    The reply format is asked for in the prompt and parsed here, so nothing depends on a JSON mode.
+    """
+
+    provider = "gemma"
+    max_edge = 2576
+    max_visual_tokens = 4784
+
+    def __init__(self, model: str = "gemma-4-31b-it", effort: str = "low", max_output_tokens: int = 4000):
+        self.model, self.effort, self.max_output_tokens = model, effort, max_output_tokens
+        self._client = None
+        self._client_lock = threading.Lock()
+
+    @property
+    def label(self) -> str:
+        return self.model
+
+    @property
+    def client(self):
+        with self._client_lock:
+            if self._client is None:
+                from google import genai
+                from google.genai import types
+
+                key = os.environ.get("GEMINI_API_KEY")
+                if not key:
+                    raise FatalEngineError("GEMINI_API_KEY is not set (Gemma is asked through the Gemini API)")
+                self._client = genai.Client(api_key=key, http_options=types.HttpOptions(timeout=CALL_TIMEOUT_MS))
+            return self._client
+
+    def ask(self, system: str, images: list, text: str, schema: dict) -> VLMReply:
+        t0 = time.perf_counter()
+        if images:
+            return VLMReply(data=None, model=self.model, error="this adapter reads text only", latency_ms=0.0)
+        prompt = (f"{system}\n\n{text}\n\nReply with one JSON object and nothing else: no explanation, no code fence. "
+                  f"It must follow this JSON schema:\n{json.dumps(schema)}")
+        try:
+            response = self.client.models.generate_content(
+                model=self.model, contents=prompt, config={"temperature": 0, "max_output_tokens": self.max_output_tokens})
+        except Exception as exc:
+            status = getattr(exc, "status_code", None) or getattr(exc, "code", None)
+            if status in (401, 403):
+                raise FatalEngineError(f"the Gemini API rejected the credentials for {self.model!r} ({status})") from None
+            return VLMReply(data=None, model=self.model, error=f"{type(exc).__name__}: {str(exc)[:200]}",
+                            latency_ms=(time.perf_counter() - t0) * 1000)
+        usage = getattr(response, "usage_metadata", None)
+        reply = VLMReply(data=None, model=self.model,
+                         input_tokens=int(getattr(usage, "prompt_token_count", 0) or 0),
+                         output_tokens=int(getattr(usage, "candidates_token_count", 0) or 0),
+                         latency_ms=(time.perf_counter() - t0) * 1000)
+        reply.cost_usd = config.token_cost_usd(self.model, reply.input_tokens, reply.output_tokens)
+        said = (getattr(response, "text", None) or "").strip()
+        start, end = said.find("{"), said.rfind("}")
+        if start < 0 or end <= start:
+            reply.no_answer = "reply was not a JSON object"
+            return reply
+        try:
+            data = json.loads(said[start:end + 1])
+        except json.JSONDecodeError:
+            reply.no_answer = "reply was not valid JSON"
+            return reply
+        if not isinstance(data, dict):
+            reply.no_answer = "reply was not a JSON object"
+            return reply
+        reply.data = data
+        return reply
+
+
 class MockVLM:
     """Offline stand-in for tests and dry pipeline checks. Costs nothing, knows nothing."""
 
@@ -366,7 +438,7 @@ class MockVLM:
         )
 
 
-PROVIDERS = ("gemini", "anthropic", "mock")
+PROVIDERS = ("gemini", "gemma", "anthropic", "mock")
 
 
 def make_vlm(provider: str, model: str | None = None, effort: str = "high"):
@@ -374,6 +446,8 @@ def make_vlm(provider: str, model: str | None = None, effort: str = "high"):
         return GeminiVLM(model or "gemini-4-carbon", effort)
     if provider == "anthropic":
         return AnthropicVLM(model or "claude-opus-5-5", effort)
+    if provider == "gemma":
+        return GemmaVLM(model or "gemma-4-31b-it", effort)
     if provider == "mock":
         return MockVLM()
     raise ValueError(f"unknown provider {provider!r} (available: {', '.join(PROVIDERS)})")

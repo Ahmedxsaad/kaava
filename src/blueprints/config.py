@@ -30,6 +30,10 @@ PRICES_USD_PER_MTOK: dict[str, dict[str, float]] = {
     # Output includes thinking tokens. Carbon and Argon are at an introductory price
     # through 30 Nov 2026; PRICE_NOTES records what they cost afterwards.
     "gemini-4-carbon": {"input": 2.00, "output": 10.00, "cache_read": 0.10},
+    # Gemma 4 on the Gemini API: listed free of charge on Google's pricing page (free tier), with no paid
+    # price published (checked 15 Nov 2026). Its calls are recorded at zero cost.
+    "gemma-4-31b-it": {"input": 0.0, "output": 0.0, "cache_read": 0.0, "cache_write": 0.0},
+    "gemma-4-26b-a4b-it": {"input": 0.0, "output": 0.0, "cache_read": 0.0, "cache_write": 0.0},
     "gemini-4-argon": {"input": 2.00, "output": 10.00, "cache_read": 0.10},
     "gemini-4-hydrogen": {"input": 1.50, "output": 7.50, "cache_read": 0.075},
 }

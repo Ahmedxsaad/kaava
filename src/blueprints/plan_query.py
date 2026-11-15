@@ -157,11 +157,20 @@ def same_reading(a: Query, b: Query) -> bool:
     return a.measure == "count_rooms" or a.combine == b.combine
 
 
-def ask_twice(question: str, index: dict, llm, is_outdoor) -> tuple[Query, Query]:
-    """Two independent readings of the question, side by side. Only readings that agree are run."""
+def ask_twice(question: str, index: dict, llm, is_outdoor, other=None) -> tuple[Query, Query]:
+    """Two independent readings of the question, side by side. Only readings that agree are run.
+
+    `other`, when given, is a different model for the second reading (Gemma beside Gemini): two
+    unrelated models that come to the same query are stronger evidence than one model agreeing
+    with itself. When it cannot be reached, the second reading falls back to the first model.
+    """
     from concurrent.futures import ThreadPoolExecutor
 
-    def reading(_):
+    def reading(n: int):
+        if n == 1 and other is not None:
+            got = ask(question, index, other, is_outdoor)
+            if not got.error:
+                return got  # read by the second, different model
         got = ask(question, index, llm, is_outdoor)
         for pause in (1.5, 4.0):  # a dropped connection is not a reason to say "can't answer"
             if not got.error:

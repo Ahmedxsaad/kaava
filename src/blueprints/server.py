@@ -29,7 +29,7 @@ from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import cloud, config, interpret, mesh, model_query, overlay, plan_query, progress, scan_plan, sheet, verify
+from . import cloud, config, interpret, ledger, mesh, model_query, overlay, plan_query, progress, scan_plan, sheet, verify
 from .answer import Answer
 from .data import Dataset, Question, drawing_of, question_id, source_of
 from .engines import dxf, dxf_index, ifc, ifc_index, raster_labels, router
@@ -815,6 +815,18 @@ class Service:
             return make_vlm("gemini", "gemini-4-carbon", "low")
         return self._text_model()
 
+    def _second_reader(self):
+        """A different model for the second reading of a free-form question: Gemma, Google's open model,
+        beside Gemini. Two unrelated models agreeing is stronger than one agreeing with itself. Measured
+        on 50 questions with known readings (scripts/bench_readers.py): both read every one right when the
+        call went through, and never agreed on a wrong reading. KAAVA_SECOND_READER=same turns it off."""
+        choice = os.environ.get("KAAVA_SECOND_READER", "gemma-4-31b-it").strip()
+        if choice.lower() in ("", "same", "off", "none") or not os.environ.get("GEMINI_API_KEY"):
+            return None
+        from .vlm import make_vlm
+
+        return make_vlm("gemma", choice)
+
     def _restate(self, asked: Question, drawing: str, engine: str) -> tuple[Answer | None, dict | None]:
         """Have a language model restate a question the engine could not read, then ask the engine again.
 
@@ -900,7 +912,7 @@ class Service:
         try:
             index = dxf_index.load_index(self.ds.abspath(self.files_of(drawing)[".dxf"]))
             read = self._two_readings(plan_query, drawing, asked.question, plan_query.inventory(index, dxf.is_outdoor),
-                                      lambda llm: plan_query.ask_twice(asked.question, index, llm, dxf.is_outdoor))
+                                      lambda llm: plan_query.ask_twice(asked.question, index, llm, dxf.is_outdoor, other=self._second_reader()))
         except (FatalEngineError, KeyError):
             return None, None
         if read is None:
@@ -917,6 +929,7 @@ class Service:
         if fresh:
             self.spent_eur += config.usd_to_eur(cost)
         note = {"question": None, "reason": query.reading, "model": query.model, "twice": True,
+                "readers": [query.model, second.model],  # who read it: two different models when Gemma took the second reading
                 "cost_eur": round(config.usd_to_eur(cost), 6), "latency_ms": round(query.latency_ms if fresh else 0.0, 1)}
         if query.error or query.cannot:
             return None, note
@@ -945,7 +958,7 @@ class Service:
             index = ifc_index.load_index(self.ds.abspath(model_file))
             name = PurePosixPath(drawing).name
             read = self._two_readings(model_query, drawing, asked.question, model_query.inventory(index, name)[0],
-                                      lambda llm: model_query.ask_twice(asked.question, index, name, llm))
+                                      lambda llm: model_query.ask_twice(asked.question, index, name, llm, other=self._second_reader()))
         except (FatalEngineError, KeyError, TypeError):
             return None, None
         if read is None:
@@ -961,6 +974,7 @@ class Service:
         if fresh:
             self.spent_eur += config.usd_to_eur(cost)
         note = {"question": None, "reason": query.reading, "model": query.model, "twice": True,
+                "readers": [query.model, second.model],  # who read it: two different models when Gemma took the second reading
                 "cost_eur": round(config.usd_to_eur(cost), 6), "latency_ms": round(query.latency_ms if fresh else 0.0, 1)}
         if query.error or query.cannot:
             return None, note
@@ -1105,6 +1119,11 @@ class Service:
                 out["baseline"] = {"answer": base.get("pred"), "status": base.get("status"),
                                    "cost_eur": base.get("cost_eur"), "latency_ms": base.get("latency_ms"),
                                    "model": (base.get("meta") or {}).get("model"), "run_id": base["run_id"]}
+        # The log of questions asked (ledger.py): what was asked and how it ended, never who asked.
+        ledger.record(drawing=drawing, source=asked.source, question=text, state=ans.state, answer=ans.answer, unit=ans.unit,
+                      engine=out["engine"], method=ans.method, cost_eur=out["cost_eur"],
+                      alone_eur=(out["baseline"] or {}).get("cost_eur"), latency_ms=int(latency),
+                      replayed=bool(replayed) or bool(ans.meta.get("shown_again")))
         return out
 
     def _family_stats(self, ans: Answer) -> dict | None:
@@ -1258,6 +1277,7 @@ class Service:
                 "full_set_mix": [{"source": s, "type": t, "questions": n}
                                  for (s, t), n in sorted(config.FULL_SET_MIX.items())],
                 "sheets_bench": _sheets_bench(),
+                "live": ledger.summary(),  # questions asked of this app, from its log (Aiven for PostgreSQL)
                 "model_budget_eur": self.budget_eur, "model_spent_eur": round(self.spent_eur, 4)}
 
 
@@ -1640,7 +1660,8 @@ def create_app(dataset_root: Path | str | None = None) -> FastAPI:
 
         load_dotenv(config.REPO_ROOT / ".env")
         return {"gemini": bool(os.environ.get("GEMINI_API_KEY")), "claude": bool(os.environ.get("ANTHROPIC_API_KEY")),
-                "cloudinary": cloud.configured(), "elevenlabs": bool(os.environ.get("ELEVENLABS_API_KEY"))}
+                "cloudinary": cloud.configured(), "elevenlabs": bool(os.environ.get("ELEVENLABS_API_KEY")),
+                "aiven": ledger.enabled()}
 
     @app.get("/api/stats")
     def stats() -> dict:

@@ -15,6 +15,7 @@
 ![Junction 2026](https://img.shields.io/badge/Junction_2026-Stoa_·_Make_Blueprints_Talk-e8690a?style=flat-square)
 ![Python 3.12](https://img.shields.io/badge/python-3.12-3776ab?style=flat-square)
 ![License: MIT](https://img.shields.io/badge/license-MIT-555?style=flat-square)
+[![CI](https://github.com/Ahmedxsaad/kaava/actions/workflows/ci.yml/badge.svg)](https://github.com/Ahmedxsaad/kaava/actions/workflows/ci.yml)
 
 ![Four questions answered in the app: 23 doors counted on a plan and lit in 3D, a corridor measured with the lift cut out of it, a slab's area with two trenches taken out, and 14 windows boxed on a scan that stands in 3D](docs/demo.gif)
 
@@ -40,6 +41,9 @@ The Junction 2026 partner technologies Kaava really uses, and what each one does
 | **Google Gemini API** · Gemini 4 Carbon | The only model in the answer path, and only ever as a pointer. It boxes each counted symbol on a scan, names the printed figures and the formula on a sheet, reads a question in your own words as a query (twice), and examines a measured area for what must be taken out. It never states a number: its reply formats have no field for one. | Any scan or sheet. The steps under each answer name every call and its cost |
 | **Cloudinary** | **Enhance:** a small scan shown enlarged with AI super-resolution, laid over the original so every mark keeps its place. **Share:** hosts an answer's evidence sheet and delivers it in the format that suits whoever opens it. | "Enhance" under a scan · "Share" on an answer |
 | **ElevenLabs** | Reads the answer aloud in a natural voice (Flash v2.5), for checking with your hands busy on site. | The speaker button by the question box |
+| **Gemma** · Gemma 4 31B (Google DeepMind) | The second reader of a question in your own words. Gemini reads it once, Gemma reads it independently, and only two readings that agree are run: two unrelated models agreeing is stronger than one model agreeing with itself. On 50 questions with known readings both read every one right and never agreed on a wrong one; when Gemma cannot be reached, Gemini takes the second reading. | The first step under a free-form answer names both models |
+| **Aiven for PostgreSQL** | The log of every question asked on the demo: what was asked and how it ended (verified, check, no number), the method and the cost. Never who asked. The app writes to it with a login that owns one table and nothing else. | "Asked on this demo, live" on the Numbers page |
+| **CRACI** | The CI: the test suite, the web build and an accuracy regression (the exact engines on the dataset's preview must stay as right as they are, with no wrong Verified answer) on every push, on CRACI's runners, which record what each build pulls in. | The CI badge above; `.github/workflows/ci.yml` |
 
 Each is optional and switches on when its key is set; with no key at all the exact engines still answer. Hosting is not a challenge partner: a Cloudflare Tunnel in front of a small Azure VM. Claude is the fallback model when no Gemini key is set.
 

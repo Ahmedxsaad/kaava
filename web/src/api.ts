@@ -118,7 +118,7 @@ export interface AskResult {
   caveat?: string | null;
   bound?: "at most" | "at least" | null;
   // `twice`: the question was read as a query two times, independently, and the readings had to match.
-  restated: { question: string | null; reason: string; model: string; cost_eur: number; latency_ms: number; twice?: boolean } | null;
+  restated: { question: string | null; reason: string; model: string; cost_eur: number; latency_ms: number; twice?: boolean; readers?: string[] } | null;
   checks: { name: string; value: number | string }[];
   verified_because: {
     family: string;
@@ -206,6 +206,9 @@ export interface Stats {
   full_set_mix: { source: string; type: string; questions: number }[];
   labels_on_scans: { run_id: string; scan_questions: number; answered: number; correct: number; share: number; share_alone: number } | null;
   // Stoa's sample sheets scored against our own answer key: this system, and the vision model alone.
+  // Questions asked of this app, from its log in PostgreSQL (Aiven): null when no log is set up.
+  live?: { asked: number; verified: number; check: number; declined: number; free: number; spent_eur: number; drawings: number;
+           compared: number; spent_compared_eur: number; alone_eur: number; since: string | null; latest: string | null; kept_in: string } | null;
   sheets_bench?: Record<string, { n: number; correct: number; wrong: number; declined: number; accuracy: number; eur_per_question: number; eur_total: number }>;
   model_budget_eur: number;
   model_spent_eur: number;

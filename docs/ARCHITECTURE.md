@@ -24,7 +24,7 @@ One rule holds everywhere: **a number is computed by code from things you can se
 
 The exact engines read a fixed set of phrasings. Anything else goes to the language model with the drawing's own list of rooms, storeys and items (`plan_query.py` for DXF plans, `model_query.py` for IFC models). It returns a **query**: which rooms, what to count or measure, how to combine. The engine runs the query on the geometry.
 
-- The question is read **twice**, independently. Readings that differ give no number, and both are shown.
+- The question is read **twice**, independently, by two different models: Gemini 4 Carbon and Gemma 4 (Gemini again when Gemma cannot be reached). Readings that differ give no number, and both are shown.
 - A guard in the rules refuses a whole-floor count when the question names a room (`dxf.part_named`, `ifc.room_named`).
 - A door or a window belongs to a room when at least half of its length runs along one of the room's walls. One that only touches a corner is drawn as left out.
 - The rooms searched are drawn before the items counted, so the search itself can be seen.
@@ -82,6 +82,7 @@ Only the exact engines can be Verified, and only where a second, independent sou
 | `cache/readings` | the two readings of a free-form question | a paid reading is asked once; the count is redone each time |
 | `cache/answers`, `examples/answers` | answers a model took part in | shown again at no cost |
 | `results/` | every evaluation run | see [EVALUATION.md](EVALUATION.md) |
+| PostgreSQL (`ledger.py`, Aiven on the public demo) | every question asked: the drawing, the question, how it ended, the cost; never who asked | the live figures on the Numbers page |
 
 ## Module map
 

@@ -1,0 +1,30 @@
+{
+  "questions": 50,
+  "plans": 10,
+  "seconds": 412.0,
+  "alone": {
+    "gemini-4-carbon": 48,
+    "gemma-4-31b-it": 34
+  },
+  "failed calls": {
+    "gemini-4-carbon": 2,
+    "gemma-4-31b-it": 16
+  },
+  "gemini twice": {
+    "agree, right": 48,
+    "a call failed": 2
+  },
+  "gemini + gemma": {
+    "agree, right": 32,
+    "a call failed": 18
+  },
+  "eur": {
+    "gemini-4-carbon, per reading": 0.00351,
+    "gemma-4-31b-it, per reading": 0.0
+  },
+  "seconds per reading": {
+    "gemini-4-carbon": 12.8,
+    "gemma-4-31b-it": 10.7
+  },
+  "where gemini twice agreed and was wrong": []
+}

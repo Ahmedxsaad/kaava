@@ -55,6 +55,10 @@ python scripts/bench_examples.py            # Stoa's four sample sheets: the sys
 | Cost per question | €0.003; the model alone €0.008 | same sample |
 | Stoa's four sample sheets, 27 questions | 27 right, 0 wrong, 0 refused, €0.022 per question | `results/stoa_sheets/` |
 
+## Who reads a question the second time
+
+`python scripts/bench_readers.py` writes free-form questions from development plans' own room names, so the right reading of each is known from the drawing, and has Gemini 4 Carbon read each twice and Gemma 4 31B once. On 50 questions over 10 plans (`results/readers/`): every reading whose call went through was right (Gemini 48 of 48, Gemma 34 of 34), and no pair agreed on a wrong reading. 16 of Gemma's 50 calls failed under the benchmark's load (the free tier's rate limit), which is why the app falls back to Gemini for the second reading when Gemma cannot be reached. Gemma's readings cost nothing; a Gemini reading €0.0035.
+
 ## Stoa's sample sheets
 
 Stoa posted four sheets without answers. `examples/stoa/questions.jsonl` holds 27 questions on them with **an answer key of our own**; each line says where its answer comes from. The key is ours, not Stoa's, and one entry changed during the event: the 150 mm slab's area was the plain rectangle (61.69 m²) until we saw that two trenches are cut into the slab; it is now the area with them taken out (59.27 m²).

@@ -19,6 +19,7 @@ The exact engines need no key. Optional services switch on when their key is in 
 | `ANTHROPIC_API_KEY` | Claude, used instead while no Gemini key is set |
 | `CLOUDINARY_URL` | "Enhance" on a small scan, and hosted evidence sheets for "Share" |
 | `ELEVENLABS_API_KEY` | the answer read aloud in a natural voice |
+| `KAAVA_PG_URL` | the log of questions asked, in PostgreSQL (Aiven on the public demo): a login that owns a schema named `kaava` |
 
 ## Settings
 
@@ -28,6 +29,7 @@ The exact engines need no key. Optional services switch on when their key is in 
 | `BLUEPRINTS_COUNT` | `distinct` | `outlines` counts an outline the file holds twice as two, as the dataset's answers do |
 | `BLUEPRINTS_WORKINGS` | 2 | how many independent workings a sheet question gets |
 | `BLUEPRINTS_EXAMINERS` | 2 | how many examiners look inside a computed area; 0 turns them off |
+| `KAAVA_SECOND_READER` | `gemma-4-31b-it` | the different model that reads a free-form question the second time; `same` lets the first model read it twice |
 | `BLUEPRINTS_WAIT_S` | 50 | how long a request waits for a model before answering "still working" (the page asks again) |
 | `BLUEPRINTS_GEMINI_RESOLUTION` | `ultra_high` | the image resolution Gemini is sent |
 | `BLUEPRINTS_OFFLINE` | unset | never reach an outside service (tests, air-gapped demos) |
@@ -46,7 +48,7 @@ The drawings are not baked into the image (each source has its own licence): mou
 Two ways, both behind a Cloudflare Tunnel so no port is opened:
 
 - **This machine:** `scripts/serve_public.sh start|update|status|tunnel|stop`. A watchdog restarts the tunnel if the public address stops answering.
-- **A small VM:** `scripts/deploy_vm.sh update|cache|status|logs`. `update` sends the last commit, builds the image there and restarts the app. Where the VM is comes from a git-ignored `.env.deploy` (`STOA_VM=user@host`, `STOA_VM_KEY=path of its ssh key`).
+- **A small VM:** `scripts/deploy_vm.sh update|cache|env|status|logs`. `update` sends the last commit, builds the image there and restarts the app. Where the VM is comes from a git-ignored `.env.deploy` (`STOA_VM=user@host`, `STOA_VM_KEY=path of its ssh key`).
 
 Two vCPUs and 8 GB are enough: the app uses about 220 MB at rest, the exact engines answer in under a millisecond, and the vision model runs elsewhere.
 
@@ -60,3 +62,7 @@ The 3D mesh of a large IFC model takes minutes and gigabytes to build. It is bui
 .venv/bin/python -m pytest       # the whole suite; tests that need the dataset skip when it is absent
 cd web && npx tsc --noEmit -p . && npm run build
 ```
+
+## CI
+
+`.github/workflows/ci.yml` runs on every push: the test suite, the web app's build, and an accuracy regression (`scripts/ci_regression.py`: the exact engines on the dataset's preview, 1,803 questions; a drop below 99% right, or one wrong Verified answer, fails the build). The jobs run on [CRACI](https://craci.com)'s GitHub Actions-compatible runners once the repository variable `CI_RUNNER` is `craci` (`gh variable set CI_RUNNER --body craci`, after CRACI's GitHub App is installed on the repository), and on GitHub's own runners until then.

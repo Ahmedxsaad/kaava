@@ -44,6 +44,9 @@ const PARTNERS: { name: string; does: string; where: string }[] = [
   { name: "Google Gemini API", does: "Gemini 4 Carbon, the only model in the answer path, and only as a pointer: it boxes each counted symbol on a scan, names the printed figures and the formula on a sheet, reads a question in your own words as a query (twice), and examines a measured area for what must be taken out. It never states a number.", where: "Any scan or sheet. The steps under each answer name every call and its cost." },
   { name: "Cloudinary", does: "Enhance: a small scan shown enlarged with AI super-resolution, laid over the original so every mark keeps its place. Share: hosts an answer's evidence sheet and delivers it in the format that suits whoever opens it.", where: "\"Enhance\" under a scan, \"Share\" on an answer." },
   { name: "ElevenLabs", does: "Reads the answer aloud in a natural voice, for checking with your hands busy on site.", where: "The speaker button by the question box." },
+  { name: "Gemma (Google DeepMind)", does: "The second reader of a question in your own words: Gemini reads it once, Gemma 4 reads it independently, and only two readings that agree are run. Two unrelated models agreeing is stronger than one model agreeing with itself. When Gemma cannot be reached, Gemini takes the second reading.", where: "The first step under a free-form answer names both models." },
+  { name: "Aiven for PostgreSQL", does: "The log of every question asked here: what was asked and how it ended, the method and the cost. Never who asked.", where: "\"Asked on this demo, live\" on the Numbers page." },
+  { name: "CRACI", does: "The CI on every push: the test suite, the web build, and an accuracy regression of the exact engines, on runners that record what each build pulls in.", where: "The CI badge on the repository." },
 ];
 
 const pct = (v: number | null | undefined, digits = 2) => (v == null ? "—" : `${(100 * v).toFixed(digits)}%`);
