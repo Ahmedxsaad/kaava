@@ -13,7 +13,7 @@ class FakeConnection:
         self.store.append((sql.split()[0], params))
         if sql.startswith("SELECT"):
             when = datetime.datetime(2026, 11, 15, 1, 0, tzinfo=datetime.timezone.utc)
-            return [[3, 1, 1, 1, 0.07, 0.016, 2, 0.0, 2, when, when, 2]]
+            return [[3, 1, 1, 1, 0.07, 0.016, 2, 0.0, 2, when, when, 2, 1]]
         return []
 
     def close(self):
@@ -35,7 +35,8 @@ def test_a_question_is_written_by_the_writer_thread_and_the_figures_are_read_bac
     monkeypatch.setattr(ledger, "_connect", lambda: FakeConnection(store))
     monkeypatch.setattr(ledger, "_summary", (0.0, None))
     ledger.record(drawing="plans/a", source="swiss_dwellings", question="How many doors? " + "x" * 600, state="verified", answer=23,
-                  unit="count", engine="DXF geometry", method="dxf-engine:v1", cost_eur=0.0, alone_eur=0.008, latency_ms=4, replayed=False)
+                  unit="count", engine="DXF geometry", method="dxf-engine:v1", cost_eur=0.0, first_cost_eur=0.0, alone_eur=0.008, latency_ms=4,
+                  replayed=False)
     ledger._rows.join()
     insert = next(params for kind, params in store if kind == "INSERT")
     assert insert["state"] == "verified" and insert["answer"] == "23" and insert["app_build"] == "abc1234"
@@ -43,6 +44,8 @@ def test_a_question_is_written_by_the_writer_thread_and_the_figures_are_read_bac
     assert set(insert) == set(ledger.FIELDS) and "ip" not in insert and "user" not in insert   # what was asked, never who asked
     live = ledger.summary()
     assert live["asked"] == 3 and live["verified"] == 1 and live["spent_eur"] == 0.07 and live["kept_in"] == "Aiven for PostgreSQL"
+    assert live["shown_again"] == 1                                 # answers shown again are counted apart: they spent nothing
+    assert "first_cost_eur" in insert                               # what the inference cost, beside what this request spent
     assert ledger.summary() is live                                 # read from the database at most every 30 seconds
 
 

@@ -243,9 +243,9 @@ function Compare({ result }: { result: AskResult }) {
         </thead>
         <tbody>
           <tr className="ours">
-            <td>{result.engine}{result.replayed_from ? ", logged" : ""}</td>
+            <td>{result.engine}{result.replayed ? ", shown again" : ""}</td>
             <td className={twice ? "" : mark(reference?.status)}>{result.answer === null ? "—" : formatValue(result.answer, unit)}</td>
-            <td>{euro(result.cost_eur)}</td>
+            <td>{result.cost_eur === null ? "not recorded" : euro(result.cost_eur)}</td>
             <td>{time(result.latency_ms)}</td>
           </tr>
           {base && (
@@ -254,6 +254,18 @@ function Compare({ result }: { result: AskResult }) {
               <td className={mark(base.status)}>{base.answer === null ? "—" : formatValue(base.answer as number, unit)}</td>
               <td>{euro(base.cost_eur)}</td>
               <td>{time(base.latency_ms)}</td>
+            </tr>
+          )}
+          {result.replayed && (
+            // An answer shown again spends nothing now. The cost above is the inference: what working it
+            // out cost, and where that figure comes from. Only that is set beside another system's cost.
+            <tr className="replay">
+              <td colSpan={4}>
+                Shown again from the kept answers: <b>{euro(result.spent_now_eur)}</b> spent now.{" "}
+                {result.cost_eur === null
+                  ? "This answer was kept before costs were recorded, so its inference cost is not shown rather than guessed."
+                  : <>The cost above is that of the inference{result.cost_note ? `, ${result.cost_note}` : ""}.</>}
+              </td>
             </tr>
           )}
           {reference && (
@@ -372,7 +384,8 @@ export function AnswerPanel(props: Props) {
   if (error) {
     return (
       <div className="answer">
-        <div className="lead"><h2>Something went wrong</h2><p>{error}</p></div>
+        {/* A file that cannot be brought is refused on purpose, in the server's own words: not a fault. */}
+        <div className="lead"><h2>{/A file you bring can be|at most 25 MB|could not be read/.test(error) ? "That file can't be opened here" : "Something went wrong"}</h2><p>{error.charAt(0).toUpperCase() + error.slice(1)}</p></div>
       </div>
     );
   }

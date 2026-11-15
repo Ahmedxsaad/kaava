@@ -1,10 +1,19 @@
 # Every push is checked three ways: the test suite, the web app's build, and an accuracy regression
 # (the exact engines on the dataset's preview must stay as right as they are, with no wrong Verified answer).
 #
-# The jobs run on CRACI's runners (https://craci.com, a Junction 2026 tech partner): CRACI records every
-# dependency a build pulls in and produces a CycloneDX SBOM of it. Each job asks for CRACI's ubuntu-24.04
-# image, the software set the jobs were written against. CRACI's GitHub App must be installed on the
-# repository, or the jobs wait for a runner that never comes.
+# Where the jobs run is one switch: the repository variable CI_RUNNER.
+#   CI_RUNNER=craci   CRACI's runners (https://craci.com, a Junction 2026 tech partner), which record every
+#                     dependency a build pulls in and produce a CycloneDX SBOM of it. Each job then asks for
+#                     CRACI's ubuntu-24.04 image, the software set the jobs were written against.
+#   unset             GitHub's own runners.
+# CRACI picks a job up only where its GitHub App covers the repository, and CRACI connects to a GitHub
+# organisation (https://docs.craci.com/guides/github-connection/). Where it does not, a job asking for
+# `craci` waits for a runner that never comes: that is what happened on 15 Nov 2026 while this repository
+# was on a personal account, so the switch is there instead of a fixed label.
+#   gh variable set CI_RUNNER --body craci      # once CRACI's app covers the repository
+#   gh variable delete CI_RUNNER                # back to GitHub's runners
+# CRACI reads the setup step's inputs when it schedules a job and never evaluates the step's `if:`; the
+# `if:` only keeps the step from running on GitHub's runners (CRACI's own guide gives this pattern).
 name: CI
 
 on:
@@ -20,10 +29,11 @@ concurrency:
 jobs:
   tests:
     name: Tests
-    runs-on: craci
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 25
     steps:
       - uses: cracicorp/setup@v1
+        if: ${{ vars.CI_RUNNER == 'craci' }}
         with:
           image: ubuntu-24.04
       - uses: actions/checkout@v4
@@ -39,13 +49,14 @@ jobs:
 
   web:
     name: Web app
-    runs-on: craci
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 15
     defaults:
       run:
         working-directory: web
     steps:
       - uses: cracicorp/setup@v1
+        if: ${{ vars.CI_RUNNER == 'craci' }}
         with:
           image: ubuntu-24.04
       - uses: actions/checkout@v4
@@ -60,10 +71,11 @@ jobs:
 
   accuracy:
     name: Accuracy regression
-    runs-on: craci
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 30
     steps:
       - uses: cracicorp/setup@v1
+        if: ${{ vars.CI_RUNNER == 'craci' }}
         with:
           image: ubuntu-24.04
       - uses: actions/checkout@v4

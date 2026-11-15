@@ -1,0 +1,67 @@
+[
+ {
+  "kept": "2b7262496e1ce2344fa3.json",
+  "drawing": "uploads/072d5e992c68",
+  "question": "How many doors are shown on this floor plan?",
+  "answer": 122,
+  "unit": "count",
+  "state": "check",
+  "method": "sheet-working:gemini-4-carbon:thinking=low:img=ultra_high:p7:tiles",
+  "error": null,
+  "cost_eur": 0.24222403184943903,
+  "latency_ms": 34277.07073700731,
+  "measured_on": "2026-11-15"
+ },
+ {
+  "kept": "3c10ef514e0c22009822.json",
+  "drawing": "uploads/9266efe87dc9",
+  "question": "What is the size of the suction header?",
+  "answer": 16.0,
+  "unit": "in",
+  "state": "check",
+  "method": "sheet-working:gemini-4-carbon:thinking=low:img=ultra_high:p7",
+  "error": null,
+  "cost_eur": 0.022077452044878758,
+  "latency_ms": 6720.5578470020555,
+  "measured_on": "2026-11-15"
+ },
+ {
+  "kept": "6198cff7ef7b17292959.json",
+  "drawing": "uploads/072d5e992c68",
+  "question": "What is the floor area of the Multi-Purpose Hall in m²?",
+  "answer": 245.0,
+  "unit": "m2",
+  "state": "check",
+  "method": "sheet-working:gemini-4-carbon:thinking=low:img=ultra_high:p7:measured",
+  "error": null,
+  "cost_eur": 0.019335866811436845,
+  "latency_ms": 12040.322775996174,
+  "measured_on": "2026-11-15"
+ },
+ {
+  "kept": "987f6509437d209cd989.json",
+  "drawing": "uploads/10dd368cb9f8",
+  "question": "What is the area of the 300 mm slab-on-grade reinforced with D16 bars, in m²?",
+  "answer": 218.02,
+  "unit": "m2",
+  "state": "check",
+  "method": "sheet-working:gemini-4-carbon:thinking=low:img=ultra_high:p7",
+  "error": null,
+  "cost_eur": 0.07952587766920015,
+  "latency_ms": 150107.34124699957,
+  "measured_on": "2026-11-15"
+ },
+ {
+  "kept": "d95b66fb44e0aa925c3c.json",
+  "drawing": "uploads/072d5e992c68",
+  "question": "How many linear metres of baseboard are needed in the Multi-Purpose Hall?",
+  "answer": 50.4,
+  "unit": "m",
+  "state": "check",
+  "method": "sheet-working:gemini-4-carbon:thinking=low:img=ultra_high:p7:measured",
+  "error": null,
+  "cost_eur": 0.016150922909880565,
+  "latency_ms": 8114.938279002672,
+  "measured_on": "2026-11-15"
+ }
+]

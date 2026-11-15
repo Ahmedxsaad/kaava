@@ -29,7 +29,7 @@ from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import cloud, config, interpret, ledger, mesh, model_query, overlay, plan_query, progress, scan_plan, sheet, verify
+from . import blind, cloud, config, interpret, ledger, mesh, model_query, overlay, plan_query, progress, scan_plan, sheet, verify
 from .answer import Answer
 from .data import Dataset, Question, drawing_of, question_id, source_of
 from .engines import dxf, dxf_index, ifc, ifc_index, raster_labels, router
@@ -57,6 +57,19 @@ UPLOADS_DIR = config.REPO_ROOT / "uploads"
 # Sheets that come with the app as examples: taken in at start like a drawing someone brings.
 EXAMPLES_DIR = config.REPO_ROOT / "examples"
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024
+# What a brought file is kept as: a sheet's picture (an image, or one page of a PDF), or an IFC model.
+BROUGHT_KINDS = (".png", ".ifc")
+# What can be brought, said wherever a file is refused. A DXF is answered from the catalogue only: the
+# DXF engine reads the room layers of the Swiss Dwellings plans, and its Verified thresholds were
+# measured on them; a DXF drawn to other conventions would be read wrongly or trusted without grounds.
+BROUGHT_WORDS = "an image, a PDF (one page at a time) or an IFC model"
+# What to offer on a model someone brings: phrasings the IFC engine reads by rule, at no cost.
+MODEL_QUESTIONS = (
+    "How many doors are there in the model?",
+    "How many windows are there in the model?",
+    "How many walls are there in the model?",
+    "How many rooms (spaces) are there in the model?",
+)
 # What to offer on a drawing nobody wrote questions for.
 GENERIC_QUESTIONS = (
     "How many doors are shown on this floor plan?",
@@ -66,25 +79,46 @@ GENERIC_QUESTIONS = (
 )
 
 
+class _Files:
+    """The dataset's files and the brought ones, for an engine that asks `path in dataset.files`."""
+
+    def __init__(self, dataset_files, brought: dict):
+        self._dataset, self._brought = dataset_files, brought
+
+    def __contains__(self, path) -> bool:
+        return path in self._brought or path in self._dataset
+
+    def __iter__(self):
+        yield from self._dataset
+        yield from self._brought
+
+    def __len__(self) -> int:
+        return len(self._dataset) + len(self._brought)
+
+
 class Library:
     """The dataset plus the drawings people bring. To the engines it looks like a Dataset."""
 
     def __init__(self, dataset: Dataset):
         self._ds = dataset
-        self.uploads: dict[str, Path] = {}  # "uploads/<id>.png" -> the file
+        self.uploads: dict[str, Path] = {}  # "uploads/<id>.png" (a sheet) or "uploads/<id>.ifc" (a model) -> the file
         self.notes: dict[str, dict] = {}  # drawing id -> what is known about an upload
         if UPLOADS_DIR.is_dir():
             for note in sorted(UPLOADS_DIR.glob("*.json")):
-                image = note.with_suffix(".png")
-                if image.is_file():
-                    self.add(image, json.loads(note.read_text(encoding="utf-8")))
+                for suffix in BROUGHT_KINDS:
+                    if note.with_suffix(suffix).is_file():
+                        self.add(note.with_suffix(suffix), json.loads(note.read_text(encoding="utf-8")))
 
     def __getattr__(self, name: str):
         return getattr(self._ds, name)
 
-    def add(self, image: Path, note: dict) -> str:
-        rel = f"uploads/{image.name}"
-        self.uploads[rel] = image
+    @property
+    def files(self):
+        return _Files(self._ds.files, self.uploads)
+
+    def add(self, file: Path, note: dict) -> str:
+        rel = f"uploads/{file.name}"
+        self.uploads[rel] = file
         self.notes[drawing_of(rel)] = note
         return drawing_of(rel)
 
@@ -98,7 +132,9 @@ class Library:
         return self.uploads_of(drawing_of(path)) or self._ds.formats(path)
 
     def ifc_model_of(self, path: str) -> str | None:
-        return None if path.startswith("uploads/") else self._ds.ifc_model_of(path)
+        if path.startswith("uploads/"):  # a brought model is its own model; a brought sheet has none
+            return drawing_of(path) if f"{drawing_of(path)}.ifc" in self.uploads else None
+        return self._ds.ifc_model_of(path)
 
     def group_of(self, path: str) -> str:
         return "uploads" if path.startswith("uploads/") else self._ds.group_of(path)
@@ -610,7 +646,12 @@ class Service:
             "suggested": list(seen.values()) or (
                 [{"question": q, "type": "", "unit": None} for q in self.ds.notes.get(drawing, {}).get("questions", [])]
                 or ([{"question": q, "type": "count", "unit": "count"} for q in GENERIC_QUESTIONS]
-                    if view.kind == "image" else [])),
+                    if view.kind == "image" else
+                    [{"question": q, "type": "count", "unit": "count"} for q in MODEL_QUESTIONS]
+                    if model and drawing.startswith("uploads/") else [])),
+            # A brought PDF is answered one page at a time: which page this drawing is, and of how many.
+            "pdf": ({"page": note["pdf"]["page"], "pages": note["pdf"]["pages"]}
+                    if (note := self.ds.notes.get(drawing, {})).get("pdf") else None),
             "can_enhance": self.can_enhance(view),
             "paper_scale": (round(view.transform["paper_scale"]) if view.transform else None),
         }
@@ -661,6 +702,8 @@ class Service:
                     store.write_text(json.dumps({"answer": ans.answer, "unit": ans.unit, "state": ans.state,
                                                  "confidence": ans.confidence, "method": ans.method, "evidence": ans.evidence,
                                                  "explanation": ans.explanation, "reason": ans.reason,
+                                                 # What working it out cost: said again each time the answer is shown again.
+                                                 "cost_usd": ans.cost_usd, "cost_note": "when it was first worked out",
                                                  "latency_ms": ans.latency_ms, "meta": ans.meta}), encoding="utf-8")
                 job["answer"] = ans
             except Exception as exc:  # the one waiting is told, whatever went wrong
@@ -696,14 +739,20 @@ class Service:
                 raise job["failed"]
             ans = job["answer"]
             if job["paid"]:  # another request already took this answer and its cost into the session's total
-                ans = Answer(**{**ans.__dict__, "cost_usd": 0.0})
+                ans = Answer(**{**ans.__dict__, "cost_usd": 0.0,
+                                "meta": {**ans.meta, "first_cost_usd": ans.cost_usd, "first_cost_note": "when it was first worked out"}})
             job["paid"] = True  # the first request to get the answer carries what it cost
             return ans
 
         return remembered
 
-    def upload(self, name: str, data: bytes) -> dict:
-        """Take in a drawing someone brings: an image or a PDF. Returns its summary."""
+    def upload(self, name: str, data: bytes, page: int = 0) -> dict:
+        """Take in what someone brings: an image, one page of a PDF, or an IFC model. Returns its summary.
+
+        A PDF is answered one page at a time, and each page is a drawing of its own: the first page
+        unless `page` (counted from 0) names another. The whole PDF is kept beside the first page, so
+        another page can be opened without sending the file again (`page_of_upload`).
+        """
         import pymupdf
         from PIL import Image
 
@@ -711,15 +760,37 @@ class Service:
             raise HTTPException(413, "a drawing can be at most 25 MB")
         ident = hashlib.sha1(data).hexdigest()[:12]
         UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+        stem = PurePosixPath(name or "drawing").stem[:80] or "drawing"
+        head = data[:2048].lstrip()
+        if head.startswith(b"ISO-10303-21"):
+            return self._take_in_model(stem, data, ident)
+        if PurePosixPath(name or "").suffix.lower() in (".dxf", ".dwg") or head.startswith((b"AC10", b"0\r\nSECTION", b"0\nSECTION")):
+            raise HTTPException(415, f"a DXF or DWG is answered from the catalogue only, where it comes with its plan: "
+                                     f"choose one there. A file you bring can be {BROUGHT_WORDS}.")
         image_path = UPLOADS_DIR / f"{ident}.png"
+        paged = None
         try:
             if data[:5] == b"%PDF-":
-                # The PDF is kept beside its picture: its own text layer is exact (sheet_text.py).
-                (UPLOADS_DIR / f"{ident}.pdf").write_bytes(data)
                 with pymupdf.open(stream=data, filetype="pdf") as doc:
-                    page = doc[0]
-                    zoom = min(5000 / max(page.rect.width, page.rect.height), 6.0)
-                    picture = Image.open(io.BytesIO(page.get_pixmap(matrix=pymupdf.Matrix(zoom, zoom), alpha=False).tobytes("png")))
+                    pages = len(doc)
+                    page = max(0, min(int(page), pages - 1))
+                    # The PDF is kept beside its picture: its own text layer is exact (sheet_text.py).
+                    whole = UPLOADS_DIR / f"{ident}.pdf"
+                    if not whole.is_file():
+                        whole.write_bytes(data)
+                    if page:  # another page: a drawing of its own, with that page alone kept beside its picture
+                        first, ident = ident, hashlib.sha1(data + f"|page={page}".encode()).hexdigest()[:12]
+                        image_path = UPLOADS_DIR / f"{ident}.png"
+                        with pymupdf.open() as one:
+                            one.insert_pdf(doc, from_page=page, to_page=page)
+                            one.save(UPLOADS_DIR / f"{ident}.pdf")
+                    else:
+                        first = ident
+                    if pages > 1:
+                        paged = {"first": first, "page": page, "pages": pages, "name": stem}
+                    sheet_page = doc[page]
+                    zoom = min(5000 / max(sheet_page.rect.width, sheet_page.rect.height), 6.0)
+                    picture = Image.open(io.BytesIO(sheet_page.get_pixmap(matrix=pymupdf.Matrix(zoom, zoom), alpha=False).tobytes("png")))
             else:
                 picture = Image.open(io.BytesIO(data))
                 picture.load()
@@ -730,18 +801,62 @@ class Service:
                 picture = flat
             picture = picture.convert("RGB")
         except Exception:
-            raise HTTPException(415, "this file is not an image or a PDF the app can read") from None
+            raise HTTPException(415, f"this file could not be read. A file you bring can be {BROUGHT_WORDS}.") from None
         if max(picture.size) > 6000:
             picture.thumbnail((6000, 6000), Image.Resampling.LANCZOS)
         picture.save(image_path)
         # The drawing is read as it came. Enlarging a scan with AI before reading it was measured
         # (scripts/eval_prepared_scans.py) and made the label engine worse where it is trusted most,
         # so the enlarged copy is only ever shown to the reader (see `enhanced`).
-        note: dict = {"title": PurePosixPath(name or "drawing").stem[:80] or "drawing", "size": list(picture.size)}
+        note: dict = {"title": f"{stem} · page {paged['page'] + 1}" if paged else stem, "size": list(picture.size)}
+        if paged:
+            note["pdf"] = paged
         (UPLOADS_DIR / f"{ident}.json").write_text(json.dumps(note, ensure_ascii=False), encoding="utf-8")
         drawing = self.ds.add(image_path, note)
         for key in [k for k in self._views if k[0] == drawing]:
             del self._views[key]
+        return self.summary(drawing)
+
+    def page_of_upload(self, drawing: str, page: int) -> dict:
+        """Another page of the PDF a brought drawing is a page of, as a drawing of its own. Returns its summary."""
+        paged = self.ds.notes.get(drawing, {}).get("pdf")
+        whole = UPLOADS_DIR / f"{paged['first']}.pdf" if paged else None
+        if whole is None or not whole.is_file():
+            raise HTTPException(409, "this drawing is not a page of a PDF that was brought here")
+        if not 0 <= int(page) < paged["pages"]:
+            raise HTTPException(400, f"this PDF has pages 1 to {paged['pages']}")
+        return self.upload(paged["name"], whole.read_bytes(), int(page))
+
+    def _take_in_model(self, stem: str, data: bytes, ident: str) -> dict:
+        """A brought IFC model: answered by the same queries as the catalogue's models, shown in 3D.
+
+        Its answers are never Verified: no error rate was measured for IFC answers (verify.py), brought or not.
+        """
+        import ifcopenshell
+
+        path = UPLOADS_DIR / f"{ident}.ifc"
+        path.write_bytes(data)
+        try:
+            model = ifcopenshell.open(str(path))
+            products = len(model.by_type("IfcProduct"))
+        except Exception:
+            products = 0
+        if not products:
+            path.unlink(missing_ok=True)
+            raise HTTPException(415, "this IFC file could not be read, or holds no building elements")
+        note = {"title": stem, "model": True, "bytes": len(data), "products": products}
+        (UPLOADS_DIR / f"{ident}.json").write_text(json.dumps(note, ensure_ascii=False), encoding="utf-8")
+        drawing = self.ds.add(path, note)
+        for key in [k for k in self._views if k[0] == drawing]:
+            del self._views[key]
+
+        def read_ahead() -> None:  # the first question finds the model already read
+            try:
+                ifc._index(path)
+            except Exception:
+                pass
+
+        threading.Thread(target=read_ahead, daemon=True).start()
         return self.summary(drawing)
 
     def can_enhance(self, view: View) -> bool:
@@ -930,7 +1045,9 @@ class Service:
             self.spent_eur += config.usd_to_eur(cost)
         note = {"question": None, "reason": query.reading, "model": query.model, "twice": True,
                 "readers": [query.model, second.model],  # who read it: two different models when Gemma took the second reading
-                "cost_eur": round(config.usd_to_eur(cost), 6), "latency_ms": round(query.latency_ms if fresh else 0.0, 1)}
+                "cost_eur": round(config.usd_to_eur(cost), 6), "latency_ms": round(query.latency_ms if fresh else 0.0, 1),
+                # A kept pair of readings is free to use again; what the two readings cost when made is still said.
+                "fresh": fresh, "first_cost_eur": round(config.usd_to_eur(query.cost_usd or 0.0), 6)}
         if query.error or query.cannot:
             return None, note
         if query.measure == "count_items" and not query.rooms and query.item in plan_query.ITEM_QUESTIONS:
@@ -975,7 +1092,9 @@ class Service:
             self.spent_eur += config.usd_to_eur(cost)
         note = {"question": None, "reason": query.reading, "model": query.model, "twice": True,
                 "readers": [query.model, second.model],  # who read it: two different models when Gemma took the second reading
-                "cost_eur": round(config.usd_to_eur(cost), 6), "latency_ms": round(query.latency_ms if fresh else 0.0, 1)}
+                "cost_eur": round(config.usd_to_eur(cost), 6), "latency_ms": round(query.latency_ms if fresh else 0.0, 1),
+                # A kept pair of readings is free to use again; what the two readings cost when made is still said.
+                "fresh": fresh, "first_cost_eur": round(config.usd_to_eur(query.cost_usd or 0.0), 6)}
         if query.error or query.cannot:
             return None, note
         ans = model_query.run(query, index, ifc._element, dict(method=ifc.METHOD, cost_usd=0.0))
@@ -1063,6 +1182,19 @@ class Service:
                 ans = verify.apply(router.confirmed(ans, other), self.thresholds)
                 can_confirm = False
         latency = ans.latency_ms if ans.latency_ms else (time.perf_counter() - t0) * 1000
+        # Two different sums of money. `first`: what working this answer out cost (the inference), whenever
+        # that was. `now`: what this request added. An answer shown again adds nothing, and its inference
+        # cost is still the figure to set beside another system's; None where it was never recorded.
+        now_usd = ans.cost_usd or 0.0
+        first_usd, cost_note = now_usd, None
+        if "first_cost_usd" in ans.meta:  # kept from an earlier asking
+            first_usd, cost_note = ans.meta["first_cost_usd"], ans.meta.get("first_cost_note")
+        elif replayed:  # a logged run's answer: the row carries what it cost then
+            now_usd, cost_note = 0.0, "in the logged run"
+        elif restated is not None and restated.get("fresh") is False and restated.get("first_cost_eur"):
+            # An exact engine ran a kept reading of the question: the engine is free, the reading was paid for once.
+            first_usd, cost_note = now_usd + restated["first_cost_eur"] * config.USD_PER_EUR, "when the question was first read"
+        again = cost_note is not None or bool(ans.meta.get("shown_again"))
         view = self.view(drawing)
         out = {
             "question": text,
@@ -1074,7 +1206,11 @@ class Service:
             "method": ans.method,
             "engine": _engine_label(ans.method),
             "confidence": ans.confidence,
-            "cost_eur": round(config.usd_to_eur(ans.cost_usd or 0.0), 6),
+            # `cost_eur`: the inference (None: an answer kept before costs were recorded). `spent_now_eur`: this request.
+            "cost_eur": None if first_usd is None else round(config.usd_to_eur(first_usd), 6),
+            "spent_now_eur": round(config.usd_to_eur(now_usd), 6),
+            "replayed": again,
+            "cost_note": cost_note,
             "latency_ms": round(latency, 1),
             "replayed_from": replayed,
             "interpreted": ans.meta.get("interpreted"),
@@ -1121,9 +1257,8 @@ class Service:
                                    "model": (base.get("meta") or {}).get("model"), "run_id": base["run_id"]}
         # The log of questions asked (ledger.py): what was asked and how it ended, never who asked.
         ledger.record(drawing=drawing, source=asked.source, question=text, state=ans.state, answer=ans.answer, unit=ans.unit,
-                      engine=out["engine"], method=ans.method, cost_eur=out["cost_eur"],
-                      alone_eur=(out["baseline"] or {}).get("cost_eur"), latency_ms=int(latency),
-                      replayed=bool(replayed) or bool(ans.meta.get("shown_again")))
+                      engine=out["engine"], method=ans.method, cost_eur=out["spent_now_eur"], first_cost_eur=out["cost_eur"],
+                      alone_eur=(out["baseline"] or {}).get("cost_eur"), latency_ms=int(latency), replayed=again)
         return out
 
     def _family_stats(self, ans: Answer) -> dict | None:
@@ -1436,12 +1571,20 @@ def _kept_file(q: Question) -> Path:
 
 
 def _kept_answer(q: Question) -> Answer | None:
-    """A model answer already paid for: from the answers that come with the example sheets, or from the cache."""
+    """A model answer already paid for: from the answers that come with the example sheets, or from the cache.
+
+    Showing it again spends nothing (`cost_usd` is 0), but what working it out cost is not forgotten: it
+    travels in `meta` (`first_cost_usd`, None where it was never recorded, and `first_cost_note`, where
+    the figure comes from), so the reader is shown the cost of the inference and not a free replay.
+    """
     store = _kept_file(q)
     for kept_file in (EXAMPLES_DIR / "answers" / store.name, store):
         if kept_file.is_file():
             kept = json.loads(kept_file.read_text(encoding="utf-8"))
-            return Answer(**{**kept, "cost_usd": 0.0, "meta": {**kept.get("meta", {}), "shown_again": True}})
+            first, note = kept.pop("cost_usd", None), kept.pop("cost_note", None)
+            return Answer(**{**kept, "cost_usd": 0.0,
+                             "meta": {**kept.get("meta", {}), "shown_again": True,
+                                      "first_cost_usd": first, "first_cost_note": note if first is not None else None}})
     return None
 
 
@@ -1626,8 +1769,17 @@ def create_app(dataset_root: Path | str | None = None) -> FastAPI:
         return {"text": progress.get(asked.qid)}
 
     @app.post("/api/upload")
-    async def upload(request: Request, name: str = "drawing") -> dict:
-        return service.upload(name, await request.body())
+    async def upload(request: Request, name: str = "drawing", page: int = 0) -> dict:
+        return service.upload(name, await request.body(), page)
+
+    @app.post("/api/upload/page")
+    def upload_page(body: dict) -> dict:
+        """Another page of a brought PDF, opened as a drawing of its own (pages count from 0)."""
+        try:
+            page = int(body.get("page", 0))
+        except (TypeError, ValueError):
+            raise HTTPException(400, "page must be a number") from None
+        return service.page_of_upload(need(str(body.get("drawing", ""))), page)
 
     @app.get("/api/enhanced")
     def enhanced(drawing: str) -> dict:
@@ -1667,6 +1819,7 @@ def create_app(dataset_root: Path | str | None = None) -> FastAPI:
     def stats() -> dict:
         return service.stats()
 
+    blind.mount(app, service)  # the blind-trial page and its API (blind.py)
     dist = config.REPO_ROOT / "web" / "dist"
     if dist.is_dir():
         app.mount("/", StaticFiles(directory=dist, html=True), name="web")

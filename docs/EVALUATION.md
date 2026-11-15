@@ -63,6 +63,22 @@ python scripts/bench_examples.py            # Stoa's four sample sheets: the sys
 
 Stoa posted four sheets without answers. `examples/stoa/questions.jsonl` holds 27 questions on them with **an answer key of our own**; each line says where its answer comes from. The key is ours, not Stoa's, and one entry changed during the event: the 150 mm slab's area was the plain rectangle (61.69 m²) until we saw that two trenches are cut into the slab; it is now the area with them taken out (59.27 m²).
 
+### What the 27 of 27 does not cover
+
+The key holds questions whose answer a person can read off the sheet in a minute. It leaves out the three answers the demo shows off on the school plan, because nobody counted or measured them by hand first:
+
+| Shown in the demo | What we know | What we do not know |
+| --- | --- | --- |
+| Every door on the school plan | The kept answer is 118, with 5 more boxed in one pass only and drawn as doubtful. A fresh run of the same question on 15 Nov 2026 gave 122. It is marked Check this. | The true count. Two runs of the system differ by four. |
+| The Multi-Purpose Hall's floor area, measured on the sheet | 245.0 m², and the same again on a fresh run; 244.14 m² when only a door's width is given as the ruler. | Whether 245 m² is right: no figure for it is printed on the sheet. |
+| The hall's baseboard length | 50.4 m, and the same again on a fresh run. | The same. |
+
+The fresh runs are in `results/kept_costs/` (they were made to measure what each kept answer costs to work out: `scripts/kept_costs.py`). Repeating an answer shows it is stable, not that it is right. The test that settles it is a blind trial: a person makes the key before the system answers, the system and the vision model alone then answer once each, and three people who do not know the system check its answer against the clock. The rig is built into the app (`/blind`) and described in [BLIND-TRIAL.md](BLIND-TRIAL.md). **No trial has been run by people yet**, so nothing is claimed from it.
+
+### What an answer costs, and what showing it again costs
+
+An example's answer comes with the app, so opening it spends nothing. That zero is never the figure set beside another system's cost. Each kept answer carries the cost of its inference and where the figure comes from: the question log's row from when it was first worked out, a benchmark run of the same question (`results/stoa_sheets/`), or one fresh run made to measure it (`results/kept_costs/`, €0.38 in all for five answers). The 14 example answers cost between €0.015 and €0.24 each to work out; the tiled door count is the dearest. A vision model alone is set beside ours only on questions that were themselves put to it.
+
 ## What is not solved
 
 - Nothing on a scan is Verified, and scans are two thirds of the dataset's questions.

@@ -50,7 +50,7 @@ Python (FastAPI, IfcOpenShell, ezdxf, Shapely, PyMuPDF, OpenCV, RapidOCR), React
 - **Best Use of Cloudinary:** AI super-resolution for viewing small scans, and hosting of shareable evidence sheets. Their rules also ask for their survey (https://cld.media/hackathon-survey).
 - **Best Use of ElevenLabs:** answers read aloud in the app.
 - **Aiven:** every question asked on the demo is logged in Aiven for PostgreSQL (never who asked) and read back as live figures on the Numbers page.
-- **Best use of CRACI:** tests, the web build and an accuracy regression of the exact engines on every push, on CRACI's runners (`.github/workflows/ci.yml`).
+- **Best use of CRACI:** only if the CI is seen running on CRACI's runners before submitting. The workflow is migrated (tests, the web build and an accuracy regression of the exact engines on every push; `.github/workflows/ci.yml`, switch `CI_RUNNER=craci`), but CRACI's GitHub connection is for an organisation and does not cover the repository on a personal account, so today the jobs run on GitHub's runners. Do not tick this challenge unless that changes.
 
 ## Video and deck
 

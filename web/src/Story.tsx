@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { api, type AskResult, type DrawingDetail, type Evidence, formatValue, headlineRun, places, type Run, type Stats } from "./api";
+import { api, type AskResult, BRING_ACCEPT, BRING_NOTE, type DrawingDetail, type Evidence, formatValue, headlineRun, places, type Run, type Stats } from "./api";
 import { type Stop, TOUR } from "./tour";
 import { type Direction, type Highlight, tintOf, Viewer3D } from "./Viewer3D";
 
@@ -478,11 +478,12 @@ export function Story({ stats, onOpen, onAsk, onBrowse, onBring, onTalk, canTalk
             <div className="actions">
               <button className="primary" onClick={() => onOpen(STOP)}>Try it on this drawing</button>
               <button className="quiet" onClick={onBrowse}>Browse all drawings →</button>
-              <label className="quiet bring">
+              <label className="quiet bring" title={BRING_NOTE}>
                 Bring your own →
-                <input type="file" accept="image/*,application/pdf" onChange={(e) => { const file = e.target.files?.[0]; if (file) onBring(file); e.target.value = ""; }} />
+                <input type="file" accept={BRING_ACCEPT} onChange={(e) => { const file = e.target.files?.[0]; if (file) onBring(file); e.target.value = ""; }} />
               </label>
             </div>
+            <p className="bring-says">Bring your own: {BRING_NOTE.charAt(0).toLowerCase() + BRING_NOTE.slice(1)}</p>
           </article>
         </div>
 

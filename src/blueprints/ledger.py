@@ -20,8 +20,10 @@ import time
 from urllib.parse import unquote, urlparse
 
 URL_VAR = "KAAVA_PG_URL"
-FIELDS = ("drawing", "source", "question", "state", "answer", "unit", "engine", "method", "cost_eur", "alone_eur",
-          "latency_ms", "replayed", "app_build")
+# `cost_eur`: what this request spent (nothing when an answer is shown again). `first_cost_eur`: what working
+# the answer out cost, whenever that was; this is the figure to set beside another system's cost.
+FIELDS = ("drawing", "source", "question", "state", "answer", "unit", "engine", "method", "cost_eur", "first_cost_eur",
+          "alone_eur", "latency_ms", "replayed", "app_build")
 TABLE_SQL = """CREATE TABLE IF NOT EXISTS kaava.answers (
     id bigserial PRIMARY KEY,
     asked_at timestamptz NOT NULL DEFAULT now(),
@@ -29,11 +31,15 @@ TABLE_SQL = """CREATE TABLE IF NOT EXISTS kaava.answers (
     state text NOT NULL, answer text, unit text, engine text, method text,
     cost_eur numeric(10,6) NOT NULL DEFAULT 0, alone_eur numeric(10,6),
     latency_ms integer, replayed boolean NOT NULL DEFAULT false, app_build text)"""
+# Added after the table was first made; rows from before it have no figure here.
+COLUMN_SQL = "ALTER TABLE kaava.answers ADD COLUMN IF NOT EXISTS first_cost_eur numeric(10,6)"
 INSERT_SQL = (f"INSERT INTO kaava.answers ({', '.join(FIELDS)}) VALUES ({', '.join(':' + f for f in FIELDS)})")
 SUMMARY_SQL = """SELECT count(*), count(*) FILTER (WHERE state = 'verified'), count(*) FILTER (WHERE state = 'check'),
-    count(*) FILTER (WHERE state = 'declined'), coalesce(sum(cost_eur), 0), coalesce(sum(alone_eur), 0),
-    count(*) FILTER (WHERE alone_eur IS NOT NULL), coalesce(sum(cost_eur) FILTER (WHERE alone_eur IS NOT NULL), 0),
-    count(DISTINCT drawing), min(asked_at), max(asked_at), count(*) FILTER (WHERE cost_eur = 0)
+    count(*) FILTER (WHERE state = 'declined'), coalesce(sum(cost_eur) FILTER (WHERE NOT replayed), 0),
+    coalesce(sum(alone_eur), 0), count(*) FILTER (WHERE alone_eur IS NOT NULL),
+    coalesce(sum(coalesce(first_cost_eur, cost_eur)) FILTER (WHERE alone_eur IS NOT NULL), 0),
+    count(DISTINCT drawing), min(asked_at), max(asked_at), count(*) FILTER (WHERE replayed OR cost_eur = 0),
+    count(*) FILTER (WHERE replayed)
     FROM kaava.answers"""
 SUMMARY_FOR_S = 30.0  # the live figures are read at most this often
 
@@ -77,6 +83,7 @@ def _write_forever() -> None:
             if connection is None:
                 connection = _connect()
                 connection.run(TABLE_SQL)
+                connection.run(COLUMN_SQL)
             connection.run(INSERT_SQL, **{field: row.get(field) for field in FIELDS})
             last_error = None
         except Exception as exc:  # the log must never take the app down with it
@@ -122,12 +129,15 @@ def summary() -> dict | None:
         connection = _connect()
         try:
             connection.run(TABLE_SQL)
-            (asked, verified, check, declined, spent, alone, compared, spent_compared, drawings, first, last, free), = connection.run(SUMMARY_SQL)
+            connection.run(COLUMN_SQL)
+            (asked, verified, check, declined, spent, alone, compared, spent_compared, drawings, first, last, free,
+             again), = connection.run(SUMMARY_SQL)
         finally:
             connection.close()
         kept = {"asked": asked, "verified": verified, "check": check, "declined": declined, "free": free,
-                "spent_eur": round(float(spent), 4), "drawings": drawings,
-                # Only where the same question was also put to the vision model alone: what each cost.
+                # Money this app spent: an answer shown again spends nothing and is not counted here.
+                "spent_eur": round(float(spent), 4), "drawings": drawings, "shown_again": again,
+                # Only where the same question was also put to the vision model alone: what the inference of each cost.
                 "compared": compared, "spent_compared_eur": round(float(spent_compared), 4), "alone_eur": round(float(alone), 4),
                 "since": first.isoformat() if first else None, "latest": last.isoformat() if last else None,
                 "kept_in": "Aiven for PostgreSQL"}

@@ -1,0 +1,539 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Blind trial · Kaava</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 28 22'%3E%3Cpath fill='%23011e01' d='M9 1h18l-4.5 7H4.5zM5.5 14h18L19 21H1z'/%3E%3C/svg%3E">
+<!-- One page, three roles: the marker makes the key (?d=<drawing>), the trial is run and read (?t=<trial>),
+     and a verifier checks the answer against the clock (?t=<trial>&verify=1). Its API is in blind.py. -->
+<style>
+  :root {
+    --bt-page: #f2f3f5; --bt-surface: #fff; --bt-sunken: #f6f7f8; --bt-line: #e4e6e8; --bt-line-2: #d3d6d9;
+    --bt-ink: #011e01; --bt-ink-2: #2c412b; --bt-ink-3: #617061; --bt-mark: #c46103; --bt-mark-wash: #fff3ea;
+    --bt-ok: #2d802a; --bt-ok-bg: #ecf8ea; --bt-stop: #b14142; --bt-stop-bg: #ffeeed; --bt-miss: #2f55c7; --bt-miss-bg: #ecf0fd;
+    --bt-warn: #8c6400; --bt-warn-bg: #fbf3e4;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { background: var(--bt-page); color: var(--bt-ink); font: 400 15px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  h1, h2, h3, p { margin: 0; }
+  a { color: inherit; }
+  .bt-top { display: flex; align-items: center; gap: 12px; height: 56px; padding: 0 20px; background: var(--bt-surface); border-bottom: 1px solid var(--bt-line); position: sticky; top: 0; z-index: 5; }
+  .bt-brand { display: flex; align-items: center; gap: 9px; text-decoration: none; font-weight: 650; letter-spacing: -0.02em; font-size: 17px; }
+  .bt-brand svg { width: 24px; height: 19px; fill: var(--bt-ink); }
+  .bt-tag { font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--bt-ink-3); border: 1px solid var(--bt-line-2); border-radius: 999px; padding: 2px 10px; }
+  .bt-main { max-width: 1240px; margin: 0 auto; padding: 20px 16px 64px; display: grid; gap: 16px; }
+  .bt-split { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; align-items: start; }
+  .bt-card { background: var(--bt-surface); border: 1px solid var(--bt-line); border-radius: 12px; padding: 18px; display: grid; gap: 12px; }
+  .bt-card h1 { font-size: 24px; letter-spacing: -0.025em; line-height: 1.2; }
+  .bt-card h2 { font-size: 16px; letter-spacing: -0.01em; }
+  .bt-muted { color: var(--bt-ink-3); font-size: 14px; }
+  .bt-small { font-size: 13px; color: var(--bt-ink-3); }
+  .bt-field { display: grid; gap: 5px; }
+  .bt-field > span { font-size: 13px; font-weight: 600; color: var(--bt-ink-2); }
+  .bt-field input, .bt-field select, .bt-field textarea { width: 100%; border: 1px solid var(--bt-line-2); border-radius: 8px; padding: 9px 11px; background: var(--bt-surface); min-height: 42px; }
+  .bt-field textarea { min-height: 70px; resize: vertical; }
+  .bt-field input:focus, .bt-field select:focus, .bt-field textarea:focus { outline: 2px solid var(--bt-ink); outline-offset: 1px; }
+  .bt-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .bt-btn { border: 1px solid var(--bt-line-2); background: var(--bt-surface); border-radius: 8px; padding: 9px 14px; min-height: 42px; cursor: pointer; font-weight: 550; }
+  .bt-btn:hover { background: var(--bt-sunken); }
+  .bt-btn:disabled { opacity: 0.45; cursor: default; }
+  .bt-btn.bt-main-btn { background: var(--bt-ink); border-color: var(--bt-ink); color: #fff; }
+  .bt-btn.bt-main-btn:hover { background: #0b3a0b; }
+  .bt-btn.bt-yes { background: var(--bt-ok-bg); border-color: var(--bt-ok); color: #1c5a1a; }
+  .bt-btn.bt-no { background: var(--bt-stop-bg); border-color: var(--bt-stop); color: #8a2c2d; }
+  .bt-chip { border: 1px solid var(--bt-line-2); background: var(--bt-sunken); border-radius: 999px; padding: 5px 12px; font-size: 13px; cursor: pointer; }
+  .bt-chip:hover { border-color: var(--bt-ink-3); }
+  .bt-check { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; }
+  .bt-check input { width: 20px; height: 20px; margin-top: 2px; flex: none; }
+  .bt-sheet { position: relative; height: min(72vh, 820px); min-height: 320px; background: #fff; border: 1px solid var(--bt-line); border-radius: 12px; overflow: hidden; touch-action: none; cursor: grab; user-select: none; -webkit-user-select: none; }
+  .bt-sheet.bt-marking { cursor: crosshair; }
+  .bt-stage { position: absolute; left: 0; top: 0; transform-origin: 0 0; will-change: transform; }
+  .bt-stage img { display: block; width: 100%; height: 100%; pointer-events: none; -webkit-user-drag: none; }
+  .bt-stage svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+  .bt-zoom { position: absolute; right: 10px; bottom: 10px; display: flex; gap: 6px; }
+  .bt-zoom button { width: 42px; height: 42px; border-radius: 8px; border: 1px solid var(--bt-line-2); background: rgb(255 255 255 / 0.94); font-size: 18px; cursor: pointer; }
+  .bt-zoom button.bt-fit { width: auto; padding: 0 12px; font-size: 14px; }
+  .bt-hint { position: absolute; left: 10px; top: 10px; background: rgb(255 255 255 / 0.94); border: 1px solid var(--bt-line-2); border-radius: 8px; padding: 4px 10px; font-size: 13px; color: var(--bt-ink-2); pointer-events: none; }
+  .bt-cover { position: absolute; inset: 0; background: var(--bt-sunken); display: grid; place-items: center; text-align: center; padding: 24px; color: var(--bt-ink-3); }
+  .bt-count { font-size: 34px; font-weight: 650; letter-spacing: -0.03em; line-height: 1; font-variant-numeric: tabular-nums; }
+  .bt-asked { grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 12px 32px; }
+  .bt-answer { font-size: 40px; font-weight: 650; letter-spacing: -0.03em; line-height: 1.05; font-variant-numeric: tabular-nums; }
+  .bt-state { display: inline-block; font-size: 12px; font-weight: 650; border-radius: 999px; padding: 2px 10px; }
+  .bt-state.bt-s-verified, .bt-state.bt-s-correct { background: var(--bt-ok-bg); color: #1c5a1a; }
+  .bt-state.bt-s-check { background: var(--bt-warn-bg); color: var(--bt-warn); }
+  .bt-state.bt-s-declined, .bt-state.bt-s-wrong { background: var(--bt-stop-bg); color: #8a2c2d; }
+  .bt-table { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
+  .bt-table th { text-align: left; font-size: 12px; font-weight: 600; color: var(--bt-ink-3); padding: 6px 10px 6px 0; border-bottom: 1px solid var(--bt-line-2); white-space: nowrap; }
+  .bt-table td { padding: 9px 10px 9px 0; border-bottom: 1px solid var(--bt-line); vertical-align: top; }
+  .bt-table tr:last-child td { border-bottom: 0; }
+  .bt-scroll { overflow-x: auto; }
+  .bt-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: var(--bt-ink-2); }
+  .bt-legend i { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }
+  .bt-link { display: flex; gap: 8px; align-items: center; }
+  .bt-link input { flex: 1; min-width: 0; border: 1px solid var(--bt-line-2); border-radius: 8px; padding: 9px 11px; background: var(--bt-sunken); font-size: 13px; min-height: 42px; }
+  .bt-error { background: var(--bt-stop-bg); border: 1px solid var(--bt-stop); color: #8a2c2d; border-radius: 8px; padding: 10px 12px; font-size: 14px; }
+  .bt-note { background: var(--bt-mark-wash); border: 1px solid #f3d3b6; border-radius: 8px; padding: 10px 12px; font-size: 14px; color: #6b3a08; }
+  .bt-timer { font-variant-numeric: tabular-nums; font-size: 13px; color: var(--bt-ink-3); }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; background: var(--bt-sunken); border: 1px solid var(--bt-line); border-radius: 6px; padding: 2px 6px; word-break: break-all; }
+  details summary { cursor: pointer; font-weight: 600; font-size: 14px; }
+  details ol { margin: 8px 0 0; padding-left: 20px; font-size: 14px; color: var(--bt-ink-2); display: grid; gap: 6px; }
+  /* what is drawn on the sheet */
+  .bt-m circle { fill: var(--bt-ink); stroke: #fff; }
+  .bt-m text { fill: #fff; font-weight: 700; font-family: system-ui, sans-serif; }
+  .bt-m.bt-hit circle { fill: var(--bt-ok); }
+  .bt-m.bt-miss circle { fill: var(--bt-miss); }
+  .bt-e rect, .bt-e polygon, .bt-e circle { fill: rgb(196 97 3 / 0.13); stroke: var(--bt-mark); }
+  .bt-e text { fill: #7a3c00; font-weight: 700; font-family: system-ui, sans-serif; paint-order: stroke; stroke: rgb(255 255 255 / 0.9); stroke-linejoin: round; }
+  .bt-e.bt-extra rect, .bt-e.bt-extra polygon, .bt-e.bt-extra circle { fill: rgb(177 65 66 / 0.16); stroke: var(--bt-stop); stroke-dasharray: 6 4; }
+  .bt-e.bt-extra text { fill: #8a2c2d; }
+  .bt-e.bt-hole polygon { fill: rgb(255 255 255 / 0.6); stroke-dasharray: 5 4; }
+  .bt-c rect, .bt-c polygon { fill: none; stroke: #7b867b; stroke-dasharray: 3 4; }
+  @media (min-width: 901px) { .bt-split > div:first-child { position: sticky; top: 72px; } }
+  @media (max-width: 900px) {
+    .bt-split { grid-template-columns: minmax(0, 1fr); }
+    .bt-sheet { height: 58vh; }
+    .bt-main { padding: 12px 10px 56px; }
+    .bt-card { padding: 14px; }
+    .bt-answer { font-size: 34px; }
+    .bt-verdicts .bt-btn { flex: 1 1 100%; }
+    .bt-asked { grid-template-columns: minmax(0, 1fr); }
+  }
+</style>
+</head>
+<body>
+<header class="bt-top">
+  <a class="bt-brand" href="/" aria-label="Kaava, home">
+    <svg viewBox="0 0 28 22" aria-hidden="true"><path d="M9 1h18l-4.5 7H4.500z"/><path d="M5.500 14h18L19 21H1z"/></svg>
+    <span>Kaava</span>
+  </a>
+  <span class="bt-tag">Blind trial</span>
+</header>
+<main class="bt-main" id="bt-main"><p class="bt-muted">Loading…</p></main>
+
+<script>
+"use strict";
+const main = document.getElementById("bt-main");
+const params = new URLSearchParams(location.search);
+const UNITS = { count: "", m: " m", m2: " m²", m3: " m³" };
+const KINDS = [["count", "A count (each item marked)"], ["length", "A length, in metres"], ["area", "An area, in m²"], ["volume", "A volume, in m³"]];
+const PRESETS = [
+  ["Count the doors", "How many doors are shown on this floor plan?", "count"],
+  ["Count the windows", "How many windows are shown on this floor plan?", "count"],
+  ["Baseboard length", "How many linear metres of baseboard are needed in ", "length"],
+  ["Floor area", "What is the floor area of ", "area"],
+];
+
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const el = (html) => { const t = document.createElement("template"); t.innerHTML = html.trim(); return t.content.firstElementChild; };
+const show = (...nodes) => { main.replaceChildren(...nodes.filter(Boolean)); };
+const num = (v, unit) => v === null || v === undefined ? "no number"
+  : typeof v !== "number" ? esc(v) : (Number.isInteger(v) ? String(v) : v.toFixed(2)) + (UNITS[unit] ?? (unit ? " " + esc(unit) : ""));
+const euro = (v) => v === null || v === undefined ? "not recorded" : v === 0 ? "€0" : v < 0.01 ? "€" + v.toFixed(4) : "€" + v.toFixed(3);
+const secs = (ms) => ms === null || ms === undefined ? "not recorded" : ms < 1000 ? Math.round(ms) + " ms" : (ms / 1000).toFixed(1) + " s";
+const when = (iso) => { try { return new Date(iso).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }); } catch { return iso; } };
+const STATUS = { correct: "matches the key", wrong: "differs from the key", declined: "no number", ungraded: "not scored", abstained: "no number" };
+const STATE = { verified: "Verified", check: "Check this", declined: "Can't answer reliably" };
+
+async function api(path, body) {
+  const res = await fetch(path, body === undefined ? undefined : { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  let data = null;
+  try { data = await res.json(); } catch { /* an empty or non-JSON reply */ }
+  if (!res.ok) throw new Error((data && (typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail))) || `the server answered ${res.status}`);
+  return { status: res.status, data };
+}
+
+/* ---------------------------------------------------------------- the sheet: pan, zoom, tap */
+function makeViewer(host, image, onTap) {
+  const W = image.width, H = image.height;
+  host.innerHTML = `<div class="bt-stage" style="width:${W}px;height:${H}px"><img alt="The drawing" draggable="false">
+    <svg viewBox="0 0 ${W} ${H}" aria-hidden="true"></svg></div>
+    <div class="bt-zoom"><button type="button" data-z="out" aria-label="Zoom out">−</button><button type="button" data-z="in" aria-label="Zoom in">+</button><button type="button" class="bt-fit" data-z="fit">Fit</button></div>`;
+  const stage = host.querySelector(".bt-stage"), img = stage.querySelector("img"), svg = stage.querySelector("svg");
+  let s = 1, tx = 0, ty = 0, least = 0.05, draw = () => "";
+  const apply = () => { stage.style.transform = `translate(${tx}px,${ty}px) scale(${s})`; svg.innerHTML = draw(s); };
+  const fit = () => {
+    const r = host.getBoundingClientRect();
+    s = Math.min(r.width / W, r.height / H) * 0.98; least = s * 0.6;
+    tx = (r.width - W * s) / 2; ty = (r.height - H * s) / 2; apply();
+  };
+  const zoomAt = (cx, cy, factor) => {
+    const r = host.getBoundingClientRect(), x = cx - r.left, y = cy - r.top;
+    const next = Math.max(least, Math.min(10, s * factor));
+    tx = x - (x - tx) * next / s; ty = y - (y - ty) * next / s; s = next; apply();
+  };
+  const pts = new Map();
+  let moved = 0, downAt = 0;
+  host.addEventListener("pointerdown", (e) => {
+    if (e.target.closest(".bt-zoom")) return;
+    try { host.setPointerCapture(e.pointerId); } catch { /* not every pointer can be captured */ }
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pts.size === 1) { moved = 0; downAt = performance.now(); } else moved = 1e6;  // a second finger: never a tap
+  });
+  host.addEventListener("pointermove", (e) => {
+    const p = pts.get(e.pointerId);
+    if (!p) return;
+    if (pts.size === 1) {
+      const dx = e.clientX - p.x, dy = e.clientY - p.y;
+      moved += Math.abs(dx) + Math.abs(dy);
+      if (moved > 8) { tx += dx; ty += dy; apply(); }
+    } else if (pts.size === 2) {
+      const [a, b] = [...pts.entries()].map(([id, q]) => (id === e.pointerId ? { x: e.clientX, y: e.clientY } : q));
+      const [a0, b0] = [...pts.values()];
+      const before = Math.hypot(a0.x - b0.x, a0.y - b0.y), after = Math.hypot(a.x - b.x, a.y - b.y);
+      const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+      tx += mx - (a0.x + b0.x) / 2; ty += my - (a0.y + b0.y) / 2;
+      if (before > 0) zoomAt(mx, my, after / before); else apply();
+    }
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  });
+  const lift = (e) => {
+    if (!pts.has(e.pointerId)) return;
+    const tap = pts.size === 1 && moved <= 8 && performance.now() - downAt < 800 && e.type === "pointerup";
+    pts.delete(e.pointerId);
+    if (tap && onTap) {
+      const r = host.getBoundingClientRect(), x = (e.clientX - r.left - tx) / s, y = (e.clientY - r.top - ty) / s;
+      if (x >= 0 && y >= 0 && x <= W && y <= H) onTap(x, y, s);
+    }
+  };
+  host.addEventListener("pointerup", lift);
+  host.addEventListener("pointercancel", lift);
+  host.addEventListener("wheel", (e) => { e.preventDefault(); zoomAt(e.clientX, e.clientY, Math.exp(-e.deltaY * 0.0016)); }, { passive: false });
+  host.querySelector(".bt-zoom").addEventListener("click", (e) => {
+    const z = e.target.closest("button")?.dataset.z;
+    const r = host.getBoundingClientRect();
+    if (z === "fit") fit(); else if (z) zoomAt(r.left + r.width / 2, r.top + r.height / 2, z === "in" ? 1.5 : 1 / 1.5);
+  });
+  window.addEventListener("resize", fit);
+  const loaded = new Promise((done) => { img.onload = () => done(true); img.onerror = () => done(false); });
+  img.src = image.url;
+  fit();
+  return { loaded, fit, redraw: apply, setDraw(fn) { draw = fn; apply(); } };
+}
+
+// A numbered dot that stays the same size on screen whatever the zoom.
+const dot = (x, y, n, cls, s) => `<g class="bt-m ${cls}"><circle cx="${x}" cy="${y}" r="${11 / s}" stroke-width="${2 / s}"/>` +
+  `<text x="${x}" y="${y}" dy="${3.9 / s}" font-size="${11 / s}" text-anchor="middle">${n}</text></g>`;
+
+// The items an answer shows, in the sheet's pixels. `extra` holds the numbers of items no key mark matches.
+function evidenceSvg(items, s, extra) {
+  const out = [], w = 2 / s, font = 13 / s;
+  // On a crowded sheet seen whole, numbers would hide the items: they appear once an item is large enough on screen.
+  const crowded = (items || []).length > 40;
+  const label = (x, y, n, size) => n === undefined || n === null || (crowded && size * s < 16) ? ""
+    : `<text x="${x}" y="${y - 4 / s}" font-size="${font}" stroke-width="${3 / s}">${n}</text>`;
+  for (const it of items || []) {
+    const pts = (ring) => ring.map(([x, y]) => `${x},${y}`).join(" ");
+    if (it.kind === "context") {
+      if (it.bbox) out.push(`<g class="bt-c"><rect x="${it.bbox[0]}" y="${it.bbox[1]}" width="${it.bbox[2] - it.bbox[0]}" height="${it.bbox[3] - it.bbox[1]}" stroke-width="${w}"/></g>`);
+      else if (it.points) out.push(`<g class="bt-c"><polygon points="${pts(it.points)}" stroke-width="${w}"/></g>`);
+      continue;
+    }
+    if (!["box", "polygon", "point", "element"].includes(it.kind)) continue;
+    const cls = "bt-e" + (extra && extra.has(it.n) ? " bt-extra" : "");
+    if (it.bbox) {
+      const [x0, y0, x1, y1] = it.bbox;
+      out.push(`<g class="${cls}"><rect x="${x0}" y="${y0}" width="${x1 - x0}" height="${y1 - y0}" stroke-width="${w}"/>${label(x0, y0, it.n, Math.max(x1 - x0, y1 - y0))}</g>`);
+    } else if (it.points) {
+      out.push(`<g class="${cls}"><polygon points="${pts(it.points)}" stroke-width="${w}"/>${label(it.points[0][0], it.points[0][1], it.n, 1e9)}</g>`);
+      for (const hole of it.holes || []) out.push(`<g class="bt-e bt-hole"><polygon points="${pts(hole)}" stroke-width="${w}"/></g>`);
+    } else if (it.x !== undefined && it.x !== null) {
+      out.push(`<g class="${cls}"><circle cx="${it.x}" cy="${it.y}" r="${9 / s}" stroke-width="${w}"/>${label(it.x + 10 / s, it.y, it.n, 1e9)}</g>`);
+    }
+  }
+  return out.join("");
+}
+
+/* ---------------------------------------------------------------- start: which drawing */
+function landing(message) {
+  const card = el(`<section class="bt-card">
+    <h1>A blind trial</h1>
+    <p>One question on one drawing, answered by a person first. The marker marks each item on the sheet (or enters what they measured) without having seen Kaava's answer, and locks that as the key. Then Kaava and the vision model alone answer once each, and three people who do not know Kaava check its answer against the clock.</p>
+    ${message ? `<p class="bt-error">${esc(message)}</p>` : ""}
+    <label class="bt-field"><span>The drawing: its id, or its address copied from the app</span>
+      <input id="bt-d" placeholder="uploads/1a2b3c4d5e6f  or  https://…/#d=uploads%2F1a2b3c4d5e6f" autocomplete="off"></label>
+    <div class="bt-row"><button class="bt-btn bt-main-btn" id="bt-go" type="button">Make the key for this drawing</button></div>
+    <p class="bt-small">A fresh sheet is the point: bring one into the app first ("Bring your own"), without asking it anything, then copy its address here. To open a trial that exists, use its link.</p>
+  </section>`);
+  const go = () => {
+    let value = card.querySelector("#bt-d").value.trim();
+    // The app keeps the drawing after the # of its address; this page after the ?.
+    try { const url = new URL(value); value = new URLSearchParams(url.hash.replace(/^#/, "")).get("d") || url.searchParams.get("d") || value; } catch { /* a plain id */ }
+    if (value) location.href = `/blind?d=${encodeURIComponent(value)}`;
+  };
+  card.querySelector("#bt-go").onclick = go;
+  card.querySelector("#bt-d").onkeydown = (e) => { if (e.key === "Enter") go(); };
+  show(card);
+}
+
+/* ---------------------------------------------------------------- the marker: making the key */
+async function keyMode(drawing) {
+  let detail;
+  try { detail = (await api(`/api/drawing?drawing=${encodeURIComponent(drawing)}`)).data; }
+  catch (err) { return landing(`This drawing could not be opened: ${err.message}`); }
+  if (!detail.view || detail.view.kind === "none" || !detail.view.url)
+    return landing("This drawing is a model with no sheet to mark. A blind trial needs a sheet.");
+  const marks = [];
+  let typed = false;
+  const page = el(`<div class="bt-split">
+    <div><div class="bt-sheet bt-marking" id="bt-sheet"></div></div>
+    <section class="bt-card">
+      <div><h1>Make the key</h1><p class="bt-muted">${esc(detail.title)}</p></div>
+      <p class="bt-note">Do this before you have seen Kaava's answer to this question on this sheet. Once locked, the key cannot be changed.</p>
+      ${params.get("rig") === "1" ? `<p class="bt-error">This is a test of the rig (rig=1): it is labelled as one and can never be exported as a result.</p>` : ""}
+      <label class="bt-field"><span>Who is marking</span><input id="bt-by" maxlength="60" placeholder="Name or initials" autocomplete="off"></label>
+      <label class="bt-field"><span>The question</span><textarea id="bt-q" maxlength="300" placeholder="The question Kaava will be asked, word for word"></textarea></label>
+      <div class="bt-row" id="bt-presets">${PRESETS.map(([name], i) => `<button type="button" class="bt-chip" data-i="${i}">${esc(name)}</button>`).join("")}</div>
+      <label class="bt-field"><span>What the answer is</span><select id="bt-kind">${KINDS.map(([k, name]) => `<option value="${k}">${esc(name)}</option>`).join("")}</select></label>
+      <div class="bt-row" style="justify-content:space-between">
+        <div><div class="bt-count" id="bt-n">0</div><div class="bt-small">marks on the sheet</div></div>
+        <div class="bt-row"><button type="button" class="bt-btn" id="bt-undo">Undo last</button><button type="button" class="bt-btn" id="bt-clear">Clear</button></div>
+      </div>
+      <p class="bt-small" id="bt-how-to">Tap each item on the sheet to mark it. Tap a mark to remove it. Drag to move the sheet, pinch or scroll to zoom.</p>
+      <label class="bt-field"><span id="bt-qty-label">The count</span><input id="bt-qty" inputmode="decimal" autocomplete="off" placeholder="0"></label>
+      <label class="bt-field"><span>How you got it (optional for a count)</span><textarea id="bt-how" maxlength="600" placeholder="For a measurement: which dimensions you read, what you added up"></textarea></label>
+      <label class="bt-check"><input type="checkbox" id="bt-unseen"><span>I have not seen Kaava's answer to this question on this sheet.</span></label>
+      <p class="bt-error" id="bt-err" hidden></p>
+      <button type="button" class="bt-btn bt-main-btn" id="bt-lock">Lock the key</button>
+    </section></div>`);
+  show(page);
+  const q = (id) => page.querySelector(id);
+  const viewer = makeViewer(q("#bt-sheet"), { width: detail.view.width, height: detail.view.height, url: detail.view.url }, (x, y, s) => {
+    const reach = 16 / s;
+    const hit = marks.findIndex(([mx, my]) => Math.hypot(mx - x, my - y) <= reach);
+    if (hit >= 0) marks.splice(hit, 1); else marks.push([Math.round(x * 10) / 10, Math.round(y * 10) / 10]);
+    refresh();
+  });
+  q("#bt-sheet").append(el(`<div class="bt-hint">Tap to mark · drag to move</div>`));
+  viewer.setDraw((s) => marks.map(([x, y], i) => dot(x, y, i + 1, "", s)).join(""));
+  function refresh() {
+    viewer.redraw();
+    q("#bt-n").textContent = marks.length;
+    const kind = q("#bt-kind").value;
+    q("#bt-qty-label").textContent = kind === "count" ? "The count" : `The measured ${kind}, in ${UNITS[{ length: "m", area: "m2", volume: "m3" }[kind]].trim()}`;
+    if (kind === "count" && !typed) q("#bt-qty").value = marks.length ? String(marks.length) : "";
+  }
+  q("#bt-qty").oninput = () => { typed = q("#bt-qty").value.trim() !== ""; };
+  q("#bt-kind").onchange = () => { typed = false; if (q("#bt-kind").value !== "count") q("#bt-qty").value = ""; refresh(); };
+  q("#bt-undo").onclick = () => { marks.pop(); refresh(); };
+  q("#bt-clear").onclick = () => { if (!marks.length || confirm("Remove every mark?")) { marks.length = 0; refresh(); } };
+  q("#bt-presets").onclick = (e) => {
+    const i = e.target.closest("button")?.dataset.i;
+    if (i === undefined) return;
+    q("#bt-q").value = PRESETS[i][1]; q("#bt-kind").value = PRESETS[i][2]; q("#bt-kind").onchange(); q("#bt-q").focus();
+  };
+  q("#bt-lock").onclick = async () => {
+    const err = q("#bt-err"), kind = q("#bt-kind").value, quantity = Number(q("#bt-qty").value.trim().replace(",", "."));
+    const fail = (text) => { err.textContent = text; err.hidden = false; };
+    err.hidden = true;
+    if (!q("#bt-by").value.trim()) return fail("Say who is marking.");
+    if (q("#bt-q").value.trim().length < 3) return fail("Write the question Kaava will be asked.");
+    if (q("#bt-qty").value.trim() === "" || !Number.isFinite(quantity)) return fail("The key needs its quantity.");
+    if (kind === "count" && marks.length && marks.length !== quantity && !confirm(`You placed ${marks.length} marks but the count says ${quantity}. Missed and added items can only be worked out when the marks are the whole count. Lock it anyway?`)) return;
+    if (!q("#bt-unseen").checked) return fail("Confirm that you have not seen Kaava's answer to this question on this sheet.");
+    if (!confirm("Lock this key? It cannot be changed afterwards.")) return;
+    q("#bt-lock").disabled = true;
+    try {
+      const made = (await api("/api/blind/key", { drawing, question: q("#bt-q").value, by: q("#bt-by").value, kind, quantity, marks, how: q("#bt-how").value, unseen: true, rig_test: params.get("rig") === "1" })).data;
+      location.href = `/blind?t=${encodeURIComponent(made.id)}`;
+    } catch (e) { fail(e.message); q("#bt-lock").disabled = false; }
+  };
+  refresh();
+}
+
+/* ---------------------------------------------------------------- the trial: run it, read it */
+const linkRow = (label, url) => `<div class="bt-field"><span>${esc(label)}</span><div class="bt-link"><input readonly value="${esc(url)}"><button type="button" class="bt-btn" data-copy="${esc(url)}">Copy</button></div></div>`;
+function wireCopies(node) {
+  node.addEventListener("click", async (e) => {
+    const button = e.target.closest("[data-copy]");
+    if (!button) return;
+    try { await navigator.clipboard.writeText(button.dataset.copy); button.textContent = "Copied"; }
+    catch { button.previousElementSibling?.select(); }
+  });
+}
+
+async function trialMode(id) {
+  let record;
+  try { record = (await api(`/api/blind/${encodeURIComponent(id)}`)).data; }
+  catch (err) { return landing(`This trial could not be opened: ${err.message}`); }
+  const verifyUrl = `${location.origin}/blind?t=${encodeURIComponent(id)}&verify=1`;
+  const run = record.run || {};
+  if (!run.kaava || !run.baseline) return waiting(record, verifyUrl);
+  results(record, verifyUrl);
+}
+
+function waiting(record, verifyUrl) {
+  const key = record.key, half = record.run && record.run.kaava;
+  const card = el(`<section class="bt-card">
+    <div><h1>The key is locked</h1><p class="bt-muted">${esc(record.title)}</p></div>
+    <p><strong>${esc(record.question)}</strong></p>
+    <p class="bt-muted">Keyed by ${esc(key.by)} on ${esc(when(key.locked_at))}. ${half ? "Kaava has answered; the model alone has not yet." : "What the key says stays hidden until Kaava has answered."}</p>
+    <p class="bt-note">Kaava and the vision model alone are now asked this question, once each. Each answer is kept: neither is ever asked again in this trial. It costs a few cents and can take a few minutes.</p>
+    <p class="bt-error" id="bt-err" hidden></p>
+    <div class="bt-row"><button type="button" class="bt-btn bt-main-btn" id="bt-run">${half ? "Ask the model alone" : "Run Kaava and the model alone, once each"}</button><span class="bt-muted" id="bt-doing"></span></div>
+    ${linkRow("This trial", location.href)}
+  </section>`);
+  wireCopies(card);
+  const button = card.querySelector("#bt-run"), doing = card.querySelector("#bt-doing"), err = card.querySelector("#bt-err");
+  button.onclick = async () => {
+    button.disabled = true; err.hidden = true;
+    const started = Date.now();
+    try {
+      for (;;) {
+        const { status, data } = await api(`/api/blind/${encodeURIComponent(record.id)}/run`, {});
+        if (status !== 202) return results(data, verifyUrl);
+        doing.textContent = `${data.doing || "Working"} · ${Math.round((Date.now() - started) / 1000)} s`;
+        if (Date.now() - started > 30 * 60 * 1000) throw new Error("this took more than half an hour; open the trial again to pick it up");
+        await new Promise((wait) => setTimeout(wait, 1500));
+      }
+    } catch (e) { err.textContent = e.message; err.hidden = false; button.disabled = false; doing.textContent = ""; }
+  };
+  show(card);
+}
+
+function results(record, verifyUrl) {
+  const key = record.key, run = record.run, kaava = run.kaava, alone = run.baseline, cmp = run.comparison || {}, sum = record.summary || {};
+  const marks = cmp.marks || {}, checks = record.verifications || [];
+  const status = (part) => `<span class="bt-state bt-s-${esc(part.status)}">${esc(STATUS[part.status] || part.status)}</span>`;
+  const hit = new Set((marks.matched || []).map(([i]) => i)), extra = new Set(marks.extra || []);
+  const head = el(`<section class="bt-card">
+    <div><h1>${esc(record.question)}</h1><p class="bt-muted">${esc(record.title)} · trial ${esc(record.id)} · ${esc(when(record.created))}${key.rig_test ? " · a test of the rig, not a trial" : ""}</p></div>
+    <div class="bt-scroll"><table class="bt-table">
+      <thead><tr><th></th><th>Answer</th><th>Against the key</th><th>Cost when worked out</th><th>Response time</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td><strong>The key</strong></td><td>${num(key.quantity, key.unit)}</td><td></td><td></td><td></td>
+          <td>${esc(key.by)}, ${esc(when(key.locked_at))}${key.marks.length ? `, ${key.marks.length} marks` : ""}${key.how ? `. ${esc(key.how)}` : ""}</td></tr>
+        <tr><td><strong>Kaava</strong></td><td>${num(kaava.answer, kaava.unit)}</td><td>${status(kaava)}</td><td>${euro(kaava.cost_eur)}</td><td>${secs(kaava.latency_ms)}</td>
+          <td><span class="bt-state bt-s-${esc(kaava.state)}">${esc(STATE[kaava.state] || kaava.state)}</span> ${esc(kaava.engine || "")}${kaava.replayed ? ". Shown again from an answer already on file: nothing more was spent now." : ""}${kaava.refused && kaava.reason ? `. ${esc(kaava.reason)}` : ""}</td></tr>
+        <tr><td><strong>Model alone</strong></td><td>${num(alone.answer, alone.unit || key.unit)}</td><td>${status(alone)}</td><td>${euro(alone.cost_eur)}</td><td>${secs(alone.latency_ms)}</td>
+          <td>${esc(alone.model || "")}${alone.logged_run ? ". From the run log, where this same call was already paid for." : ""}${alone.refused && alone.reason ? `. ${esc(alone.reason)}` : ""}</td></tr>
+      </tbody></table></div>
+    ${key.kind === "count" ? (marks.comparable
+      ? `<p><strong>${marks.missed.length}</strong> missed (in the key, not found by Kaava) · <strong>${marks.extra.length}</strong> added (boxed by Kaava, not in the key) · ${marks.matched.length} matched. A mark belongs to an item when it lies on it, or beside it by less than half the item's size (and never more than ${marks.tolerance_px} px).</p>`
+      : `<p class="bt-muted">Missed and added marks were not worked out: ${esc(marks.why || "")}.</p>`)
+      : (cmp.difference !== undefined ? `<p>Kaava differs from the key by <strong>${num(cmp.difference, key.unit)}</strong>${cmp.relative !== undefined ? ` (${(100 * cmp.relative).toFixed(1)}%)` : ""}. The dataset's rule allows 2%.</p>` : "")}
+    ${key.kaava_answer_on_file ? `<p class="bt-note">An answer by Kaava to this very question was already on file when the key was locked. The marker declared they had not seen it.</p>` : ""}
+  </section>`);
+  const sheet = el(`<section class="bt-card"><h2>On the sheet</h2>
+    <div class="bt-legend"><span><i style="background:var(--bt-mark)"></i>counted by Kaava</span>${marks.comparable ? `<span><i style="background:var(--bt-stop)"></i>added by Kaava (dashed)</span><span><i style="background:var(--bt-ok)"></i>key mark, matched</span><span><i style="background:var(--bt-miss)"></i>key mark, missed</span>` : (key.marks.length ? `<span><i style="background:var(--bt-ink)"></i>key mark</span>` : "")}</div>
+    <div class="bt-sheet" id="bt-sheet"></div></section>`);
+  const people = el(`<section class="bt-card"><h2>Checked by people who do not know Kaava</h2>
+    ${kaava.refused ? `<p class="bt-muted">Kaava gave no number, so there is no answer to check.</p>` : `
+    ${checks.length ? `<div class="bt-scroll"><table class="bt-table"><thead><tr><th>Who</th><th>Verdict</th><th>Time taken</th><th>Agrees with the key</th><th>Note</th></tr></thead><tbody>
+      ${checks.map((c) => `<tr><td>${esc(c.by)}</td><td>${{ right: "Kaava is right", wrong: "Kaava is wrong", cannot_tell: "Can't tell" }[c.verdict]}</td><td>${c.seconds} s</td><td>${c.agrees_with_key === null ? "" : c.agrees_with_key ? "yes" : "no"}</td><td>${esc(c.note)}</td></tr>`).join("")}
+      </tbody></table></div>
+      <p>${checks.length} of 3 checks done · median ${sum.median_seconds} s · ${sum.agree_with_key} agree with the key, ${sum.disagree_with_key} disagree, ${sum.could_not_tell} could not tell.</p>`
+      : `<p class="bt-muted">Nobody has checked this answer yet. Send the link below to three people who have not used Kaava.</p>`}
+    ${linkRow("The link for a verifier (it shows Kaava's answer, never the key)", verifyUrl)}`}
+    <p class="bt-small">To put this trial in the repository: <code>python scripts/blind_trial.py export ${esc(record.id)} --from ${esc(location.origin)}</code></p>
+  </section>`);
+  wireCopies(people);
+  show(head, sheet, people);
+  const viewer = makeViewer(sheet.querySelector("#bt-sheet"), record.image);
+  viewer.setDraw((s) => evidenceSvg(kaava.evidence, s, marks.comparable ? extra : null) +
+    key.marks.map(([x, y], i) => dot(x, y, i + 1, marks.comparable ? (hit.has(i) ? "bt-hit" : "bt-miss") : "", s)).join(""));
+}
+
+/* ---------------------------------------------------------------- a verifier: check the answer, timed */
+async function verifyMode(id) {
+  let record;
+  try { record = (await api(`/api/blind/${encodeURIComponent(id)}?view=verify`)).data; }
+  catch (err) { return landing(`This trial could not be opened: ${err.message}`); }
+  const kaava = record.kaava;
+  if (!kaava) return show(el(`<section class="bt-card"><h1>Not ready yet</h1><p>Kaava has not answered in this trial yet. Ask the person who sent you this link to run it first.</p></section>`));
+  if (kaava.refused) return show(el(`<section class="bt-card"><h1>Nothing to check</h1><p>Kaava gave no number for this question, so there is no answer to check.</p></section>`));
+  const page = el(`<div class="bt-split">
+    <div><div class="bt-sheet" id="bt-sheet"></div></div>
+    <section class="bt-card" id="bt-side">
+      <div><h1>Check one answer</h1><p class="bt-muted">${esc(record.title)}</p></div>
+      <p>When you press Start you will see a question about this drawing, the answer a program called Kaava gave, and the items it counted or measured, numbered on the sheet. Decide whether the answer is right. Move and zoom the sheet as you like.</p>
+      <p class="bt-muted">You are timed from Start until you choose. There is no right speed: take the time you need to be sure.</p>
+      <label class="bt-field"><span>Who is checking</span><input id="bt-by" maxlength="60" placeholder="Name or initials" autocomplete="off"></label>
+      <p class="bt-error" id="bt-err" hidden></p>
+      <button type="button" class="bt-btn bt-main-btn" id="bt-start" disabled>Loading the sheet…</button>
+    </section></div>`);
+  show(page);
+  const side = page.querySelector("#bt-side"), host = page.querySelector("#bt-sheet");
+  const viewer = makeViewer(host, record.image);
+  const cover = el(`<div class="bt-cover"><p>The sheet and Kaava's answer appear when you press Start.</p></div>`);
+  host.append(cover);
+  const start = side.querySelector("#bt-start");
+  viewer.loaded.then((ok) => { start.disabled = !ok; start.textContent = ok ? "Start" : "The sheet could not be loaded"; });
+  start.onclick = async () => {
+    const by = side.querySelector("#bt-by").value.trim(), err = side.querySelector("#bt-err");
+    if (!by) { err.textContent = "Say who is checking."; err.hidden = false; return; }
+    start.disabled = true;
+    let token = null;
+    try { token = (await api(`/api/blind/${encodeURIComponent(id)}/verify/start`, {})).data.token; } catch { /* timed here all the same */ }
+    looking(by, token);
+  };
+
+  function looking(by, token) {
+    const began = performance.now();
+    cover.remove();
+    viewer.setDraw((s) => evidenceSvg(kaava.evidence, s, null));
+    viewer.fit();
+    const counted = (kaava.evidence || []).filter((it) => ["box", "polygon", "point", "element"].includes(it.kind)).length;
+    main.prepend(el(`<section class="bt-card bt-asked">
+      <div><p class="bt-small">The question</p><h2>${esc(record.question)}</h2></div>
+      <div><p class="bt-small">Kaava's answer</p><div class="bt-answer">${num(kaava.answer, kaava.unit)}</div>
+        <p class="bt-small"><span class="bt-state bt-s-${esc(kaava.state)}">${esc(STATE[kaava.state] || kaava.state)}</span> ${esc(kaava.engine || "")}</p></div>
+    </section>`));
+    side.replaceChildren(...el(`<div>
+      <div><h2>Is that answer right?</h2></div>
+      ${kaava.explanation ? `<p class="bt-muted">${esc(kaava.explanation)}</p>` : ""}
+      ${kaava.caveat ? `<p class="bt-note">${esc(typeof kaava.caveat === "string" ? kaava.caveat : JSON.stringify(kaava.caveat))}</p>` : ""}
+      <p class="bt-small">${counted ? `${counted} item${counted === 1 ? "" : "s"} marked on the sheet in orange${counted > 40 ? ". Zoom in to see each one's number." : ", each with its number."}` : "This answer has no items marked on the sheet."}</p>
+      ${(kaava.trace || []).length ? `<details><summary>How Kaava worked it out</summary><ol>${kaava.trace.map((t) => `<li><strong>${esc(t.title)}</strong> ${esc(t.body)}</li>`).join("")}</ol></details>` : ""}
+      <div class="bt-row bt-verdicts">
+        <button type="button" class="bt-btn bt-yes" data-v="right">Kaava's answer is right</button>
+        <button type="button" class="bt-btn bt-no" data-v="wrong">Kaava's answer is wrong</button>
+        <button type="button" class="bt-btn" data-v="cannot_tell">I can't tell</button>
+      </div>
+      <p class="bt-timer" id="bt-clock">0 s</p>
+    </div>`).children);
+    const clock = side.querySelector("#bt-clock");
+    const tick = setInterval(() => { clock.textContent = `${Math.round((performance.now() - began) / 1000)} s`; }, 500);
+    side.querySelector(".bt-verdicts").onclick = (e) => {
+      const verdict = e.target.closest("button")?.dataset.v;
+      if (!verdict) return;
+      clearInterval(tick);
+      decided(by, token, verdict, Math.max(1, (performance.now() - began) / 1000));
+    };
+  }
+
+  function decided(by, token, verdict, seconds) {
+    side.replaceChildren(...el(`<div>
+      <div><h1>${{ right: "You said: right", wrong: "You said: wrong", cannot_tell: "You said: can't tell" }[verdict]}</h1><p class="bt-muted">In ${seconds.toFixed(1)} seconds.</p></div>
+      <label class="bt-field"><span>Anything to add? (optional)</span><textarea id="bt-note" maxlength="400" placeholder="What made you sure, or what was hard to check"></textarea></label>
+      <p class="bt-error" id="bt-err" hidden></p>
+      <button type="button" class="bt-btn bt-main-btn" id="bt-send">Send</button>
+    </div>`).children);
+    side.querySelector("#bt-send").onclick = async () => {
+      const send = side.querySelector("#bt-send"), err = side.querySelector("#bt-err");
+      send.disabled = true;
+      try {
+        const full = (await api(`/api/blind/${encodeURIComponent(id)}/verify`, { by, token, verdict, seconds: Math.round(seconds * 10) / 10, note: side.querySelector("#bt-note").value })).data;
+        const key = full.key, said = full.run.kaava;
+        side.replaceChildren(...el(`<div>
+          <div><h1>Thank you</h1><p class="bt-muted">Your check is recorded.</p></div>
+          <p>The key, made by ${esc(key.by)} before Kaava answered, says <strong>${num(key.quantity, key.unit)}</strong>. Kaava said <strong>${num(said.answer, said.unit)}</strong>: ${esc(STATUS[said.status] || said.status)}.</p>
+          <div class="bt-row"><a class="bt-btn" href="/blind?t=${encodeURIComponent(id)}">See the whole trial</a></div>
+        </div>`).children);
+      } catch (e) { err.textContent = e.message; err.hidden = false; send.disabled = false; }
+    };
+  }
+}
+
+/* ---------------------------------------------------------------- which page this is */
+const trial = params.get("t"), drawing = params.get("d");
+if (trial && params.get("verify")) verifyMode(trial);
+else if (trial) trialMode(trial);
+else if (drawing) keyMode(drawing);
+else landing("");
+</script>
+</body>
+</html>

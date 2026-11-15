@@ -267,15 +267,15 @@ export function Numbers() {
                 <em>Verified · <b>{int(stats.live.check)}</b> Check this · <b>{int(stats.live.declined)}</b> no number</em>
               </div>
               <div className="n-tile">
-                <span>Answered at no cost</span>
+                <span>Answered at no further cost</span>
                 <strong>{pct(stats.live.free / stats.live.asked)}</strong>
-                <em><b>{int(stats.live.free)}</b> of {int(stats.live.asked)}: exact engines, or an answer already paid for</em>
+                <em><b>{int(stats.live.free)}</b> of {int(stats.live.asked)}: exact engines{stats.live.shown_again ? <>, or one of <b>{int(stats.live.shown_again)}</b> answers shown again (paid for when first worked out)</> : ", or an answer already paid for"}</em>
               </div>
               <div className="n-tile">
                 <span>Spent on model calls</span>
                 <strong>€{stats.live.spent_eur.toFixed(2)}</strong>
                 <em>{stats.live.compared > 0
-                  ? <>on the {int(stats.live.compared)} also put to the model alone: <b>€{stats.live.spent_compared_eur.toFixed(3)}</b> against €{stats.live.alone_eur.toFixed(3)}</>
+                  ? <>on the {int(stats.live.compared)} also put to the model alone, inference against inference (no free replay counted as free): <b>€{stats.live.spent_compared_eur.toFixed(3)}</b> against €{stats.live.alone_eur.toFixed(3)}</>
                   : "in all, since the log began"}</em>
               </div>
             </div>

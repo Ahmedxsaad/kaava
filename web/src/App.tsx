@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnswerPanel } from "./AnswerPanel";
-import { api, type AskResult, type DrawingDetail, type Evidence, euro, formatValue, headlineRun, places, type Source, SOURCE_NAMES, spoken } from "./api";
+import { api, type AskResult, type DrawingDetail, type Evidence, euro, formatValue, places, type Source, SOURCE_NAMES, spoken } from "./api";
 import { Home } from "./Home";
 import { Numbers } from "./Numbers";
 import { Picker } from "./Picker";
@@ -75,10 +75,11 @@ export function App() {
   const [playing, setPlaying] = useState(false);  // the examples play on their own, one after another
   const [bringing, setBringing] = useState(false);
   const [shared, setShared] = useState<string | null>(null);
-  // What this session's answers cost, and what the vision model alone costs for the same questions.
-  const [meter, setMeter] = useState({ answers: 0, spent: 0, alone: 0 });
+  // This session's answers, in two sums that are never mixed: what working them out cost (the inference,
+  // whenever it was done) and what this session added (an answer shown again adds nothing). A vision
+  // model alone is set beside ours only for questions that were themselves put to it, never an average.
+  const [meter, setMeter] = useState({ answers: 0, inference: 0, unrecorded: 0, now: 0, compared: 0, ours: 0, alone: 0 });
   const ticket = useRef(0);
-  const aloneRef = useRef<number | null>(null);
   const pending = useRef<string | null>(route.question || null);
   const wanted = useRef<Mode | null>(route.view ?? null);  // a view asked for in the link wins once
   const voiced = useRef(false);  // the server can read answers aloud with a natural voice
@@ -106,10 +107,16 @@ export function App() {
       setFocus(null);
       setProgress(0);
       setResult(answer);
+      const base = answer.baseline?.cost_eur ?? null;
+      const like = base !== null && answer.cost_eur !== null;  // both costs measured for this very question
       setMeter((m) => ({
         answers: m.answers + 1,
-        spent: m.spent + (answer.replayed_from ? 0 : answer.cost_eur),
-        alone: m.alone + (answer.baseline?.cost_eur ?? aloneRef.current ?? 0),
+        inference: m.inference + (answer.cost_eur ?? 0),
+        unrecorded: m.unrecorded + (answer.cost_eur === null ? 1 : 0),
+        now: m.now + answer.spent_now_eur,
+        compared: m.compared + (like ? 1 : 0),
+        ours: m.ours + (like ? answer.cost_eur! : 0),
+        alone: m.alone + (like ? base! : 0),
       }));
       setFocusKey(`${drawing.id}|${clean}|${mine}`);
       const has2d = drawing.view.kind !== "none";
@@ -169,6 +176,20 @@ export function App() {
       setBringing(false);
     }
   }, [open]);
+  // Another page of a brought PDF: it opens as a drawing of its own, and questions are then about it.
+  const turn = useCallback(async (to: number) => {
+    if (!detail?.pdf || to < 0 || to >= detail.pdf.pages || to === detail.pdf.page) return;
+    setError(null);
+    setBringing(true);
+    try {
+      const made = await api.uploadPage(detail.id, to);
+      await open(made.id);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBringing(false);
+    }
+  }, [detail, open]);
   const share = useCallback(async () => {
     if (!detail || !asked) return;
     setShared("working");
@@ -185,10 +206,6 @@ export function App() {
   }, [detail, asked]);
 
   useEffect(() => {
-    api.stats().then((stats) => {
-      const run = headlineRun(stats.runs, "alone");
-      aloneRef.current = run?.rows.find((r) => r.scope === "overall")?.eur_per_question ?? null;
-    }).catch(() => undefined);
     api.partners().then((p) => { voiced.current = p.elevenlabs; }).catch(() => undefined);
     api.sources().then(async (list) => {
       setSources(list);
@@ -456,9 +473,9 @@ export function App() {
         </nav>
         <div className="right">
           {page === "ask" && meter.answers > 0 && (
-            <span className="meter" title="What this session's answers cost here, and what a vision model alone costs for the same questions">
-              {meter.answers} answer{meter.answers === 1 ? "" : "s"} · {euro(meter.spent)}
-              {meter.alone > 0 && <em> · model alone {euro(meter.alone)}</em>}
+            <span className="meter" title={`Inference: what working these answers out cost, whenever that was done${meter.unrecorded ? ` (${meter.unrecorded} kept before costs were recorded: not in the sum)` : ""}. Now: what this session added; an answer shown again from the kept answers adds nothing.${meter.compared ? ` Like for like: on the ${meter.compared} question${meter.compared === 1 ? "" : "s"} also put to a vision model alone, our inference cost ${euro(meter.ours)} and the model alone ${euro(meter.alone)}.` : " No question here was also put to a vision model alone, so no comparison is shown."}`}>
+              {meter.answers} answer{meter.answers === 1 ? "" : "s"} · inference {euro(meter.inference)} · now {euro(meter.now)}
+              {meter.compared > 0 && <em> · on {meter.compared} also put to the model alone: {euro(meter.ours)} vs {euro(meter.alone)}</em>}
             </span>
           )}
           {page === "ask" && (
@@ -565,6 +582,19 @@ export function App() {
                       <span>
                         {detail.example ? "Stoa's sample sheet" : SOURCE_NAMES[detail.source] ?? detail.source} · {detail.formats.join(", ").toUpperCase()}{detail.paper_scale ? ` · 1:${detail.paper_scale}` : ""}
                       </span>
+                      {detail.pdf && detail.pdf.pages > 1 && (
+                        // A brought PDF is answered one page at a time: the page is chosen here, and said.
+                        <span className="pdf-pages" title="Questions are answered on the page shown. Each page of your PDF opens as a drawing of its own.">
+                          <button type="button" onClick={() => void turn(detail.pdf!.page - 1)} disabled={bringing || detail.pdf.page === 0} aria-label="Previous page">←</button>
+                          Page
+                          <select value={detail.pdf.page} disabled={bringing} onChange={(e) => void turn(Number(e.target.value))} aria-label="Page of the PDF">
+                            {Array.from({ length: detail.pdf.pages }, (_, i) => <option key={i} value={i}>{i + 1}</option>)}
+                          </select>
+                          of {detail.pdf.pages}
+                          <button type="button" onClick={() => void turn(detail.pdf!.page + 1)} disabled={bringing || detail.pdf.page >= detail.pdf.pages - 1} aria-label="Next page">→</button>
+                          <em>answers are for this page</em>
+                        </span>
+                      )}
                     </>
                   )}
                 </div>
@@ -613,12 +643,18 @@ export function App() {
               )}
               {!detail && !error && <div className="viewer-wait">Opening the drawing…</div>}
             </div>
-            <footer>{detail?.credit}{detail?.model_file ? ` · Model: ${detail.model_file}` : ""}</footer>
+            <footer>
+              {detail?.credit}{detail?.model_file ? ` · Model: ${detail.model_file}` : ""}
+              {detail && has2d && (
+                // A person makes the answer key first, then this system and a vision model alone answer once each (docs/BLIND-TRIAL.md).
+                <a className="blind-link" href={`/blind?d=${encodeURIComponent(detail.id)}`} title="Mark the answer yourself before seeing ours; then this system and a vision model alone answer once each, and three people check the result against the clock.">Blind trial on this sheet →</a>
+              )}
+            </footer>
           </section>
         </main>
       )}
 
-      {picking && <Picker sources={sources} current={detail?.id ?? null} onPick={(id) => void open(id)} onClose={() => setPicking(false)} />}
+      {picking && <Picker sources={sources} current={detail?.id ?? null} onPick={(id) => void open(id)} onClose={() => setPicking(false)} onBring={(file) => { setPicking(false); void bring(file); }} />}
     </div>
   );
 }

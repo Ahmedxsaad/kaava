@@ -229,7 +229,10 @@ def test_the_sample_sheets_come_with_their_questions_and_their_answers_cost_noth
     questions = [s["question"] for s in detail["suggested"]]
     assert "What is the area of the 150 mm slab-on-grade in m²?" in questions
     answer = ask(client, slab["id"], "What is the area of the 150 mm slab-on-grade in m²?")
-    assert answer["state"] == "check" and answer["cost_eur"] == 0 and answer["replayed_from"]
+    assert answer["state"] == "check" and answer["replayed_from"]
+    # Shown again: nothing is spent now. What working it out cost is still said, with where the figure comes from.
+    assert answer["replayed"] and answer["spent_now_eur"] == 0
+    assert answer["cost_eur"] > 0.01 and "benchmark run" in answer["cost_note"]
     # 6200 × 9950 mm by the printed dimensions, less the two trenches the examiners found inside the slab,
     # which the program measured where they are drawn (their widths are not printed).
     assert answer["answer"] == 59.28 and answer["unit"] == "m2" and answer["method"].startswith("sheet-working")
@@ -334,6 +337,76 @@ def test_a_brought_drawing_opens_and_can_be_shared(client):
     finally:
         ident = summary["id"].split("/")[-1]
         for suffix in (".png", ".json"):
+            (UPLOADS_DIR / f"{ident}{suffix}").unlink(missing_ok=True)
+
+
+@needs_data
+def test_a_brought_pdf_is_answered_one_page_at_a_time_and_the_page_can_be_chosen(client):
+    """A PDF of several sheets: the first page opens, the reader is told which page it is, and another
+    page opens as a drawing of its own, with that page alone kept beside its picture for the text reader."""
+    import pymupdf
+
+    from blueprints.server import UPLOADS_DIR
+
+    with pymupdf.open() as doc:
+        for words in ("GROUND FLOOR PLAN", "FIRST FLOOR PLAN", "DOOR SCHEDULE"):
+            doc.new_page(width=600, height=400).insert_text((60, 80), words, fontsize=20)
+        data = doc.tobytes()
+    made = client.post("/api/upload", params={"name": "school set.pdf"}, content=data)
+    assert made.status_code == 200, made.text
+    first = made.json()
+    idents = [first["id"].split("/")[-1]]
+    try:
+        assert first["title"] == "school set · page 1"
+        detail = client.get("/api/drawing", params={"drawing": first["id"]}).json()
+        assert detail["pdf"] == {"page": 0, "pages": 3} and detail["view"]["kind"] == "image"
+        third = client.post("/api/upload/page", json={"drawing": first["id"], "page": 2})
+        assert third.status_code == 200, third.text
+        third = third.json()
+        idents.append(third["id"].split("/")[-1])
+        assert third["id"] != first["id"] and third["title"] == "school set · page 3"
+        assert client.get("/api/drawing", params={"drawing": third["id"]}).json()["pdf"] == {"page": 2, "pages": 3}
+        with pymupdf.open(UPLOADS_DIR / f"{idents[1]}.pdf") as kept:            # what the text reader will read: that page only
+            assert len(kept) == 1 and "DOOR SCHEDULE" in kept[0].get_text()
+        # From any page to any other, and back to the first without sending the file again.
+        back = client.post("/api/upload/page", json={"drawing": third["id"], "page": 0}).json()
+        assert back["id"] == first["id"]
+        assert client.post("/api/upload/page", json={"drawing": first["id"], "page": 3}).status_code == 400
+        assert client.post("/api/upload/page", json={"drawing": SWISS, "page": 1}).status_code == 409   # not a brought PDF
+    finally:
+        for ident in idents:
+            for suffix in (".png", ".json", ".pdf"):
+                (UPLOADS_DIR / f"{ident}{suffix}").unlink(missing_ok=True)
+
+
+@needs_data
+def test_a_brought_ifc_model_is_queried_like_the_catalogue_ones_and_a_dxf_is_refused_in_plain_words(client):
+    from blueprints.server import MODEL_QUESTIONS, UPLOADS_DIR
+
+    model = min((PREVIEW / "data").rglob("*.ifc"), key=lambda f: f.stat().st_size, default=None)
+    if model is None:
+        pytest.skip("no IFC file in the preview")
+    made = client.post("/api/upload", params={"name": "my house.ifc"}, content=model.read_bytes())
+    assert made.status_code == 200, made.text
+    summary = made.json()
+    ident = summary["id"].split("/")[-1]
+    try:
+        assert summary["source"] == "uploads" and summary["formats"] == ["ifc"] and summary["engine"] == "ifc" and summary["has_3d"]
+        detail = client.get("/api/drawing", params={"drawing": summary["id"]}).json()
+        assert detail["view"]["kind"] == "none" and detail["mesh_kind"] == "ifc" and detail["model_file"] == f"{ident}.ifc"
+        assert [s["question"] for s in detail["suggested"]] == list(MODEL_QUESTIONS)
+        answer = ask(client, summary["id"], MODEL_QUESTIONS[0])
+        # Counted from the model's own elements, at no cost. No error rate was measured for IFC answers: never Verified.
+        assert answer["method"].startswith("ifc") and answer["state"] != "verified"
+        assert answer["cost_eur"] == 0 and answer["spent_now_eur"] == 0 and not answer["replayed"]
+        if answer["answer"] is not None:
+            assert len([e for e in answer["evidence"] if e["kind"] == "element"]) == answer["answer"]
+        refused = client.post("/api/upload", params={"name": "plan.dxf"}, content=b"  0\nSECTION\n  2\nHEADER\n")
+        assert refused.status_code == 415 and "catalogue" in refused.json()["detail"] and "IFC model" in refused.json()["detail"]
+        assert client.post("/api/upload", params={"name": "broken.ifc"}, content=b"ISO-10303-21;\nnot a model").status_code == 415
+        assert not (UPLOADS_DIR / f"{__import__('hashlib').sha1(b'ISO-10303-21;' + chr(10).encode() + b'not a model').hexdigest()[:12]}.ifc").exists()
+    finally:
+        for suffix in (".ifc", ".json"):
             (UPLOADS_DIR / f"{ident}{suffix}").unlink(missing_ok=True)
 
 
@@ -458,3 +531,26 @@ def test_a_model_file_too_large_to_mesh_is_refused_without_being_opened(tmp_path
     assert mesh.is_built(big)                      # settled: there is nothing to wait for
     with pytest.raises(mesh.MeshTooLarge, match="the model file is"):
         mesh.ifc_mesh(big)
+
+
+def test_an_answer_shown_again_spends_nothing_and_still_says_what_its_inference_cost(monkeypatch, tmp_path):
+    """A kept answer is free to show again, but the cost of working it out is not replaced by that zero."""
+    from blueprints import server
+    from blueprints.data import Question
+
+    monkeypatch.setattr(server.config, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(server, "EXAMPLES_DIR", tmp_path / "examples")
+    kept = {"answer": 118, "unit": "count", "state": "check", "confidence": 0.6, "method": "sheet-working:x", "evidence": [],
+            "explanation": "", "reason": "", "latency_ms": 100813.0, "meta": {"model": "m"}}
+    priced = Question(qid="a", path="uploads/abc.png", question="How many doors?", answer=None, unit=None, type="",
+                      source="uploads", drawing="uploads/abc", group="uploads")
+    unpriced = Question(qid="b", path="uploads/abc.png", question="How many windows?", answer=None, unit=None, type="",
+                        source="uploads", drawing="uploads/abc", group="uploads")
+    server._kept_file(priced).parent.mkdir(parents=True)
+    server._kept_file(priced).write_text(json.dumps({**kept, "cost_usd": 0.2677, "cost_note": "when it was first worked out"}))
+    server._kept_file(unpriced).write_text(json.dumps(kept))           # kept before costs were recorded
+    again = server._kept_answer(priced)
+    assert again.cost_usd == 0.0 and again.answer == 118 and again.meta["shown_again"]
+    assert again.meta["first_cost_usd"] == 0.2677 and again.meta["first_cost_note"] == "when it was first worked out"
+    old = server._kept_answer(unpriced)
+    assert old.cost_usd == 0.0 and old.meta["first_cost_usd"] is None and old.meta["first_cost_note"] is None   # not guessed

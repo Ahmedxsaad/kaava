@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
-import { api, type DrawingSummary, type Source, SOURCE_NAMES } from "./api";
+import { api, BRING_ACCEPT, BRING_NOTE, type DrawingSummary, type Source, SOURCE_NAMES } from "./api";
 
 interface Props {
   sources: Source[];
   current: string | null;
   onPick(id: string): void;
   onClose(): void;
+  onBring(file: File): void;
 }
 
 const ENGINE_NOTE: Record<string, string> = {
@@ -13,7 +14,7 @@ const ENGINE_NOTE: Record<string, string> = {
   dxf: "exact · geometry",
 };
 
-export function Picker({ sources, current, onPick, onClose }: Props) {
+export function Picker({ sources, current, onPick, onClose, onBring }: Props) {
   const initial = sources.find((s) => current?.includes(`/${s.source}/`))?.source ?? sources[0]?.source ?? "";
   const [source, setSource] = useState(initial);
   const [query, setQuery] = useState("");
@@ -57,6 +58,10 @@ export function Picker({ sources, current, onPick, onClose }: Props) {
         <header>
           <h2>Choose a drawing</h2>
           <input autoFocus placeholder="Filter by name" value={query} onChange={(e) => setQuery(e.target.value)} />
+          <label className="bring bring-here" title={BRING_NOTE}>
+            Bring your own
+            <input type="file" accept={BRING_ACCEPT} onChange={(e) => { const file = e.target.files?.[0]; if (file) onBring(file); e.target.value = ""; }} />
+          </label>
           <button className="close" onClick={onClose} aria-label="Close">×</button>
         </header>
         <nav>
@@ -68,10 +73,13 @@ export function Picker({ sources, current, onPick, onClose }: Props) {
           ))}
         </nav>
         <p className="picker-note">
-          {meta?.archive
+          {source === "uploads"
+            ? "Stoa's sample sheets, and what was brought to this demo. A sheet is read with its working shown; a model is answered by queries on the model."
+            : meta?.archive
             ? "Archive drawings nobody wrote questions for. Ask anything; a vision model answers and its items are drawn."
             : "Drawings from the development split. The calibration and test drawings stay unseen."}
-          {meta?.credit ? ` ${meta.credit}.` : ""}
+          {meta?.credit && source !== "uploads" ? ` ${meta.credit.replace(/\.$/, "")}.` : ""}
+          <span className="bring-line">Bring your own: {BRING_NOTE.charAt(0).toLowerCase() + BRING_NOTE.slice(1)}</span>
         </p>
         <div className="grid">
           {items.map((d) => (

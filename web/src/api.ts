@@ -56,6 +56,8 @@ export interface DrawingDetail extends DrawingSummary {
   suggested: Suggested[];
   paper_scale: number | null;
   can_enhance: boolean;
+  // A brought PDF is answered one page at a time: which page this drawing is (from 0), and of how many.
+  pdf?: { page: number; pages: number } | null;
 }
 
 export interface Evidence {
@@ -106,7 +108,13 @@ export interface AskResult {
   method: string;
   engine: string;
   confidence: number | null;
-  cost_eur: number;
+  // Two sums of money. `cost_eur`: what working this answer out cost (the inference), whenever that was;
+  // null when the answer was kept before costs were recorded. `spent_now_eur`: what this request added,
+  // nothing when a kept answer is shown again (`replayed`). `cost_note`: where the inference figure comes from.
+  cost_eur: number | null;
+  spent_now_eur: number;
+  replayed: boolean;
+  cost_note: string | null;
   latency_ms: number;
   replayed_from: string | null;
   interpreted: string | null;
@@ -207,7 +215,7 @@ export interface Stats {
   labels_on_scans: { run_id: string; scan_questions: number; answered: number; correct: number; share: number; share_alone: number } | null;
   // Stoa's sample sheets scored against our own answer key: this system, and the vision model alone.
   // Questions asked of this app, from its log in PostgreSQL (Aiven): null when no log is set up.
-  live?: { asked: number; verified: number; check: number; declined: number; free: number; spent_eur: number; drawings: number;
+  live?: { asked: number; verified: number; check: number; declined: number; free: number; spent_eur: number; drawings: number; shown_again?: number;
            compared: number; spent_compared_eur: number; alone_eur: number; since: string | null; latest: string | null; kept_in: string } | null;
   sheets_bench?: Record<string, { n: number; correct: number; wrong: number; declined: number; accuracy: number; eur_per_question: number; eur_total: number }>;
   model_budget_eur: number;
@@ -266,6 +274,16 @@ export const api = {
   },
   async upload(file: File): Promise<DrawingSummary> {
     const res = await fetch(`/api/upload?name=${encodeURIComponent(file.name)}`, { method: "POST", body: file });
+    if (!res.ok) throw new Error(await message(res));
+    return res.json();
+  },
+  // Another page of a brought PDF: each page is a drawing of its own (pages count from 0).
+  async uploadPage(drawing: string, page: number): Promise<DrawingSummary> {
+    const res = await fetch("/api/upload/page", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ drawing, page }),
+    });
     if (!res.ok) throw new Error(await message(res));
     return res.json();
   },
@@ -339,6 +357,10 @@ const UNIT_LABELS: Record<string, string> = { m2: "m²", m3: "m³", m: "m", mm: 
 export function unitLabel(unit: string | null): string {
   return UNIT_LABELS[unit ?? ""] ?? "";
 }
+
+// What can be brought, said wherever a file is asked for. The server refuses the rest in the same words.
+export const BRING_ACCEPT = "image/*,application/pdf,.pdf,.ifc";
+export const BRING_NOTE = "An image, a PDF (one page at a time: choose the page once it opens) or an IFC model, up to 25 MB. DXF and DWG plans are answered from the catalogue only.";
 
 export function euro(value: number): string {
   if (value === 0) return "€0";
