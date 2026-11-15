@@ -80,7 +80,7 @@
   <h1>Ask a drawing.<br>See where the answer came from.</h1>
   <p class="lead">Counts, areas and volumes computed from the drawing's own geometry and marked on the sheet, so a project engineer can check an answer in seconds. Every answer is Verified, Check this, or Can't answer reliably.</p>
   <div class="grow"></div>
-  <div class="foot"><span>All figures in this deck come from the evaluation log in the repository (results/), 14 November 2026.</span><span>1</span></div>
+  <div class="foot"><span>All figures in this deck come from the evaluation log in the repository (results/), 15 November 2026.</span><span>1</span></div>
 </section>
 
 <!-- 2 -->
@@ -128,8 +128,8 @@
   <h2>Three states. “Verified” is a measured claim, not a feeling.</h2>
   <p class="lead" style="margin-top: 18px;">Thresholds are set on calibration drawings the engines were never tuned on: a kind of answer is Verified only if the 95% upper bound on its error rate is at most 1%.</p>
   <div class="cols c4" style="margin-top: 54px;">
-    <div class="tile"><div class="big">0</div><span>wrong among Verified answers</span><em>of <b>18,198</b> Verified answers on 63,592 development questions</em></div>
-    <div class="tile"><div class="big">&lt; 0.25%</div><span>error bound, counts</span><em><b>8</b> wrong in <b>6,354</b> held-out answers</em></div>
+    <div class="tile"><div class="big">0</div><span>wrong among Verified answers</span><em>of <b>16,982</b> Verified answers on 63,592 development questions</em></div>
+    <div class="tile"><div class="big">&lt; 0.28%</div><span>error bound, counts</span><em><b>8</b> wrong in <b>5,710</b> held-out answers</em></div>
     <div class="tile"><div class="big">&lt; 0.53%</div><span>error bound, areas</span><em><b>6</b> wrong in <b>2,612</b> held-out answers</em></div>
     <div class="tile"><div class="big">€0</div><span>cost of a Verified answer</span><em>every one comes from geometry, in milliseconds</em></div>
   </div>
@@ -238,6 +238,31 @@
 
 <!-- 8 -->
 <section class="slide">
+  <p class="eyebrow">Stoa's own sheets</p>
+  <h2>The hard questions, asked live and filmed.</h2>
+  <div class="cols c3" style="margin-top: 40px;">
+    <div class="card">
+      <span class="tag">Examiners</span>
+      <h3>61.69 m² becomes 59.28 m²</h3>
+      <p>A slab's area from its printed dimensions is right about the rectangle and wrong about the slab. Two independent readers look inside what was measured and find two trenches; the program measures them on the drawing and takes them out.</p>
+    </div>
+    <div class="card">
+      <span class="tag">One size given</span>
+      <h3>A door, 1.7 m wide</h3>
+      <p>Told only that, the program measures the door in pixels, then the hall with it: 244.14 m², 0.35% from the scale bar's figure. Told a size that contradicts the sheet, it refuses.</p>
+    </div>
+    <div class="card">
+      <span class="tag">Twelve questions, none replayed</span>
+      <h3>8 of 8 right where there is a key</h3>
+      <p>Slab areas by type, baseboards, door counts, piping, a table added up: €0.60 and seven minutes of answering for all twelve. On the four sample sheets, 27 of 27 against an answer key of our own.</p>
+    </div>
+  </div>
+  <p class="lead" style="font-size: 22px; max-width: 1260px; margin-top: 36px;">What did not hold up, and is shown as such: the door count for the whole school moves between runs (113 to 124) and stays Check this. One slab question has no stable answer, and Kaava refuses when its two workings differ.</p>
+  <div class="foot"><span>Every run, including the two that went wrong, is logged in results/hard_cases/. The filmed run: docs/hard-cases.mp4.</span><span>8</span></div>
+</section>
+
+<!-- 9 -->
+<section class="slide">
   <p class="eyebrow">Built to last</p>
   <h2>Next year's model makes this system better, not obsolete.</h2>
   <div class="cols c2" style="margin-top: 40px; gap: 34px;">
@@ -258,10 +283,10 @@
       </ul>
     </div>
   </div>
-  <div class="foot"><span>Kaava</span><span>8</span></div>
+  <div class="foot"><span>Kaava</span><span>9</span></div>
 </section>
 
-<!-- 9 -->
+<!-- 10 -->
 <section class="slide dark">
   <div class="mark"><i></i>Kaava</div>
   <div class="grow"></div>
@@ -274,7 +299,7 @@
   </div>
   <div class="grow"></div>
   <p class="lead" style="font-size: 21px;">Demo and source code: see the links in the Junction submission. The code is MIT-licensed.</p>
-  <div class="foot"><span>Junction 2026 · Stoa · Make Blueprints Talk</span><span>9</span></div>
+  <div class="foot"><span>Junction 2026 · Stoa · Make Blueprints Talk</span><span>10</span></div>
 </section>
 
 </body>

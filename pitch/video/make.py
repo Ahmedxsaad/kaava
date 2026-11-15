@@ -47,7 +47,7 @@ def seconds(path: Path) -> float:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--base", default="http://127.0.0.1:8000")
-    parser.add_argument("--out", default=str(ROOT / "pitch" / "blueprints-talk-pitch.mp4"))
+    parser.add_argument("--out", default=str(ROOT / "pitch" / "kaava-pitch.mp4"))
     args = parser.parse_args()
     load_dotenv(ROOT / ".env")
     key = os.environ.get("ELEVENLABS_API_KEY")
