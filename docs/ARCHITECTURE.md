@@ -59,7 +59,7 @@ A working that multiplies a slab's length by its width is right about the rectan
 
 A room on a sheet or a scan is **the free space inside its walls**, whatever its shape (`measure.room_shape`): the largest square that fits is slid around the room, so it cannot leave through a door or a window; nooks are added, a closet behind a door is not; columns, shafts and cores standing in it are holes, taken out and drawn. A plain rectangular room is measured as its rectangle and checked against that outline.
 
-The scale comes from the best thing on the sheet that has a known size: a graphic scale bar; else a printed dimension (the ends of its dimension line are found in the pixels); else the doors, taken as standard doors 0.9 m wide. The last is an estimate, shown with the range it leaves open. The same standard checks the other two: door openings measured at the sheet's scale must come out as wide as doors are, or nothing is measured.
+The scale comes from the best thing on the sheet that has a known size: a size the question itself states (that thing is found on the sheet and measured in pixels; it must agree with the scale bar when there is one); else a graphic scale bar; else a printed dimension (the ends of its dimension line are found in the pixels); else the doors, taken as standard doors 0.9 m wide. The last is an estimate, shown with the range it leaves open. The same standard checks the other two: door openings measured at the sheet's scale must come out as wide as doors are, or nothing is measured.
 
 ![Where the scale comes from](diagrams/07-scale.png)
 

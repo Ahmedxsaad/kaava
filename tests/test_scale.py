@@ -140,3 +140,37 @@ def test_measured_rooms_are_combined_by_the_calculator_as_the_model_says(tmp_pat
     assert any(step[0].startswith("The calculator combined") for step in less.meta["trace"])
     assert sr._measured(q, path, index, "area", [hall, hall], W, H, common(), combine="a * b").state == DECLINED
     assert sr._measured(q, path, index, "area", [hall, hall], W, H, common(), combine="a - b").state == DECLINED   # nothing left
+
+
+def test_a_size_given_in_the_question_is_the_ruler_for_everything_else(tmp_path):
+    # No scale on the sheet. The question says the room is 8 m long; the model points at its two side walls.
+    path, index, _ = plan(tmp_path, bar=False)
+    given = {"what": "the hall, wall to wall", "value": 8, "unit": "m", "from": [344, 172], "to": [344, 496]}   # [y, x] on the grid
+    ans = ask(path, index, question="The hall is 8 m long. What is its floor area in m²?", given=given)
+    assert ans.state == CHECK and ans.answer == pytest.approx(40.0, rel=0.02)
+    assert "the size the question gives" in ans.explanation and "8 m" in ans.explanation
+    assert any(step[0] == "The program took the scale from the size given in the question" for step in ans.meta["trace"])
+    # The number must be the question's own: a size the question does not state is not taken from the model.
+    made_up = ask(path, index, question="What is the floor area of the hall in m²?", given=given)
+    assert made_up.state == DECLINED and "nothing to take its scale from" in made_up.reason
+
+
+def test_a_size_given_in_the_question_must_agree_with_the_sheets_own_scale_bar(tmp_path):
+    path, index, _ = plan(tmp_path, bar=True)
+    right = {"what": "the hall, wall to wall", "value": 8, "unit": "m", "from": [344, 172], "to": [344, 496]}
+    agrees = ask(path, index, question="The hall is 8 m long. What is its floor area in m²?", given=right)
+    assert agrees.state == CHECK and agrees.answer == pytest.approx(40.0, rel=0.02)
+    assert "apart" in agrees.meta["checks"]["the sheet's own scale bar"]
+    wrong = {**right, "value": 12}
+    differs = ask(path, index, question="The hall is 12 m long. What is its floor area in m²?", given=wrong)
+    assert differs.state == DECLINED and "nothing is measured" in differs.reason
+
+
+def test_a_door_given_as_the_ruler_is_measured_from_jamb_to_jamb(tmp_path):
+    # The plan's one door opening is 1 m wide (x 300..349 in the bottom wall). The model points a few pixels off each jamb.
+    path, index, _ = plan(tmp_path, bar=False)
+    found = scale.from_dimension(path, (305, 404), (343, 407), 1.0, "1 m", grid_px=1.2, least_px=20, faces=True)
+    assert found["px_per_m"] == pytest.approx(PPM, rel=0.01) and not found["estimate"]      # 50 px, both jambs found
+    given = {"what": "the door", "value": 1, "unit": "m", "from": grid([0, 404, 0, 404])[:1] + [round(1000 * 305 / W)], "to": [round(1000 * 406 / H), round(1000 * 343 / W)]}
+    ans = ask(path, index, question="The door is 1 m wide. What is the floor area of the hall in m²?", given=given)
+    assert ans.state == CHECK and ans.answer == pytest.approx(40.0, rel=0.03) and "estimate" not in ans.meta

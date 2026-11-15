@@ -113,7 +113,7 @@ function why(result: AskResult): { title: string; text: React.ReactNode } {
           : result.method.startsWith("sheet-working") && result.method.endsWith(":tiles")
             ? "Each box was drawn by a vision model on a tile of the sheet at full size, in two independent passes. The count is of the boxes both passes drew; a box only one pass drew is dashed with a question mark and not counted. Look over both kinds: a click leaves a counted one out and the count follows."
           : result.method.startsWith("sheet-working") && result.method.endsWith(":measured")
-            ? "A vision model said which room and drew a rough box; the program moved each side onto the wall and measured against the scale bar. Check that the rectangle is the room and that the marked openings are doors."
+            ? "A vision model said which room and drew a rough box; the program found the room inside its walls and measured it against the sheet's scale, taken from the thing marked as the ruler (the scale bar, a printed dimension, a size the question gave, or the doors). Check that the outline is the room and that the marked openings are doors."
           : result.method.startsWith("sheet-working")
             ? "Which figures and rows matter was a vision model's choice. The counting and the arithmetic are the program's, and each figure was read again by the program at the place marked. Check that the marked figures are the right ones."
           : result.method.startsWith("vlm")

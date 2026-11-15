@@ -53,7 +53,7 @@ python scripts/bench_examples.py            # Stoa's four sample sheets: the sys
 | 200 dev questions, stratified | 95.8% right; the vision model alone 62.5% | `router:v1+fallback[vlm-pointing…]` on `dev_baseline_200` |
 | Whole dev split, exact engines only | 33,452 of 63,592 answered at no cost; 16,982 Verified, 0 wrong | `router:v1` on `all-dev` |
 | Cost per question | €0.003; the model alone €0.008 | same sample |
-| Stoa's four sample sheets, 27 questions | 27 right, 0 wrong, 0 refused, €0.022 per question | `results/stoa_sheets/` |
+| Stoa's four sample sheets, 27 questions | 27 right, 0 wrong, 0 refused, €0.024 per question | `results/stoa_sheets/` |
 
 ## Who reads a question the second time
 

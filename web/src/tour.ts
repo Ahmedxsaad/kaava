@@ -100,6 +100,16 @@ export const TOUR: Stop[] = [
     view: "plan",
   },
   {
+    label: "One door's width is all it is given",
+    card: true,
+    hard: true,
+    note: "The question states one size: a door, 1.7 m. The program measures that door in pixels, then the hall with it: 244 m², 0.3% from the scale bar's own answer",
+    state: "check",
+    drawing: "uploads/072d5e992c68",
+    question: "The double door between the Multi-Purpose Hall and the Store is 1.7 m wide. Using only that as the scale, what is the floor area of the Multi-Purpose Hall, in m²?",
+    view: "plan",
+  },
+  {
     label: "Asked in German, shown in 3D",
     note: "Plan raised from the DXF · model alone said 69.5",
     state: "verified",

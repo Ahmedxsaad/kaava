@@ -121,7 +121,7 @@ On Stoa's slab sheet: the 150 mm slab is 6200 × 9950 mm = 61.69 m² by its prin
 
 On a sheet with no model or DXF, a room is measured as the free space inside its walls: an L-shaped room by its own outline, a corridor around a lift without the lift, a hall without its columns. What was taken out is drawn on the sheet and listed in the working. A plain rectangular room is still measured as its rectangle, and that is checked against the outline.
 
-The scale comes from the best thing on the sheet that has a known size: the graphic scale bar; else a dimension printed on the plan (the model points at it, the program reads the figure itself and finds the ends of the dimension line in the pixels); else the doors, taken as standard doors 0.9 m wide. That last one is an estimate and is shown as one, with the range it leaves open (doors are 0.8 to 1.0 m), and is never Verified. The same standard is a check on the other two: a room's door openings, measured at the sheet's scale, must come out as wide as doors are, or nothing is measured.
+The scale comes from the best thing on the sheet that has a known size. If the question itself states one size ("the double door is 1.7 m wide"), that thing is found on the sheet, measured in pixels from jamb to jamb or wall to wall, and used as the ruler for everything else; when the sheet also has a scale bar the two must agree within 5%, or nothing is measured. On Stoa's school plan, given only that door's width, the hall comes out 244.1 m² and its baseboard 50.3 m, against 245.0 m² and 50.4 m from the sheet's own scale bar. Otherwise: the graphic scale bar; else a dimension printed on the plan (the model points at it, the program reads the figure itself and finds the ends of the dimension line in the pixels); else the doors, taken as standard doors 0.9 m wide. That last one is an estimate and is shown as one, with the range it leaves open (doors are 0.8 to 1.0 m), and is never Verified. The same standard is a check on the other two: a room's door openings, measured at the sheet's scale, must come out as wide as doors are, or nothing is measured.
 
 Scans get the same treatment, and a 3D view of their own: the walls are found in the scan's pixels (no model is asked), raised on the scan itself, and what an answer counted stands in place on it. A scan whose walls cannot be told from the rest has no 3D view rather than a misleading one.
 
@@ -157,7 +157,7 @@ All of these are "Check this": which figures matter is the model's judgement, an
 
 | On Stoa's four sheets, 27 questions | Right | Wrong | No number | Cost per question |
 | --- | --- | --- | --- | --- |
-| This system | 27 | 0 | 0 | €0.022 |
+| This system | 27 | 0 | 0 | €0.024 |
 | Gemini alone, from the picture | 26 | 1 | 0 | €0.006 |
 
 These are questions a frontier model can also read off the sheet, and it mostly does. The one that separates them is the area of the 150 mm slab. By its printed dimensions the slab is 6200 × 9950 mm = 61.69 m², and two trenches are cut into it whose widths are not printed. Our key for it is the area with the trenches taken out (59.27 m²; until the evening of 14 Nov it was the plain rectangle, and the system's 61.69 counted as right). Gemini alone answered 64.93 m², adding alcoves it estimated by eye. The system computes the rectangle from the two printed figures, then its examiners find the trenches and the program measures them on the drawing: 59.31 m². The Gemini-alone row was scored against the earlier key and has not been re-run; against the new key its slab answer is still wrong. The system costs about three times as much per question, for the text list it sends, the second working and the examiners.
@@ -224,7 +224,7 @@ The landing page opens by itself: a real drawing from the dataset answers one qu
 | ![The landing page's first screen](docs/screenshots/home.png) | ![An apartment's rooms tinted with their areas](docs/screenshots/apartment-paper.png) |
 | ![A storey of an IFC model cut open with its doors marked](docs/screenshots/ifc-storey.png) | ![An IFC model with its storeys lifted apart and a door tally beside each](docs/screenshots/ifc-storeys-apart.png) |
 
-The left and right arrow keys step through seventeen prepared examples, five of them on Stoa's sample sheets; "Play examples" runs them on their own.
+The left and right arrow keys step through eighteen prepared examples, six of them on Stoa's sample sheets; "Play examples" runs them on their own.
 
 ## Tech partners
 

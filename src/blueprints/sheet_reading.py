@@ -50,7 +50,7 @@ from .pointing import _box
 from .render import can_render, render
 from .scoring import CHECK
 
-PROMPT = 6
+PROMPT = 7
 MAX_TEXTS = 1100
 # How many times a question is worked out, independently. Two workings that disagree give no number.
 WORKINGS = max(1, int(os.environ.get("BLUEPRINTS_WORKINGS", "2")))
@@ -70,7 +70,7 @@ You do not state the final number. You give what you read and how it combines, a
 
 4. look_closer: for a question asking how many drawn symbols there are on a plan when they are many and small and carry no identifying text (doors, windows, fixtures, columns, outlets). Do not list them. Give `what`: one sentence saying exactly what counts as one item and how it is drawn, and box_2d: the part of the sheet that holds the plan to search (leave out the title block, legends and notes). The program then looks at that part piece by piece at full size. In the other three forms, leave `what` empty.
 
-5. measure: for the size of a room or of several rooms (floor area, perimeter, length of baseboard or skirting) when the sheet prints no figure for it but the plan is drawn to scale. Do not estimate the size. Set quantity to area, perimeter or baseboard, and list the rooms: for each, text_id of the room's name on the plan (-1 when the list does not have it), name, box_2d: a box whose four sides lie on the inner faces of the room's walls (for a room that is not a rectangle: the box around the whole room), and rectangular: false when the room is not a plain rectangle. The program finds the room inside its walls whatever its shape, takes out what stands in it (columns, shafts, cores), and for baseboard leaves out the door openings. It needs the sheet's scale and takes it itself from the first of these that the sheet has: (a) a graphic scale bar: then leave reference and doors empty; (b) reference: one dimension printed on the plan, given as text_id of its figure, unit (mm, cm, m, in or ft), and from and to, the two ends of its dimension line, each as [y, x] on the grid; choose a long one whose line runs straight across or straight down the sheet; (c) only when the sheet has neither: doors, boxes around up to eight ordinary single doors on the plan, each box tight around the door leaf and its swing; the program measures them against the standard width of a door and gives an estimate. The rooms are added up unless you say otherwise: to combine them another way (a hall without the stage that stands in it, one wing less another), the rooms are a, b, c, ... in the order you list them, and combine is an expression over those letters with + and - only, such as a - b; leave combine empty to add them all up. In the other forms, leave quantity empty.
+5. measure: for the size of a room or of several rooms (floor area, perimeter, length of baseboard or skirting) when the sheet prints no figure for it but the plan is drawn to scale. Do not estimate the size. Set quantity to area, perimeter or baseboard, and list the rooms: for each, text_id of the room's name on the plan (-1 when the list does not have it), name, box_2d: a box whose four sides lie on the inner faces of the room's walls (for a room that is not a rectangle: the box around the whole room), and rectangular: false when the room is not a plain rectangle. The program finds the room inside its walls whatever its shape, takes out what stands in it (columns, shafts, cores), and for baseboard leaves out the door openings. It needs the sheet's scale. When the question itself states the size of something on the plan (a door's width, the length of a wall, how long or wide a room is), give `given`: what that thing is in a few words, value and unit exactly as the question states them, and from and to, the two ends of that thing on the plan, each as [y, x] on the grid (for a door: the two sides of its opening; for a room's length: the two walls it runs between); the program takes the scale from that and measures everything else with it. Otherwise leave given empty (value 0) and the program takes the scale itself from the first of these that the sheet has: (a) a graphic scale bar: then leave reference and doors empty; (b) reference: one dimension printed on the plan, given as text_id of its figure, unit (mm, cm, m, in or ft), and from and to, the two ends of its dimension line, each as [y, x] on the grid; choose a long one whose line runs straight across or straight down the sheet; (c) only when the sheet has neither: doors, boxes around up to eight ordinary single doors on the plan, each box tight around the door leaf and its swing; the program measures them against the standard width of a door and gives an estimate. The rooms are added up unless you say otherwise: to combine them another way (a hall without the stage that stands in it, one wing less another), the rooms are a, b, c, ... in the order you list them, and combine is an expression over those letters with + and - only, such as a - b; leave combine empty to add them all up. In the other forms, leave quantity empty.
 
 - If the sheet does not let you answer in one of these forms, set cannot_tell to true and say in basis what is missing.
 - basis: one or two sentences on how you got there."""
@@ -111,6 +111,10 @@ SCHEMA = {
                 "text_id": {"type": "integer"}, "unit": {"type": "string"}, "from": _BOX, "to": _BOX},
                 "required": ["text_id", "unit", "from", "to"], "additionalProperties": False},
             "doors": {"type": "array", "items": _BOX},
+            # A size the question itself states (a door 0.9 m wide, a wall 6 m long), and the two ends of that thing on the plan.
+            "given": {"type": "object", "properties": {
+                "what": {"type": "string"}, "value": {"type": "number"}, "unit": {"type": "string"}, "from": _BOX, "to": _BOX},
+                "required": ["what", "value", "unit", "from", "to"], "additionalProperties": False},
             # How the measured rooms combine when it is not a plain sum: "a - b" over the rooms in the order listed.
             "combine": {"type": "string"}},
             "required": ["quantity", "rooms"], "additionalProperties": False},
@@ -409,6 +413,7 @@ def make_engine(vlm) -> Callable[[Question, Dataset], Answer]:
             return _measured(q, path, index, wanted["quantity"], rooms, width, height, common,
                              reference=wanted.get("reference") if isinstance(wanted.get("reference"), dict) else None,
                              doors=[d for d in wanted.get("doors") or [] if isinstance(d, list)],
+                             given=wanted.get("given") if isinstance(wanted.get("given"), dict) else None,
                              combine=str(wanted.get("combine") or "").strip())
 
         if what and not figures and not items:
@@ -873,18 +878,66 @@ def _poly_to_source(points: list[list[float]], zoom: float) -> list[list[float]]
     return [[x / zoom, y / zoom] for x, y in points]
 
 
+GIVEN_AGREES = 0.05  # a size given in the question and the sheet's own scale bar must agree this closely
+
+
+def _stated(question: str, value: float) -> bool:
+    """Whether the question itself states this number (17.8, 17,8 or 17.80 all state 17.8)."""
+    for found in re.findall(r"\d+(?:[.,]\d+)?", question):
+        try:
+            if abs(float(found.replace(",", ".")) - value) <= 1e-9 * max(1.0, abs(value)):
+                return True
+        except ValueError:
+            continue
+    return False
+
+
 def _scale_of(path, index: dict, texts: dict, reference: dict | None, doors: list, width: float, height: float,
-              zoom: float) -> dict | None:
-    """The sheet's scale from the best thing on it that has a known size (scale.py): bar, printed dimension, doors."""
-    found = scale.from_bar(path, index)
-    if found is not None:
-        return found
+              zoom: float, given: dict | None = None, question: str = "") -> dict | None:
+    """The sheet's scale from the best thing on it that has a known size (scale.py): a size the question
+    itself gives, else the scale bar, a printed dimension, the doors."""
     grid = max(width, height) * zoom / 1000.0  # one step of the model's grid, in pixels
 
     def point(yx) -> tuple[float, float] | None:
         if not isinstance(yx, list) or len(yx) != 2:
             return None
         return float(yx[1]) / 1000.0 * width * zoom, float(yx[0]) / 1000.0 * height * zoom
+
+    if given and isinstance(given.get("value"), (int, float)) and given["value"] > 0:
+        # The question says how large one thing is: that thing is found on the sheet and measured in pixels,
+        # and it is the ruler for everything else. The number must be the question's own, not the model's.
+        value, unit = float(given["value"]), unit_of(str(given.get("unit") or "")) or "m"
+        start, end = point(given.get("from")), point(given.get("to"))
+        what = str(given.get("what") or "the thing whose size the question gives").strip()[:60]
+        if start and end and unit in _LINEAR and _stated(question, value):
+            found = scale.from_dimension(path, start, end, value * _LINEAR[unit], f"{value:g} {unit}", grid, least_px=20, faces=True)
+            if found is not None:
+                px = found["px_per_m"] * value * _LINEAR[unit]
+                ends = found["checks"].pop("ends of the dimension line found in the pixels")
+                found.update(source="given", label=f"{what}: {value:g} {unit} = {px:,.0f} px",
+                             said=f"the size the question gives ({what}: {value:g} {unit} = {px:,.0f} px on the sheet)",
+                             trace=["The program took the scale from the size given in the question",
+                                    f"{what}: {value:g} {unit} = {px:,.0f} px, {found['px_per_m']:.1f} px per metre; "
+                                    f"{ends} of its ends moved onto the lines that cross it there"])
+                found["checks"] = {"scale, from the size given in the question": f"{what}: {value:g} {unit} = {px:,.0f} px ({found['px_per_m']:.1f} px per metre)",
+                                   "ends of that thing found in the pixels": ends}
+                for item in found["evidence"]:
+                    item["label"] = f"{value:g} {unit} = {px:,.0f} px"
+                bar = scale.from_bar(path, index)
+                if bar is not None:  # the sheet has a scale of its own: the two must agree
+                    off = abs(found["px_per_m"] - bar["px_per_m"]) / bar["px_per_m"]
+                    found["checks"]["the sheet's own scale bar"] = (f"{bar['px_per_m']:.1f} px per metre, against {found['px_per_m']:.1f} "
+                                                                    f"from the size given: {off:.1%} apart")
+                    found["evidence"] += bar["evidence"]
+                    found["trace"][1] += f". The sheet's own scale bar gives {bar['px_per_m']:.1f} px per metre: {off:.1%} apart"
+                    if off > GIVEN_AGREES:
+                        found["conflict"] = (f"the size given in the question ({what}: {value:g} {unit}) makes the sheet {found['px_per_m']:.1f} px per "
+                                             f"metre, and the sheet's own scale bar ({bar['label']}) makes it {bar['px_per_m']:.1f}: they are "
+                                             f"{off:.0%} apart, so nothing is measured. Check which thing the size belongs to")
+                return found
+    found = scale.from_bar(path, index)
+    if found is not None:
+        return found
 
     if reference:
         item = texts.get(reference.get("text_id", -1))
@@ -907,7 +960,8 @@ def _scale_of(path, index: dict, texts: dict, reference: dict | None, doors: lis
 
 
 def _measured(q: Question, path, index: dict, quantity: str, rooms: list[dict], width: float, height: float,
-              common: dict, reference: dict | None = None, doors: list | None = None, combine: str = "") -> Answer:
+              common: dict, reference: dict | None = None, doors: list | None = None, combine: str = "",
+              given: dict | None = None) -> Answer:
     """Rooms measured on the sheet itself: the free space inside their walls, against the sheet's scale.
 
     A plain rectangular room is measured as its rectangle (measure.measure_room) and checked against
@@ -917,7 +971,10 @@ def _measured(q: Question, path, index: dict, quantity: str, rooms: list[dict], 
     source_index = index
     texts = {item["id"]: item for item in source_index["items"]}
     path, zoom, index = as_pixels(path, source_index)
-    ruler = _scale_of(path, index, texts, reference, doors or [], width, height, zoom)
+    ruler = _scale_of(path, index, texts, reference, doors or [], width, height, zoom, given=given, question=q.question)
+    if ruler is not None and ruler.get("conflict"):
+        common["meta"] = {**common["meta"], "checks": ruler["checks"]}
+        return Answer.decline(ruler["conflict"], **common)
     if ruler is None:
         return Answer.decline("the sheet has nothing to take its scale from: no graphic scale bar was found, and no printed "
                               "dimension or doors were pointed at", **common)
@@ -985,7 +1042,7 @@ def _measured(q: Question, path, index: dict, quantity: str, rooms: list[dict], 
         each.append(area if quantity == "area" else perimeter - (sum(o["width_m"] for o in openings) if quantity == "baseboard" else 0.0))
         if quantity == "area":
             total += area
-            parts.append(f"{size}{cut}" if rect["ok"] or holes else f"{area:.2f} m²")
+            parts.append(f"{size}{cut}")
             label = f"{name}: {size}{cut} = {area:.2f} m²"
         else:
             taken = openings if quantity == "baseboard" else []
@@ -1069,7 +1126,9 @@ def _measured(q: Question, path, index: dict, quantity: str, rooms: list[dict], 
         common["meta"]["estimate"] = {"low": round(low, 2), "high": round(high, 2), "from": ruler["said"],
                                       "unit": pretty(shown_unit)}
         common["meta"]["not_verifiable"] = True
-        estimate = (f" This is an estimate: no scale is printed on the sheet. Between {_fmt(low)} and {_fmt(high)} "
+        why = ("the scale rests on the size given in the question, and an end of that thing was not found exactly in the pixels"
+               if ruler["source"] == "given" else "no scale is printed on the sheet")
+        estimate = (f" This is an estimate: {why}. Between {_fmt(low)} and {_fmt(high)} "
                     f"{pretty(shown_unit)} over the range that leaves open.")
     return Answer(answer=round(shown, 2), unit=shown_unit, state=CHECK, confidence=confidence, evidence=evidence,
                   explanation=f"{working}. Measured on the sheet: {measured_how}, and the lengths were read against "

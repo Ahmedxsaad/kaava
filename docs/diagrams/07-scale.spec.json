@@ -1,6 +1,6 @@
 {
   "title": "Where the scale comes from",
-  "subtitle": "A plan can be measured once one length on it is known. The program takes the best one the sheet has, and says which",
+  "subtitle": "A plan can be measured once one length on it is known: a size you state, the scale bar, a printed dimension, or the doors",
   "destination": "slide",
   "theme": "sketch",
   "zones": [
@@ -27,6 +27,13 @@
       "sub": "no figure for the room",
       "icon": "it:Document",
       "color": "client"
+    },
+    {
+      "id": "given",
+      "label": "A size you state",
+      "sub": "that thing, measured in px",
+      "zone": "known",
+      "icon": "people:Guy"
     },
     {
       "id": "bar",
@@ -87,22 +94,32 @@
   "edges": [
     {
       "from": "sheet",
-      "to": "bar",
+      "to": "given",
       "step": 1,
-      "label": "A scale bar is read first"
+      "label": "A size stated in the question"
+    },
+    {
+      "from": "sheet",
+      "to": "bar",
+      "step": 2,
+      "label": "Else the scale bar"
     },
     {
       "from": "sheet",
       "to": "dim",
-      "step": 2,
+      "step": 3,
       "label": "Else a printed dimension"
     },
     {
       "from": "sheet",
       "to": "doors",
-      "step": 3,
+      "step": 4,
       "label": "Else doors, as standard doors",
       "style": "dotted"
+    },
+    {
+      "from": "given",
+      "to": "check"
     },
     {
       "from": "bar",
@@ -111,7 +128,7 @@
     {
       "from": "dim",
       "to": "check",
-      "step": 4,
+      "step": 5,
       "label": "Doors must come out door-wide"
     },
     {
@@ -122,13 +139,13 @@
     {
       "from": "check",
       "to": "room",
-      "step": 5,
+      "step": 6,
       "label": "The room's free space is measured"
     },
     {
       "from": "room",
       "to": "exact",
-      "step": 6,
+      "step": 7,
       "label": "Area, perimeter or baseboard"
     },
     {
