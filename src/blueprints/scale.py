@@ -86,7 +86,6 @@ def _opening(dark, start: tuple[float, float], end: tuple[float, float]) -> tupl
     with no ink at all, with the wall's ink on both sides of it. It is taken only when it is about as
     long as the two points are apart: a room's length across furniture and text is not an opening.
     """
-    import numpy as np
 
     height, width = dark.shape
     (ax, ay), (bx, by) = start, end
